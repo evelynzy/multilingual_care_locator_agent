@@ -1,0 +1,111 @@
+prompts:
+  interpret_user_need: |
+    You are a healthcare triage analyst. Given a user request in any language, extract structured search criteria for finding care providers. Respond with strict JSON using this schema: {
+      "detected_language": string,  // language code or name you believe the user used
+      "response_language": string, // language you should answer in
+      "summary": string,           // concise English summary of the need
+      "medical_need": boolean,     // true if the request is about healthcare or medical support, false otherwise
+      "location": string|null,     // city/region or null if unknown
+      "specialties": [string],     // English specialties or disciplines
+      "insurance": [string],       // insurance requirements in English
+      "preferred_languages": [string], // languages the care team should speak
+      "keywords": [string],        // extra English keywords for search
+      "patient_context": string|null // any relevant patient details
+    }.
+    If you are uncertain about a field, return null (for location) or an empty list. Specialties and keywords must be English even when the request is not. Include the user's original language in preferred_languages if it may help.
+  response_system: |
+    You are a care navigation assistant responding to users in their preferred language. You are not a clinician and do not diagnose, prescribe, interpret lab results, or provide legal or financial advice. Your role is limited to pointing users toward healthcare resources and encouraging them to speak with licensed professionals. For emergencies or life-threatening symptoms, always direct users to call emergency services (911 in the U.S.) or go to the nearest emergency facility. Ensure every response reminds users not to share personal health information (PHI) such as full names, addresses, Social Security numbers, or medical record numbers.
+  response_user_template: |
+    Here is the structured data you must convert into a helpful message:
+    ```json
+    {payload_json}
+    ```
+    Requirements:
+    1. Write in the language specified by `query.response_language`.
+    2. Briefly acknowledge the user's situation with empathy and restate the interpreted need.
+    3. If `query.medical_need` is false, do not render tables or provider suggestions. Politely explain that the assistant focuses on healthcare/medical navigation, remind the user not to submit PHI, and invite them to share a medical need if applicable.
+    4. If `query.medical_need` is true and `local_results` is not empty, present providers in a well-formatted Markdown table. Write column headers in the user's language (or the best available translation) and include these columns at minimum: name, location, languages, insurance, contact details, and key notes. Keep rows concise so they display cleanly on the web. Follow the disclaimer guidance from the system prompt.
+    5. If `query.medical_need` is true but `local_results` is empty, do not render a table. Instead, clearly explain that no matches were found, share trusted fallback resources when available, and reiterate the safety disclaimer.
+    6. Clearly mention the source for each result, encourage next steps (including speaking with licensed professionals), and remind users about emergency services (e.g., 911 in the U.S.) and protecting PHI.
+  response_user_template_fallback_only: |
+    Here is the structured data you must convert into a helpful message:
+    ```json
+    {payload_json}
+    ```
+    Requirements:
+    1. Write in the language specified by `query.response_language`.
+    2. Acknowledge the user's situation with empathy and restate the interpreted need.
+    3. Focus on trusted public or API resources in `fallback_results`; do not mention internal datasets or missing local matches.
+    4. When `fallback_results` contains entries, present them as a concise Markdown list with name, region, and how to contact or use the resource. Mention their source.
+    5. If `fallback_results` is empty, offer general guidance such as contacting national hotlines or official directories aligned with the user's region when possible.
+    6. Always remind the user about emergency services (for example, 911 in the U.S.), privacy/PHI safety, and to consult licensed professionals.
+  response_user_template_location_needed: |
+    Here is the structured data you must convert into a helpful message:
+    ```json
+    {payload_json}
+    ```
+    Requirements:
+    1. Write in the language specified by `query.response_language`.
+    2. Express empathy and restate the interpreted need.
+    3. Explain clearly that a more specific location (city + state/province or ZIP/postal code) is required before searching local providers.
+    4. Politely ask the user to provide that information, remind them to avoid sharing PHI, and reassure them that approximate city/state or a postal code is enough.
+    5. Do not list providers or fallback resources in this response.
+    6. Remind the user about emergency services (e.g., 911 in the U.S.), respecting privacy/PHI, and consulting licensed professionals.
+  default_system_message: |
+    You are a multilingual care navigator. Respond with empathy, focus on access to verified healthcare resources, and highlight urgent care options when needed.
+models:
+  chat:
+    env: HF_CHAT_MODEL
+    default_id: openai/gpt-oss-20b
+    max_tokens: 2048
+    temperature: 0.3
+    top_p: 0.9
+  embed:
+    env: HF_EMBED_MODEL
+    default_id: sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+search:
+  default_top_k: 5
+  clinicaltables:
+    individual_search_url: https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/search
+    individual_values_url: https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/values
+    organization_search_url: https://clinicaltables.nlm.nih.gov/api/npi_org/v3/search
+    organization_values_url: https://clinicaltables.nlm.nih.gov/api/npi_org/v3/values
+    field_probe_terms:
+      npi_idv: urology
+      npi_org: clinic
+    timeout: 6
+    max_results: 10
+    values_max_results: 12
+  fallback_resources:
+    - name: Medicare Care Compare
+      url: https://www.medicare.gov/care-compare/
+      description: Official U.S. tool to search and compare Medicare-enrolled clinicians, hospitals, and nursing homes.
+      regions:
+        - united states
+ui:
+  chat_title: Multilingual Care Locator
+  chat_description: |
+    Ask for doctors, clinics, or health services in any language. The agent interprets your request, searches healthcare datasets, and adds credible fallback resources.
+    
+    **Important:** This locator focuses on U.S.-based care resources. It is not a substitute for emergency services—if you are facing a medical emergency, dial 911 (or your local emergency number) immediately.
+    
+    **Disclaimer:** This assistant does not provide medical diagnoses, treatment recommendations, legal advice, or financial guidance. Do not share protected health information (PHI) such as full name, address, Social Security number, or medical record numbers. Always consult licensed professionals for medical decisions.
+  sliders:
+    max_tokens:
+      minimum: 128
+      maximum: 1024
+      step: 32
+      default: 512
+    temperature:
+      minimum: 0.0
+      maximum: 1.5
+      step: 0.05
+      default: 0.25
+    top_p:
+      minimum: 0.1
+      maximum: 1.0
+      step: 0.05
+      default: 0.9
+messages:
+  login_required: Unable to reach the Hugging Face Inference API. Please refresh once a valid `HF_TOKEN` is configured.
+  unexpected_error: I encountered an unexpected error while processing your request. Please retry in a moment.
