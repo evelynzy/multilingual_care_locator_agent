@@ -1,69 +1,142 @@
+import os
+import logging
+from typing import List, Optional
+
 import gradio as gr
 from huggingface_hub import InferenceClient
+from dotenv import load_dotenv
+
+from care_agent import CareLocatorAgent
+from retriever import ProviderRepository
+from config_loader import (
+    get_chat_model_settings,
+    get_message,
+    get_ui_settings,
+)
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+load_dotenv()
+
+chat_settings = get_chat_model_settings()
+ui_settings = get_ui_settings()
+
+DEFAULT_MODEL_ID = chat_settings["model_id"]
+LOGIN_MESSAGE = get_message(
+    "login_required",
+    "Authentication required to use the Hugging Face Inference API.",
+)
+ERROR_MESSAGE = get_message(
+    "unexpected_error",
+    "I encountered an unexpected error while processing your request. Please retry in a moment.",
+)
+
+
+# Initialize repository and agent once so we do not reload data per request.
+provider_repository = ProviderRepository()
+care_locator_agent = CareLocatorAgent(provider_repository)
+
+
+def _augment_history(
+    history: Optional[List[dict]], system_message: Optional[str]
+) -> List[dict]:
+    messages: List[dict] = []
+    if system_message:
+        messages.append({"role": "system", "content": system_message})
+    if history:
+        messages.extend(history)
+    return messages
 
 
 def respond(
-    message,
-    history: list[dict[str, str]],
-    system_message,
-    max_tokens,
-    temperature,
-    top_p,
-    hf_token: gr.OAuthToken,
+    message: str,
+    history: List[dict],
 ):
-    """
-    For more information on `huggingface_hub` Inference API support, please check the docs: https://huggingface.co/docs/huggingface_hub/v0.22.2/en/guides/inference
-    """
-    client = InferenceClient(token=hf_token.token, model="openai/gpt-oss-20b")
+    token_value = os.getenv("HF_TOKEN")
 
-    messages = [{"role": "system", "content": system_message}]
+    if not token_value:
+        logger.error("HF_TOKEN environment variable not set; unable to call Inference API")
+        return LOGIN_MESSAGE
 
-    messages.extend(history)
+    client = InferenceClient(token=token_value, model=DEFAULT_MODEL_ID)
 
-    messages.append({"role": "user", "content": message})
+    augmented_history = _augment_history(history, ui_settings.get("default_system_message"))
 
-    response = ""
+    try:
+        logger.info("Invoking care locator. message=%s", message[:1000])
+        reply = care_locator_agent.handle_request(
+            client=client,
+            message=message,
+            history=augmented_history,
+            max_tokens=chat_settings.get("max_tokens", 512),
+            temperature=chat_settings.get("temperature", 0.3),
+            top_p=chat_settings.get("top_p", 0.9),
+        )
+    except Exception as exc:  # noqa: BLE001 - surface error to end user
+        logger.exception("Unexpected error while processing request")
+        return f"⚠️ {ERROR_MESSAGE} Details for debugging: {exc}"
 
-    for message in client.chat_completion(
-        messages,
-        max_tokens=max_tokens,
-        stream=True,
-        temperature=temperature,
-        top_p=top_p,
-    ):
-        choices = message.choices
-        token = ""
-        if len(choices) and choices[0].delta.content:
-            token = choices[0].delta.content
-
-        response += token
-        yield response
+    return reply
 
 
-"""
-For information on how to customize the ChatInterface, peruse the gradio docs: https://www.gradio.app/docs/chatinterface
-"""
 chatbot = gr.ChatInterface(
     respond,
     type="messages",
-    additional_inputs=[
-        gr.Textbox(value="You are a friendly Chatbot.", label="System message"),
-        gr.Slider(minimum=1, maximum=2048, value=512, step=1, label="Max new tokens"),
-        gr.Slider(minimum=0.1, maximum=4.0, value=0.7, step=0.1, label="Temperature"),
-        gr.Slider(
-            minimum=0.1,
-            maximum=1.0,
-            value=0.95,
-            step=0.05,
-            label="Top-p (nucleus sampling)",
-        ),
-    ],
+    description=ui_settings.get("description", ""),
+    title=ui_settings.get("title", "Multilingual Care Locator"),
 )
 
-with gr.Blocks() as demo:
-    with gr.Sidebar():
-        gr.LoginButton()
+custom_css = """
+.gradio-container .gr-chatbot {
+    min-height: 420px;
+    max-height: 560px;
+    overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+    .gradio-container .gr-chatbot {
+        min-height: 320px;
+        max-height: 420px;
+    }
+
+    .gradio-container .gr-chatbot {
+        min-height: 320px;
+        max-height: 420px;
+    }
+}
+
+.gradio-container table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+.gradio-container th,
+.gradio-container td {
+    white-space: normal;
+    word-break: break-word;
+}
+
+.gradio-container table {
+    display: block;
+    overflow-x: auto;
+}
+"""
+
+
+with gr.Blocks(fill_height=True, css=custom_css) as demo:
     chatbot.render()
+    gr.Markdown(
+        """
+        **Data sources**
+        - [NPI Records - Individuals](https://clinicaltables.nlm.nih.gov/apidoc/npi_idv/v3/doc.html) public API
+        - [NPI Records - Organizations](https://clinicaltables.nlm.nih.gov/apidoc/npi_org/v3/doc.html) public API
+        """
+    )
 
 
 if __name__ == "__main__":
