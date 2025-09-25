@@ -293,7 +293,8 @@ class CareLocatorAgent:
 
             if not local_results:
                 fallback_results, missing_location_hint = self._search_clinicaltables(
-                    parsed_query
+                    parsed_query,
+                    limit=self.ctss_max_results,
                 )
                 logger.info(
                     "ClinicalTables fallback results=%s", len(fallback_results)
@@ -305,6 +306,13 @@ class CareLocatorAgent:
                     )
         else:
             logger.info("Parsed request marked as non-medical; skipping provider search")
+
+        no_results_found = (
+            parsed_query.medical_need
+            and not local_results
+            and not fallback_results
+            and not missing_location_hint
+        )
 
         response_payload = {
             "query": {
@@ -327,6 +335,11 @@ class CareLocatorAgent:
 
         if missing_location_hint:
             response_payload.setdefault("notes", missing_location_hint)
+        elif no_results_found:
+            response_payload.setdefault(
+                "notes",
+                "No providers were found in the local dataset or via the ClinicalTables API."
+            )
 
         if self.provider_repository.load_error and not fallback_only_mode:
             response_payload["notes"] = (
@@ -755,28 +768,61 @@ class CareLocatorAgent:
                 query.location
             )
             for chunk in self._split_location(normalized_location):
-                best = self._best_suggestion_across_datasets(
-                    chunk, self._ctss_location_fields
+                user_chunk = chunk.strip()
+                if not user_chunk:
+                    continue
+
+                parts.append(user_chunk)
+
+                suggestion = self._best_suggestion_across_datasets(
+                    user_chunk, self._ctss_location_fields
                 )
-                if best:
-                    parts.append(best)
-                    chunk_filters = self._build_query_filters(best)
-                    filters.extend(chunk_filters)
-                    if self._location_filters_are_specific(
-                        chunk_filters, normalized_location, alias_used
-                    ):
-                        location_was_specific = True
-                    break
+
+                suggestion_for_filters: Optional[str] = None
+                suggestion_for_terms: Optional[str] = None
+
+                if suggestion and suggestion.strip() and suggestion != user_chunk:
+                    user_state = self._extract_state_code(user_chunk)
+                    suggestion_state = self._extract_state_code(suggestion)
+                    if user_state and suggestion_state and user_state != suggestion_state:
+                        suggestion_for_filters = None
+                        suggestion_for_terms = None
+                    else:
+                        suggestion_for_filters = suggestion
+                        suggestion_for_terms = suggestion
+
+                if suggestion_for_terms:
+                    parts.append(suggestion_for_terms)
+
+                chunk_filters = self._build_query_filters(
+                    user_chunk, suggestion_for_filters
+                )
+                filters.extend(chunk_filters)
+                if self._location_filters_are_specific(
+                    chunk_filters, user_chunk, alias_used
+                ):
+                    location_was_specific = True
+                break
 
         query_filter = " AND ".join(filters) if filters else None
 
         return " ".join(part for part in parts if part), query_filter, location_was_specific
 
     # ------------------------------------------------------------------
-    def _build_query_filters(self, location_text: str) -> List[str]:
+    def _build_query_filters(
+        self, user_location: str, suggestion: Optional[str] = None
+    ) -> List[str]:
         filters: List[str] = []
 
-        state_code = self._extract_state_code(location_text)
+        user_state = self._extract_state_code(user_location)
+        suggestion_state = (
+            self._extract_state_code(suggestion) if suggestion else None
+        )
+
+        state_code = user_state or suggestion_state
+        if user_state and suggestion_state and user_state != suggestion_state:
+            state_code = user_state
+
         if state_code:
             filters.append(f"addr_practice.state:{state_code}")
 
@@ -784,9 +830,9 @@ class CareLocatorAgent:
 
     # ------------------------------------------------------------------
     def _location_filters_are_specific(
-        self, filters: List[str], normalized_location: str, alias_used: bool
+        self, filters: List[str], user_location: str, alias_used: bool
     ) -> bool:
-        if self._extract_zip_code(normalized_location):
+        if self._extract_zip_code(user_location):
             return True
 
         if alias_used:
@@ -796,7 +842,7 @@ class CareLocatorAgent:
         if not has_state:
             return False
 
-        return self._location_has_city(normalized_location)
+        return self._location_has_city(user_location)
 
     # ------------------------------------------------------------------
     def _location_has_city(self, value: str) -> bool:
