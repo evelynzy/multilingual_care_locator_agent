@@ -123,6 +123,30 @@ _US_STATE_NAMES = {
 }
 
 
+_LOCATION_NOISE_TOKENS = {
+    "plan",
+    "insurance",
+    "coverage",
+    "policy",
+    "need",
+    "looking",
+    "search",
+    "find",
+    "for",
+    "provider",
+    "doctor",
+    "dentist",
+    "dental",
+    "care",
+    "help",
+    "support",
+    "area",
+    "region",
+    "state",
+    "province",
+}
+
+
 @dataclass
 class ParsedCareQuery:
     """Structured representation of the user's care request."""
@@ -258,6 +282,22 @@ class CareLocatorAgent:
             "greater los angeles": "Los Angeles CA",
             "dallas fort worth": "Dallas TX",
         }
+
+        state_code_pattern = "|".join(sorted(_US_STATE_CODES))
+        state_name_pattern = "|".join(
+            re.escape(name)
+            for name in sorted(_US_STATE_NAMES.keys(), key=len, reverse=True)
+        )
+        city_pattern = r"(?P<city>(?-i:[A-Z])[A-Za-z'.-]{2,}(?:\s+(?-i:[A-Z])[A-Za-z'.-]{2,})*)"
+        separator_pattern = r"\s*,?\s+"
+        self._city_state_code_regex = re.compile(
+            rf"{city_pattern}{separator_pattern}(?P<state>{state_code_pattern})\b",
+            re.IGNORECASE,
+        )
+        self._city_state_name_regex = re.compile(
+            rf"{city_pattern}{separator_pattern}(?P<state>{state_name_pattern})\b",
+            re.IGNORECASE,
+        )
 
         self._initialize_clinicaltables_field_maps()
 
@@ -467,9 +507,14 @@ class CareLocatorAgent:
     def _search_clinicaltables(
         self, query: ParsedCareQuery, limit: int = 3
     ) -> tuple[List[dict], Optional[str]]:
-        search_terms, query_filter, location_was_specific = (
-            self._compose_clinicaltables_query_parts(query)
-        )
+        (
+            search_terms,
+            query_filter,
+            location_was_specific,
+            city_hint,
+            zip_hint,
+            state_hint,
+        ) = self._compose_clinicaltables_query_parts(query)
         logger.debug(
             "ClinicalTables combined search_terms=%s filter=%s",
             search_terms,
@@ -479,12 +524,21 @@ class CareLocatorAgent:
         if not search_terms.strip():
             return [], None
 
+        if not location_was_specific:
+            return [], self._location_hint()
+
         results: List[dict] = []
         per_dataset_limit = max(limit, self.ctss_max_results)
 
         for dataset in self._ctss_dataset_priority:
             dataset_results = self._clinicaltables_search_dataset(
-                dataset, search_terms, query_filter, per_dataset_limit
+                dataset,
+                search_terms,
+                query_filter,
+                per_dataset_limit,
+                city_hint=city_hint,
+                zip_hint=zip_hint,
+                state_hint=state_hint,
             )
             for record in dataset_results:
                 results.append(record)
@@ -494,8 +548,7 @@ class CareLocatorAgent:
         if results:
             return results, None
 
-        note = None if location_was_specific else self._location_hint()
-        return results, note
+        return results, None
 
     # ------------------------------------------------------------------
     def _clinicaltables_search_dataset(
@@ -504,6 +557,10 @@ class CareLocatorAgent:
         search_terms: str,
         query_filter: Optional[str],
         limit: int,
+        *,
+        city_hint: Optional[str] = None,
+        zip_hint: Optional[str] = None,
+        state_hint: Optional[str] = None,
     ) -> List[dict]:
         config = self.ctss_dataset_configs.get(dataset, {})
         url = config.get("search_url")
@@ -657,6 +714,21 @@ class CareLocatorAgent:
 
             npi = data.get("NPI")
 
+            if state_hint:
+                state_str = str(state).strip().upper() if state else ""
+                if state_str and state_str != state_hint.upper():
+                    continue
+
+            if zip_hint:
+                postal_str = str(postal_code).strip() if postal_code else ""
+                if not postal_str or not postal_str.startswith(zip_hint):
+                    continue
+
+            if city_hint:
+                city_str = str(city).strip().lower() if city else ""
+                if city_str != city_hint.strip().lower():
+                    continue
+
             location_parts: List[str] = []
             if street:
                 location_parts.append(str(street))
@@ -763,16 +835,46 @@ class CareLocatorAgent:
         # Location: reduce to one normalized chunk (city/state/zip)
         alias_used = False
 
+        location_inputs: List[str] = []
+        city_hint: Optional[str] = None
+        zip_hint: Optional[str] = None
+        state_hint: Optional[str] = None
+
+        inferred_location = self._infer_location_hint(query)
+        if inferred_location:
+            location_inputs.append(inferred_location)
+
         if query.location:
+            location_inputs.append(query.location)
+
+        for location_input in location_inputs:
             normalized_location, alias_used = self._normalize_location_alias(
-                query.location
+                location_input
             )
             for chunk in self._split_location(normalized_location):
                 user_chunk = chunk.strip()
                 if not user_chunk:
                     continue
 
-                parts.append(user_chunk)
+                match = self._match_city_state(user_chunk)
+                chunk_city: Optional[str] = None
+                chunk_state: Optional[str] = None
+                if match:
+                    chunk_city, chunk_state = match
+                else:
+                    chunk_state = self._extract_state_code(user_chunk)
+
+                chunk_zip = self._extract_zip_code(user_chunk)
+
+                if chunk_city and not city_hint:
+                    city_hint = chunk_city
+                if chunk_state and not state_hint:
+                    state_hint = chunk_state
+                if chunk_zip and not zip_hint:
+                    zip_hint = chunk_zip
+
+                if user_chunk not in parts:
+                    parts.append(user_chunk)
 
                 suggestion = self._best_suggestion_across_datasets(
                     user_chunk, self._ctss_location_fields
@@ -791,26 +893,72 @@ class CareLocatorAgent:
                         suggestion_for_filters = suggestion
                         suggestion_for_terms = suggestion
 
-                if suggestion_for_terms:
+                if suggestion_for_terms and suggestion_for_terms not in parts:
                     parts.append(suggestion_for_terms)
 
                 chunk_filters = self._build_query_filters(
-                    user_chunk, suggestion_for_filters
+                    user_chunk,
+                    suggestion_for_filters,
+                    city_hint=chunk_city,
+                    zip_hint=chunk_zip,
+                    state_hint=chunk_state,
                 )
-                filters.extend(chunk_filters)
+                for filter_value in chunk_filters:
+                    if filter_value not in filters:
+                        filters.append(filter_value)
                 if self._location_filters_are_specific(
                     chunk_filters, user_chunk, alias_used
                 ):
                     location_was_specific = True
+
+                should_stop = bool(chunk_filters) or bool(chunk_zip) or bool(chunk_city)
+                if location_was_specific or should_stop:
+                    break
+
+            if location_was_specific or city_hint or zip_hint:
                 break
+
+        if not state_hint:
+            for filter_value in filters:
+                if filter_value.startswith("addr_practice.state:"):
+                    state_hint = filter_value.split(":", 1)[1]
+                    break
+
+        if not zip_hint:
+            for filter_value in filters:
+                if filter_value.startswith("addr_practice.zip:"):
+                    zip_hint = filter_value.split(":", 1)[1].strip()
+                    break
+
+        if not city_hint and filters:
+            for filter_value in filters:
+                if filter_value.startswith("addr_practice.city:"):
+                    value = filter_value.split(":", 1)[1].strip()
+                    if value.startswith('"') and value.endswith('"') and len(value) >= 2:
+                        value = value[1:-1]
+                    city_hint = value
+                    break
 
         query_filter = " AND ".join(filters) if filters else None
 
-        return " ".join(part for part in parts if part), query_filter, location_was_specific
+        return (
+            " ".join(part for part in parts if part),
+            query_filter,
+            location_was_specific,
+            city_hint,
+            zip_hint,
+            state_hint,
+        )
 
     # ------------------------------------------------------------------
     def _build_query_filters(
-        self, user_location: str, suggestion: Optional[str] = None
+        self,
+        user_location: str,
+        suggestion: Optional[str] = None,
+        *,
+        city_hint: Optional[str] = None,
+        zip_hint: Optional[str] = None,
+        state_hint: Optional[str] = None,
     ) -> List[str]:
         filters: List[str] = []
 
@@ -819,14 +967,20 @@ class CareLocatorAgent:
             self._extract_state_code(suggestion) if suggestion else None
         )
 
-        state_code = user_state or suggestion_state
+        state_code = state_hint or user_state or suggestion_state
         if user_state and suggestion_state and user_state != suggestion_state:
             state_code = user_state
 
         if state_code:
             filters.append(f"addr_practice.state:{state_code}")
 
-        return filters
+        if zip_hint:
+            filters.append(f"addr_practice.zip:{zip_hint}")
+        elif city_hint and state_code:
+            escaped_city = city_hint.replace('"', '\"')
+            filters.append(f'addr_practice.city:"{escaped_city}"')
+
+        return list(dict.fromkeys(filters))
 
     # ------------------------------------------------------------------
     def _location_filters_are_specific(
@@ -846,13 +1000,38 @@ class CareLocatorAgent:
 
     # ------------------------------------------------------------------
     def _location_has_city(self, value: str) -> bool:
-        tokens = [token.strip() for token in re.split(r"[,\s]+", value) if token.strip()]
+        normalized = value.strip().lower()
+        if not normalized:
+            return False
+
+        if normalized in _US_STATE_NAMES:
+            return False
+
+        if normalized.upper() in _US_STATE_CODES:
+            return False
+
+        stripped_state_candidate = re.sub(
+            r"\b(state|province|region|area|of|the)\b",
+            " ",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+        stripped_state_candidate = re.sub(r"\s+", " ", stripped_state_candidate).strip()
+        if stripped_state_candidate in _US_STATE_NAMES:
+            return False
+
+        tokens = [token.strip() for token in re.split(r"[,\s]+", normalized) if token.strip()]
         for token in tokens:
             upper = token.upper()
-            lower = token.lower()
-            if upper in _US_STATE_CODES or lower in _US_STATE_NAMES:
+            if upper in _US_STATE_CODES or token in _US_STATE_NAMES:
+                continue
+            if token in _LOCATION_NOISE_TOKENS:
                 continue
             if token.isdigit():
+                continue
+            if len(token) < 3:
+                continue
+            if not re.search(r"[A-Za-z]", token):
                 continue
             return True
         return False
@@ -874,6 +1053,15 @@ class CareLocatorAgent:
         normalized = value.strip().lower()
         if normalized in _US_STATE_NAMES:
             return _US_STATE_NAMES[normalized]
+        stripped = re.sub(
+            r"\b(state|province|region|area|of|the)\b",
+            " ",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+        stripped = re.sub(r"\s+", " ", stripped).strip()
+        if stripped in _US_STATE_NAMES:
+            return _US_STATE_NAMES[stripped]
         return None
 
     # ------------------------------------------------------------------
@@ -886,9 +1074,49 @@ class CareLocatorAgent:
     # ------------------------------------------------------------------
     def _location_hint(self) -> str:
         return (
-            "为了更好地匹配当地资源，请提供更具体的位置（例如城市、州或邮编）。"
-            " / Please share a specific city, state, or ZIP code so I can refine the search."
+            "Please share a specific city, state, or ZIP code so I can refine the search."
         )
+
+    # ------------------------------------------------------------------
+    def _infer_location_hint(self, query: ParsedCareQuery) -> Optional[str]:
+        texts: List[str] = []
+        if query.summary:
+            texts.append(query.summary)
+        texts.extend(query.keywords)
+
+        for text in texts:
+            if not text or not isinstance(text, str):
+                continue
+            match = self._match_city_state(text)
+            if match:
+                city, state_code = match
+                return f"{city} {state_code}"
+        return None
+
+    # ------------------------------------------------------------------
+    def _match_city_state(self, text: str) -> Optional[Tuple[str, str]]:
+        for pattern in (self._city_state_code_regex, self._city_state_name_regex):
+            match = pattern.search(text)
+            if not match:
+                continue
+
+            city = match.group("city").strip().strip(",")
+            state_fragment = match.group("state").strip()
+
+            state_code = None
+            if pattern is self._city_state_code_regex:
+                state_code = state_fragment.upper()
+            else:
+                state_code = _US_STATE_NAMES.get(state_fragment.lower())
+
+            if not state_code:
+                continue
+
+            location = f"{city} {state_code}"
+            if self._location_has_city(location):
+                return city.strip(), state_code
+
+        return None
 
     # ------------------------------------------------------------------
     def _parse_clinicaltables_payload(
