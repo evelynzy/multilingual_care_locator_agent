@@ -59,17 +59,15 @@ def get_search_settings() -> Dict[str, Any]:
                 "individual_search_url",
                 "https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/search",
             ),
-            "individual_values_url": clinical.get(
-                "individual_values_url",
-                "https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/values",
+            "individual_values_url": (
+                clinical.get("individual_values_url") or None
             ),
             "organization_search_url": clinical.get(
                 "organization_search_url",
                 "https://clinicaltables.nlm.nih.gov/api/npi_org/v3/search",
             ),
-            "organization_values_url": clinical.get(
-                "organization_values_url",
-                "https://clinicaltables.nlm.nih.gov/api/npi_org/v3/values",
+            "organization_values_url": (
+                clinical.get("organization_values_url") or None
             ),
             "field_probe_terms": clinical.get("field_probe_terms", {}),
             "timeout": clinical.get("timeout", 6),
