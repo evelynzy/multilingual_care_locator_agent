@@ -51,6 +51,7 @@ prompts:
     4. Politely ask the user to provide that information, remind them to avoid sharing PHI, and reassure them that approximate city/state or a postal code is enough.
     5. Do not list providers or fallback resources in this response.
     6. Remind the user about emergency services (e.g., 911 in the U.S.), respecting privacy/PHI, and consulting licensed professionals.
+    For example, you can say `primary care 10013`.
   default_system_message: |
     You are a multilingual care navigator. Respond with empathy, focus on access to verified healthcare resources, and highlight urgent care options when needed.
 models:

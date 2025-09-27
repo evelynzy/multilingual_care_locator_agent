@@ -86,6 +86,12 @@ def respond(
 chatbot = gr.ChatInterface(
     respond,
     type="messages",
+    # textbox=gr.Textbox(placeholder="e.g., primary care 90048"),
+    examples=[
+        "primary care 75001",
+        "儿科 10013",
+        "dentista 33012",
+    ],
     description=ui_settings.get("description", ""),
     title=ui_settings.get("title", "Multilingual Care Locator"),
 )
@@ -135,6 +141,7 @@ with gr.Blocks(fill_height=True, css=custom_css) as demo:
         **Data sources**
         - [NPI Records - Individuals](https://clinicaltables.nlm.nih.gov/apidoc/npi_idv/v3/doc.html) public API
         - [NPI Records - Organizations](https://clinicaltables.nlm.nih.gov/apidoc/npi_org/v3/doc.html) public API
+        - [NPPES API](https://npiregistry.cms.hhs.gov/api-page) public API
         """
     )
 
