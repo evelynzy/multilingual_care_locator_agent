@@ -1,14 +1,15 @@
 ---
 title: Multilingual Care Locator Agent
-emoji: 💬
-colorFrom: yellow
-colorTo: purple
+emoji: 🏢
+colorFrom: blue
+colorTo: green
 sdk: gradio
 app_file: app.py
 pinned: false
 hf_oauth: false
 license: apache-2.0
 short_description: Multilingual healthcare locator agent
+sdk_version: 5.47.2
 ---
 
 This Space hosts a multilingual care navigation assistant built with [Gradio](https://gradio.app), the [Hugging Face Inference API](https://huggingface.co/docs/api-inference/index), and a [LlamaIndex](https://www.llamaindex.ai/) vector search over healthcare providers.
