@@ -545,7 +545,20 @@ class CareLocatorAgent:
         keywords = _merge_lists(latest.keywords, full.keywords)
         patient_context = latest.patient_context or full.patient_context
         summary = latest.summary or full.summary
-        medical_need = latest.medical_need if latest.medical_need is not None else full.medical_need
+
+        latest_need = latest.medical_need
+        full_need = full.medical_need
+        if latest_need is None and full_need is None:
+            medical_need = False
+        elif latest_need is None:
+            medical_need = bool(full_need)
+        elif full_need is None:
+            medical_need = bool(latest_need)
+        else:
+            medical_need = bool(latest_need or full_need)
+
+        if not medical_need and specialties:
+            medical_need = True
 
         return ParsedCareQuery(
             detected_language=detected_language or full.detected_language,
@@ -584,28 +597,51 @@ class CareLocatorAgent:
         if not location_was_specific:
             return [], self._location_hint()
 
-        results: List[dict] = []
         per_dataset_limit = max(limit, self.ctss_max_results)
 
-        for dataset in self._ctss_dataset_priority:
-            dataset_results = self._clinicaltables_search_dataset(
-                dataset,
-                search_terms,
-                query_filter,
-                per_dataset_limit,
-                city_hint=city_hint,
-                zip_hint=zip_hint,
-                state_hint=state_hint,
+        search_variants: List[tuple[str, Optional[str], str]] = [
+            (search_terms, query_filter, "primary"),
+        ]
+
+        location_only_terms = " ".join(
+            part for part in [zip_hint, city_hint, state_hint] if part
+        )
+        if (
+            location_only_terms
+            and location_only_terms.strip()
+            and location_only_terms.strip() != search_terms.strip()
+        ):
+            search_variants.append(
+                (location_only_terms.strip(), query_filter, "location-only")
             )
-            for record in dataset_results:
-                results.append(record)
-                if len(results) >= limit:
-                    return results, None
 
-        if results:
-            return results, None
+        for variant_terms, variant_filter, variant_label in search_variants:
+            variant_results: List[dict] = []
+            logger.debug(
+                "ClinicalTables search variant=%s terms=%s filter=%s",
+                variant_label,
+                variant_terms,
+                variant_filter,
+            )
+            for dataset in self._ctss_dataset_priority:
+                dataset_results = self._clinicaltables_search_dataset(
+                    dataset,
+                    variant_terms,
+                    variant_filter,
+                    per_dataset_limit,
+                    city_hint=city_hint,
+                    zip_hint=zip_hint,
+                    state_hint=state_hint,
+                )
+                for record in dataset_results:
+                    variant_results.append(record)
+                    if len(variant_results) >= limit:
+                        return variant_results[:limit], None
 
-        return results, None
+            if variant_results:
+                return variant_results[:limit], None
+
+        return [], None
 
     # ------------------------------------------------------------------
     def _clinicaltables_search_dataset(
@@ -1082,12 +1118,12 @@ class CareLocatorAgent:
         zip_hint: Optional[str] = None
         state_hint: Optional[str] = None
 
-        inferred_location = self._infer_location_hint(query)
-        if inferred_location:
-            location_inputs.append(inferred_location)
-
         if query.location:
             location_inputs.append(query.location)
+
+        inferred_location = self._infer_location_hint(query)
+        if inferred_location and inferred_location not in location_inputs:
+            location_inputs.append(inferred_location)
 
         for location_input in location_inputs:
             normalized_location, alias_used = self._normalize_location_alias(
@@ -1159,6 +1195,15 @@ class CareLocatorAgent:
 
             if location_was_specific or city_hint or zip_hint:
                 break
+
+        if not zip_hint and query.location:
+            explicit_zip = self._extract_zip_code(query.location)
+            if explicit_zip:
+                zip_hint = explicit_zip
+                filter_value = f"addr_practice.zip:{explicit_zip}"
+                if filter_value not in filters:
+                    filters.append(filter_value)
+                location_was_specific = True
 
         if not state_hint:
             for filter_value in filters:
