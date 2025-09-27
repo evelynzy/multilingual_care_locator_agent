@@ -68,9 +68,7 @@ search:
   default_top_k: 5
   clinicaltables:
     individual_search_url: https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/search
-    individual_values_url: https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/values
     organization_search_url: https://clinicaltables.nlm.nih.gov/api/npi_org/v3/search
-    organization_values_url: https://clinicaltables.nlm.nih.gov/api/npi_org/v3/values
     field_probe_terms:
       npi_idv: urology
       npi_org: clinic

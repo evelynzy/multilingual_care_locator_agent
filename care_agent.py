@@ -206,30 +206,31 @@ class CareLocatorAgent:
                     "individual_search_url",
                     "https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/search",
                 ),
-                "values_url": clinical.get(
-                    "individual_values_url",
-                    "https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/values",
-                ),
-                "fields_url": clinical.get(
-                    "individual_fields_url",
-                    "https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/fields",
-                ),
+                # The v3 ClinicalTables API no longer exposes dedicated values/fields endpoints
+                # for NPI datasets. Keep the configuration keys optional and default them to None
+                # so the agent skips those HTTP calls.
+                "values_url": clinical.get("individual_values_url") or None,
+                "fields_url": clinical.get("individual_fields_url") or None,
                 "probe_term": field_probe_terms.get("npi_idv", "urology"),
                 "source_label": "NPI Registry (individual)",
                 "result_fields": [
-                    "Provider Last Name (Legal Name)",
-                    "Provider First Name",
-                    "Provider Middle Name",
-                    "Provider Business Practice Location Address Line 1",
+                    "name.full",
+                    "name.first",
+                    "name.middle",
+                    "name.last",
+                    "name.prefix",
+                    "name.suffix",
                     "NPI",
-                    "Provider Language Description_1",
-                    "Provider Business Practice Location Address City Name",
-                    "Provider Business Practice Location Address State Name",
-                    "Provider Business Practice Location Address Postal Code",
-                    "Provider Business Practice Location Address Telephone Number",
-                    "Provider Taxonomy Description_1",
-                    "Healthcare Provider Taxonomy Code_1",
-                    "Provider Business Practice Location Address Country Code (If outside U.S.)",
+                    "provider_type",
+                    "addr_practice.full",
+                    "addr_practice.address_1",
+                    "addr_practice.address_2",
+                    "addr_practice.city",
+                    "addr_practice.state",
+                    "addr_practice.zip",
+                    "addr_practice.country_name",
+                    "addr_practice.phone",
+                    "languages",
                 ],
             },
             "npi_org": {
@@ -237,28 +238,23 @@ class CareLocatorAgent:
                     "organization_search_url",
                     "https://clinicaltables.nlm.nih.gov/api/npi_org/v3/search",
                 ),
-                "values_url": clinical.get(
-                    "organization_values_url",
-                    "https://clinicaltables.nlm.nih.gov/api/npi_org/v3/values",
-                ),
-                "fields_url": clinical.get(
-                    "organization_fields_url",
-                    "https://clinicaltables.nlm.nih.gov/api/npi_org/v3/fields",
-                ),
+                "values_url": clinical.get("organization_values_url") or None,
+                "fields_url": clinical.get("organization_fields_url") or None,
                 "probe_term": field_probe_terms.get("npi_org", "clinic"),
                 "source_label": "NPI Registry (organization)",
                 "result_fields": [
-                    "Provider Organization Name (Legal Business Name)",
-                    "Provider Business Practice Location Address Line 1",
+                    "name.full",
                     "NPI",
-                    "Authorized Official Title or Position",
-                    "Provider Business Practice Location Address City Name",
-                    "Provider Business Practice Location Address State Name",
-                    "Provider Business Practice Location Address Postal Code",
-                    "Provider Business Practice Location Address Telephone Number",
-                    "Provider Taxonomy Description_1",
-                    "Provider Language Description_1",
-                    "Healthcare Provider Taxonomy Code_1",
+                    "provider_type",
+                    "addr_practice.full",
+                    "addr_practice.address_1",
+                    "addr_practice.address_2",
+                    "addr_practice.city",
+                    "addr_practice.state",
+                    "addr_practice.zip",
+                    "addr_practice.country_name",
+                    "addr_practice.phone",
+                    "languages",
                 ],
             },
         }
@@ -270,21 +266,17 @@ class CareLocatorAgent:
 
         self.fallback_resources = self.search_settings.get("fallback_resources", [])
         self._ctss_field_map: Dict[str, Dict[str, int]] = {}
-        self._ctss_result_field_indexes: Dict[str, List[int]] = {}
         self._ctss_result_field_order: Dict[str, List[str]] = {}
         self._ctss_suggest_cache: Dict[Tuple[str, str, str], List[str]] = {}
         self._ctss_taxonomy_fields: List[str] = [
-            "Provider Taxonomy Description_1",
-            "Healthcare Provider Taxonomy Code_1",
+            "provider_type",
+            "taxonomies[0].desc",
         ]
         self._ctss_location_fields: List[str] = [
-            "Provider Business Practice Location Address City Name",
-            "Provider Business Practice Location Address State Name",
-            "Provider Business Practice Location Address Postal Code",
-            "Provider Business Practice Location Address Country Code (If outside U.S.)",
-            "Provider Business Mailing Address City Name",
-            "Provider Business Mailing Address State Name",
-            "Provider Business Mailing Address Postal Code",
+            "addr_practice.city",
+            "addr_practice.state",
+            "addr_practice.zip",
+            "addr_practice.country_name",
         ]
         self._location_aliases: Dict[str, str] = {
             "bay area": "San Francisco CA",
@@ -663,9 +655,9 @@ class CareLocatorAgent:
         params = {"terms": search_terms, "maxList": str(limit)}
         if query_filter:
             params["q"] = query_filter
-        field_indexes = self._ctss_result_field_indexes.get(dataset)
-        if field_indexes:
-            params["df"] = ",".join(str(index) for index in field_indexes)
+        field_names = self._ctss_result_field_order.get(dataset)
+        if field_names:
+            params["df"] = ",".join(field_names)
 
         try:
             response = requests.get(url, params=params, timeout=self.ctss_timeout)
@@ -728,17 +720,17 @@ class CareLocatorAgent:
             name = self._first_match(
                 data,
                 [
-                    "Provider Organization Name (Legal Business Name)",
-                    "Provider Last Name (Legal Name)",
-                    "Provider First Name",
+                    "name.full",
+                    "name.last",
+                    "name.first",
                 ],
                 default="Healthcare Provider",
             )
 
             if dataset == "npi_idv":
-                first = data.get("Provider First Name")
-                last = data.get("Provider Last Name (Legal Name)")
-                middle = data.get("Provider Middle Name")
+                first = data.get("name.first")
+                last = data.get("name.last")
+                middle = data.get("name.middle")
                 combined = " ".join(
                     chunk
                     for chunk in [first, middle, last]
@@ -747,65 +739,47 @@ class CareLocatorAgent:
                 if combined.strip():
                     name = combined.strip()
 
+            full_address = self._first_match(data, ["addr_practice.full"])
             city = self._first_match(
                 data,
-                [
-                    "Provider Business Practice Location Address City Name",
-                    "Provider Business Mailing Address City Name",
-                ],
+                ["addr_practice.city"],
             )
 
             state = self._first_match(
                 data,
-                [
-                    "Provider Business Practice Location Address State Name",
-                    "Provider Business Mailing Address State Name",
-                ],
+                ["addr_practice.state"],
             )
 
             postal_code = self._first_match(
                 data,
-                [
-                    "Provider Business Practice Location Address Postal Code",
-                    "Provider Business Mailing Address Postal Code",
-                ],
+                ["addr_practice.zip"],
             )
 
             street = self._first_match(
                 data,
-                [
-                    "Provider Business Practice Location Address Line 1",
-                    "Provider Business Mailing Address Line 1",
-                ],
+                ["addr_practice.address_1"],
             )
 
             country = self._first_match(
                 data,
-                [
-                    "Provider Business Practice Location Address Country Code (If outside U.S.)",
-                    "Provider Business Mailing Address Country Code (If outside U.S.)",
-                ],
+                ["addr_practice.country_name"],
             )
 
             phone = self._first_match(
                 data,
-                [
-                    "Provider Business Practice Location Address Telephone Number",
-                    "Provider Business Mailing Address Telephone Number",
-                ],
+                ["addr_practice.phone"],
             )
 
             taxonomy = self._first_match(
                 data,
                 [
-                    "Provider Taxonomy Description_1",
-                    "Healthcare Provider Taxonomy Code_1",
+                    "provider_type",
+                    "taxonomies[0].desc",
+                    "taxonomies[0].code",
                 ],
             )
 
-            languages = self._ensure_list(
-                data.get("Provider Language Description_1")
-            )
+            languages = self._ensure_list(data.get("languages"))
 
             npi = data.get("NPI")
 
@@ -825,21 +799,24 @@ class CareLocatorAgent:
                     continue
 
             location_parts: List[str] = []
-            if street:
-                location_parts.append(str(street))
+            if full_address and isinstance(full_address, str) and full_address.strip():
+                location_parts.append(full_address.strip())
+            else:
+                if street:
+                    location_parts.append(str(street))
 
-            city_state = ", ".join(
-                chunk for chunk in [city, state] if isinstance(chunk, str) and chunk.strip()
-            )
-            if city_state:
-                if postal_code and isinstance(postal_code, str) and postal_code.strip():
-                    city_state = f"{city_state} {postal_code.strip()}"
-                location_parts.append(city_state)
-            elif postal_code:
-                location_parts.append(str(postal_code))
+                city_state = ", ".join(
+                    chunk for chunk in [city, state] if isinstance(chunk, str) and chunk.strip()
+                )
+                if city_state:
+                    if postal_code and isinstance(postal_code, str) and postal_code.strip():
+                        city_state = f"{city_state} {postal_code.strip()}"
+                    location_parts.append(city_state)
+                elif postal_code:
+                    location_parts.append(str(postal_code))
 
-            if country and isinstance(country, str) and country.strip() and country.strip().upper() not in {"US", "USA"}:
-                location_parts.append(country.strip())
+                if country and isinstance(country, str) and country.strip() and country.strip().upper() not in {"US", "USA"}:
+                    location_parts.append(country.strip())
 
             location_text = ", ".join(location_parts)
 
@@ -1606,38 +1583,38 @@ class CareLocatorAgent:
     # ------------------------------------------------------------------
     def _initialize_clinicaltables_field_maps(self) -> None:
         for dataset, config in self.ctss_dataset_configs.items():
-            field_map = self._fetch_field_map_for_dataset(dataset, config)
+            requested_fields = config.get("result_fields") or []
+            alias_map: Dict[str, List[str]] = config.get("field_aliases", {}) or {}
+
+            if requested_fields:
+                field_map = {
+                    field: index for index, field in enumerate(requested_fields)
+                }
+            else:
+                field_map = self._fetch_field_map_for_dataset(dataset, config)
+
             self._ctss_field_map[dataset] = field_map
 
-            requested_fields = config.get("result_fields") or []
-            if not field_map or not requested_fields:
+            resolved_fields: List[str] = list(requested_fields) or list(field_map.keys())
+            if not resolved_fields:
                 continue
 
-            indexes: List[int] = []
-            resolved_fields: List[str] = []
-            alias_map: Dict[str, List[str]] = config.get("field_aliases", {})
+            if alias_map and field_map:
+                filtered_fields: List[str] = []
+                for canonical_field in resolved_fields:
+                    candidates = [canonical_field] + alias_map.get(canonical_field, [])
+                    if any(candidate in field_map for candidate in candidates):
+                        filtered_fields.append(canonical_field)
+                    else:
+                        logger.warning(
+                            "ClinicalTables %s missing requested field '%s'",
+                            dataset,
+                            canonical_field,
+                        )
+                if filtered_fields:
+                    resolved_fields = filtered_fields
 
-            for canonical_field in requested_fields:
-                candidates = [canonical_field] + alias_map.get(canonical_field, [])
-                selected_index: Optional[int] = None
-                for candidate in candidates:
-                    candidate_index = field_map.get(candidate)
-                    if candidate_index is not None:
-                        selected_index = candidate_index
-                        break
-                if selected_index is None:
-                    logger.warning(
-                        "ClinicalTables %s missing requested field '%s'",
-                        dataset,
-                        canonical_field,
-                    )
-                    continue
-                indexes.append(selected_index)
-                resolved_fields.append(canonical_field)
-
-            if indexes:
-                self._ctss_result_field_indexes[dataset] = indexes
-                self._ctss_result_field_order[dataset] = resolved_fields
+            self._ctss_result_field_order[dataset] = list(dict.fromkeys(resolved_fields))
 
     # ------------------------------------------------------------------
     def _fetch_field_map_for_dataset(
@@ -1930,7 +1907,29 @@ class CareLocatorAgent:
         if value is None:
             return []
         if isinstance(value, list):
-            return [str(item) for item in value if item is not None]
+            normalized: List[str] = []
+            for item in value:
+                if item is None:
+                    continue
+                if isinstance(item, str):
+                    if item.strip():
+                        normalized.append(item.strip())
+                    continue
+                if isinstance(item, dict):
+                    for key in (
+                        "language",
+                        "language_desc",
+                        "desc",
+                        "description",
+                        "name",
+                    ):
+                        candidate = item.get(key)
+                        if isinstance(candidate, str) and candidate.strip():
+                            normalized.append(candidate.strip())
+                            break
+                else:
+                    normalized.append(str(item))
+            return normalized
         if isinstance(value, str):
             if not value.strip():
                 return []
