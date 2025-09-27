@@ -76,6 +76,11 @@ search:
     timeout: 6
     max_results: 10
     values_max_results: 12
+  npi_registry:
+    lookup_url: https://npiregistry.cms.hhs.gov/api/
+    version: "2.1"
+    timeout: 6
+    enabled: true
   fallback_resources:
     - name: Medicare Care Compare
       url: https://www.medicare.gov/care-compare/

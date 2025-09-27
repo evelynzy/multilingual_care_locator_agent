@@ -51,6 +51,7 @@ def get_embed_model_name() -> str:
 def get_search_settings() -> Dict[str, Any]:
     search = _load_config().get("search", {})
     clinical = search.get("clinicaltables", {})
+    registry = search.get("npi_registry", {})
     return {
         "default_top_k": search.get("default_top_k", 5),
         "clinicaltables": {
@@ -74,6 +75,14 @@ def get_search_settings() -> Dict[str, Any]:
             "timeout": clinical.get("timeout", 6),
             "max_results": clinical.get("max_results", 3),
             "values_max_results": clinical.get("values_max_results", 10),
+        },
+        "npi_registry": {
+            "lookup_url": registry.get(
+                "lookup_url", "https://npiregistry.cms.hhs.gov/api/"
+            ),
+            "version": str(registry.get("version", "2.1")),
+            "timeout": registry.get("timeout", 6),
+            "enabled": registry.get("enabled", True),
         },
         "fallback_resources": search.get("fallback_resources", []),
     }
