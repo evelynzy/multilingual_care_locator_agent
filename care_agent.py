@@ -186,6 +186,20 @@ class CareLocatorAgent:
         self.ctss_max_results = clinical.get("max_results", 3)
         self.ctss_values_max_results = clinical.get("values_max_results", 10)
 
+        self.npi_registry_config = self.search_settings.get("npi_registry", {}) or {}
+        self._npi_registry_enabled = bool(
+            self.npi_registry_config.get("enabled", True)
+            and self.npi_registry_config.get("lookup_url")
+        )
+        self.npi_registry_url = self.npi_registry_config.get("lookup_url")
+        self.npi_registry_timeout = self.npi_registry_config.get(
+            "timeout", self.ctss_timeout
+        )
+        self.npi_registry_version = str(
+            self.npi_registry_config.get("version", "2.1")
+        )
+        self._npi_registry_cache: Dict[str, Optional[dict]] = {}
+
         self.ctss_dataset_configs: Dict[str, Dict[str, Any]] = {
             "npi_idv": {
                 "search_url": clinical.get(
@@ -640,7 +654,6 @@ class CareLocatorAgent:
             response.status_code,
             response.text[:500],
         )
-        print(response.text)
         fields, entries = self._parse_clinicaltables_payload(dataset, payload)
         logger.debug(
             "ClinicalTables %s parsed fields_count=%s entries_count=%s sample=%s",
@@ -670,7 +683,10 @@ class CareLocatorAgent:
                         dataset,
                         fallback_record,
                     )
-                    results.append(fallback_record)
+                    enhanced = self._enhance_with_npi_registry(
+                        dataset, fallback_record
+                    )
+                    results.append(enhanced)
                 continue
 
             name = self._first_match(
@@ -791,25 +807,25 @@ class CareLocatorAgent:
 
             location_text = ", ".join(location_parts)
 
-            results.append(
-                {
-                    "name": name,
-                    "location": location_text or ", ".join(
-                        chunk
-                        for chunk in [city, state]
-                        if isinstance(chunk, str) and chunk.strip()
-                    ),
-                    "phone": phone,
-                    "npi": npi,
-                    "languages": languages,
-                    "taxonomy": taxonomy,
-                    "source": config.get(
-                        "source_label", "NPI Registry via clinicaltables.nlm.nih.gov"
-                    ),
-                    "dataset": dataset,
-                    "raw": data,
-                }
-            )
+            record = {
+                "name": name,
+                "location": location_text
+                or ", ".join(
+                    chunk
+                    for chunk in [city, state]
+                    if isinstance(chunk, str) and chunk.strip()
+                ),
+                "phone": phone,
+                "npi": npi,
+                "languages": languages,
+                "taxonomy": taxonomy,
+                "source": config.get(
+                    "source_label", "NPI Registry via clinicaltables.nlm.nih.gov"
+                ),
+                "dataset": dataset,
+                "raw": data,
+            }
+            results.append(self._enhance_with_npi_registry(dataset, record))
 
         return results
 
@@ -857,6 +873,189 @@ class CareLocatorAgent:
             "dataset": dataset,
             "raw": {"fallback_row": list(row)},
         }
+
+    # ------------------------------------------------------------------
+    def _enhance_with_npi_registry(self, dataset: str, record: dict) -> dict:
+        if not self._npi_registry_enabled:
+            return record
+        if not isinstance(record, dict):
+            return record
+
+        npi = record.get("npi")
+        if not npi:
+            return record
+
+        npi_str = str(npi).strip()
+        if not npi_str.isdigit():
+            return record
+
+        lookup = self._lookup_npi_registry_entry(npi_str)
+        if not lookup:
+            return record
+
+        practice_address = lookup.get("practice_address")
+        mailing_address = lookup.get("mailing_address")
+        location_override = self._format_npi_registry_location(practice_address)
+        if location_override:
+            record["location"] = location_override
+
+        phone_value = None
+        if isinstance(practice_address, dict):
+            phone_value = practice_address.get("telephone_number")
+        if not phone_value and isinstance(mailing_address, dict):
+            phone_value = mailing_address.get("telephone_number")
+        if isinstance(phone_value, str) and phone_value.strip():
+            record["phone"] = phone_value.strip()
+
+        if not record.get("taxonomy") and lookup.get("taxonomies"):
+            taxonomy = self._first_non_empty_taxonomy_description(
+                lookup.get("taxonomies")
+            )
+            if taxonomy:
+                record["taxonomy"] = taxonomy
+
+        record.setdefault("raw", {})["npi_registry"] = {
+            "dataset": dataset,
+            "lookup": lookup,
+        }
+        return record
+
+    # ------------------------------------------------------------------
+    def _lookup_npi_registry_entry(self, npi: str) -> Optional[dict]:
+        cached = self._npi_registry_cache.get(npi)
+        if cached is not None:
+            return cached
+
+        if not self._npi_registry_enabled or not self.npi_registry_url:
+            self._npi_registry_cache[npi] = None
+            return None
+
+        params = {
+            "number": npi,
+            "version": self.npi_registry_version,
+            "limit": 1,
+        }
+
+        try:
+            response = requests.get(
+                self.npi_registry_url,
+                params=params,
+                timeout=self.npi_registry_timeout,
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            logger.warning("NPI registry lookup failed for %s: %s", npi, exc)
+            self._npi_registry_cache[npi] = None
+            return None
+
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = None
+
+        entry: Optional[dict] = None
+        if isinstance(payload, dict):
+            results = payload.get("results") or []
+            if results:
+                candidate = results[0]
+                if isinstance(candidate, dict):
+                    entry = candidate
+
+        if not entry:
+            self._npi_registry_cache[npi] = None
+            return None
+
+        addresses = entry.get("addresses")
+        practice = self._select_npi_registry_address(addresses, target="LOCATION")
+        mailing = self._select_npi_registry_address(addresses, target="MAILING")
+
+        normalized = {
+            "npi": npi,
+            "practice_address": practice,
+            "mailing_address": mailing,
+            "taxonomies": entry.get("taxonomies"),
+            "basic": entry.get("basic"),
+            "enumeration_type": entry.get("enumeration_type"),
+            "created_epoch": entry.get("created_epoch"),
+            "last_updated_epoch": entry.get("last_updated_epoch"),
+            "raw_entry": entry,
+        }
+
+        self._npi_registry_cache[npi] = normalized
+        return normalized
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _select_npi_registry_address(addresses: Any, *, target: str) -> Optional[dict]:
+        if not isinstance(addresses, list):
+            return None
+
+        fallback: Optional[dict] = None
+        for entry in addresses:
+            if not isinstance(entry, dict):
+                continue
+            if fallback is None:
+                fallback = entry
+            purpose = entry.get("address_purpose")
+            if isinstance(purpose, str) and purpose.strip().upper() == target.upper():
+                return entry
+
+        return fallback
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _format_npi_registry_location(address: Optional[dict]) -> str:
+        if not isinstance(address, dict):
+            return ""
+
+        parts: List[str] = []
+        for key in ("address_1", "address_2"):
+            value = address.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(value.strip())
+
+        city = address.get("city")
+        state = address.get("state")
+        locality_parts: List[str] = []
+        if isinstance(city, str) and city.strip():
+            locality_parts.append(city.strip())
+        if isinstance(state, str) and state.strip():
+            locality_parts.append(state.strip())
+
+        locality = ", ".join(locality_parts)
+        postal = address.get("postal_code")
+        if isinstance(postal, str) and postal.strip():
+            postal_clean = postal.strip()
+            if locality:
+                locality = f"{locality} {postal_clean}"
+            else:
+                locality = postal_clean
+
+        if locality:
+            parts.append(locality)
+
+        country = address.get("country_name") or address.get("country_code")
+        if isinstance(country, str):
+            country_clean = country.strip()
+            if country_clean and country_clean.upper() not in {"US", "USA", "UNITED STATES"}:
+                parts.append(country_clean)
+
+        return ", ".join(parts)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _first_non_empty_taxonomy_description(taxonomies: Any) -> Optional[str]:
+        if not isinstance(taxonomies, list):
+            return None
+
+        for entry in taxonomies:
+            if not isinstance(entry, dict):
+                continue
+            for key in ("desc", "code"):
+                value = entry.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return None
 
     # ------------------------------------------------------------------
     def _compose_clinicaltables_query_parts(
@@ -1578,10 +1777,46 @@ class CareLocatorAgent:
             temperature=temperature,
             top_p=top_p,
         )
-        finish_reason = completion.choices[0].finish_reason if completion.choices else "unknown"
+
+        choices = getattr(completion, "choices", None) or []
+        first_choice = choices[0] if choices else None
+        finish_reason = (
+            getattr(first_choice, "finish_reason", None)
+            if first_choice is not None
+            else "unknown"
+        )
         logger.info("Response generation finish_reason=%s", finish_reason)
 
-        return completion.choices[0].message["content"].strip()
+        if first_choice is None:
+            raise RuntimeError("Model did not return any choices")
+
+        message = getattr(first_choice, "message", None)
+        content = None
+
+        if isinstance(message, dict):
+            content = message.get("content")
+        elif message is not None:
+            content = getattr(message, "content", None)
+
+        if content is None and hasattr(first_choice, "text"):
+            content = getattr(first_choice, "text")
+
+        if isinstance(content, list):
+            text_chunks: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    text_chunks.append(item)
+                elif isinstance(item, dict):
+                    text_chunks.append(str(item.get("text", "")))
+            content = "".join(text_chunks)
+
+        if not content:
+            raise RuntimeError("Model response missing content")
+
+        if not isinstance(content, str):
+            content = str(content)
+
+        return content.strip()
 
     # ------------------------------------------------------------------
     def _should_use_fallback_only_template(self) -> bool:
