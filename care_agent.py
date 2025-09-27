@@ -314,6 +314,10 @@ class CareLocatorAgent:
         logger.info("Handling request. message_length=%s history_turns=%s", len(message), len(history))
         parsed_query = self._interpret_user_need(client, message, history)
 
+        if history:
+            latest_only_query = self._interpret_user_need(client, message, [])
+            parsed_query = self._merge_parsed_queries(parsed_query, latest_only_query)
+
         local_results: List[dict] = []
         fallback_results: List[dict] = []
 
@@ -501,6 +505,45 @@ class CareLocatorAgent:
             preferred_languages=self._ensure_list(parsed_payload.get("preferred_languages")),
             keywords=self._ensure_list(parsed_payload.get("keywords")),
             patient_context=parsed_payload.get("patient_context"),
+        )
+
+    # ------------------------------------------------------------------
+    def _merge_parsed_queries(
+        self, full: ParsedCareQuery, latest: ParsedCareQuery
+    ) -> ParsedCareQuery:
+        def _prefer(primary: Optional[str], fallback: Optional[str]) -> Optional[str]:
+            return primary if primary not in (None, "", "unknown") else fallback
+
+        def _merge_lists(primary: List[str], fallback: List[str]) -> List[str]:
+            merged: List[str] = []
+            for item in primary + fallback:
+                if item not in merged:
+                    merged.append(item)
+            return merged
+
+        detected_language = _prefer(latest.detected_language, full.detected_language)
+        response_language = _prefer(latest.response_language, full.response_language)
+
+        specialties = latest.specialties or full.specialties
+        location = latest.location or full.location
+        insurance = latest.insurance or full.insurance
+        preferred_languages = _merge_lists(latest.preferred_languages, full.preferred_languages)
+        keywords = _merge_lists(latest.keywords, full.keywords)
+        patient_context = latest.patient_context or full.patient_context
+        summary = latest.summary or full.summary
+        medical_need = latest.medical_need if latest.medical_need is not None else full.medical_need
+
+        return ParsedCareQuery(
+            detected_language=detected_language or full.detected_language,
+            response_language=response_language or full.response_language,
+            summary=summary,
+            medical_need=medical_need,
+            location=location,
+            specialties=specialties,
+            insurance=insurance,
+            preferred_languages=preferred_languages,
+            keywords=keywords,
+            patient_context=patient_context,
         )
 
     # ------------------------------------------------------------------
