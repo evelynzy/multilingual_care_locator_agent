@@ -142,6 +142,7 @@ with gr.Blocks(fill_height=True, css=custom_css) as demo:
         - [NPI Records - Individuals](https://clinicaltables.nlm.nih.gov/apidoc/npi_idv/v3/doc.html) public API
         - [NPI Records - Organizations](https://clinicaltables.nlm.nih.gov/apidoc/npi_org/v3/doc.html) public API
         - [NPPES API](https://npiregistry.cms.hhs.gov/api-page) public API
+        - [Medicare Opt Out Records](https://data.cms.gov/data-api/v1/dataset/9887a515-7552-4693-bf58-735c77af46d7/data) public data
         """
     )
 
