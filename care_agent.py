@@ -932,13 +932,13 @@ class CareLocatorAgent:
             "lookup": lookup,
         }
         # check CMS opt‑out status and attach the result
-            try:
-                opt_out_info = self._check_medicare_opt_out(str(record["npi"]))
-                if opt_out_info:
-                    record["medicare_opt_out"] = opt_out_info
-            except Exception:
-                # do not break provider enrichment if opt‑out lookup fails
-                logger.warning("Error checking opt‑out status for %s", record.get("npi"))
+        try:
+            opt_out_info = self._check_medicare_opt_out(str(record["npi"]))
+            if opt_out_info:
+                record["medicare_opt_out"] = opt_out_info
+        except Exception:
+            # do not break provider enrichment if opt‑out lookup fails
+            logger.warning("Error checking opt‑out status for %s", record.get("npi"))
 
         return record
 
