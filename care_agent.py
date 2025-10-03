@@ -931,6 +931,15 @@ class CareLocatorAgent:
             "dataset": dataset,
             "lookup": lookup,
         }
+        # check CMS opt‑out status and attach the result
+            try:
+                opt_out_info = self._check_medicare_opt_out(str(record["npi"]))
+                if opt_out_info:
+                    record["medicare_opt_out"] = opt_out_info
+            except Exception:
+                # do not break provider enrichment if opt‑out lookup fails
+                logger.warning("Error checking opt‑out status for %s", record.get("npi"))
+
         return record
 
     # ------------------------------------------------------------------
@@ -997,6 +1006,64 @@ class CareLocatorAgent:
         self._npi_registry_cache[npi] = normalized
         return normalized
 
+        # ------------------------------------------------------------------
+    def _check_medicare_opt_out(self, npi: str) -> Optional[dict]:
+        """
+        Look up a provider's Medicare opt‑out status using CMS's Opt‑Out Affidavits API.
+        Returns a dict with opted_out (bool), optout_effective_date, optout_end_date,
+        or None if no record is found or the request fails.
+        """
+        # Dataset ID for the Opt‑Out Affidavits (as of 2025-09-28).
+        # Fields include NPI, Optout Effective Date, and Optout End Date:contentReference[oaicite:0]{index=0}.
+        dataset_id = "9887a515-7552-4693-bf58-735c77af46d7"
+        base_url = f"https://data.cms.gov/data-api/v1/dataset/{dataset_id}/data"
+
+        try:
+            # Build query: filter by exact NPI
+            resp = requests.get(
+                base_url,
+                params={
+                    "filter[NPI]": str(npi),
+                    # limit results to one record; not strictly necessary but avoids large payloads
+                    "size": "1",
+                },
+                timeout=6,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as exc:
+            logger.warning("Opt‑out lookup failed for %s: %s", npi, exc)
+            return None
+
+        # API returns an array of records; if empty, provider has no opt‑out on file
+        if not isinstance(data, list) or not data:
+            return {"opted_out": False}
+
+        record = data[0]
+        effective = record.get("Optout Effective Date")
+        end = record.get("Optout End Date")
+
+        # Determine if the opt‑out is currently in effect.  An open‑ended (null) end date
+        # or end date in the future means the provider is opted out.
+        opted_out = False
+        if effective:
+            # End date might be empty or a future date (YYYY/MM/DD format)
+            if not end:
+                opted_out = True
+            else:
+                try:
+                    from datetime import date
+                    end_date = date.fromisoformat(end.replace("/", "-"))
+                    opted_out = end_date >= date.today()
+                except Exception:
+                    opted_out = True
+
+        return {
+            "opted_out": opted_out,
+            "optout_effective_date": effective,
+            "optout_end_date": end,
+        }
+    
     # ------------------------------------------------------------------
     @staticmethod
     def _select_npi_registry_address(addresses: Any, *, target: str) -> Optional[dict]:
