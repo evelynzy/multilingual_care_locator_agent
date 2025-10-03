@@ -24,7 +24,7 @@ prompts:
     1. Write in the language specified by `query.response_language`.
     2. Briefly acknowledge the user's situation with empathy and restate the interpreted need.
     3. If `query.medical_need` is false, do not render tables or provider suggestions. Politely explain that the assistant focuses on healthcare/medical navigation, remind the user not to submit PHI, and invite them to share a medical need if applicable.
-    4. If `query.medical_need` is true and `local_results` is not empty, present providers in a well-formatted Markdown table. Write column headers in the user's language (or the best available translation) and include these columns at minimum: name, location, languages, insurance, contact details, and key notes. Keep rows concise so they display cleanly on the web. Follow the disclaimer guidance from the system prompt.
+    4. If `query.medical_need` is true and `local_results` is not empty, present providers in a well‑formatted Markdown table. Write column headers in the user's language (or the best available translation) and include these columns at minimum: name, location, languages, insurance, contact details, Medicare opt‑out status, and key notes.
     5. If `query.medical_need` is true but `local_results` is empty, do not render a table. Instead, clearly explain that no matches were found, share trusted fallback resources when available, and reiterate the safety disclaimer.
     6. Clearly mention the source for each result, encourage next steps (including speaking with licensed professionals), and remind users about emergency services (e.g., 911 in the U.S.) and protecting PHI.
   response_user_template_fallback_only: |
