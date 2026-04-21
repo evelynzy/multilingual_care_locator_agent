@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,14 +17,84 @@ from retriever import ProviderRepository, SearchCriteria
 logger = logging.getLogger(__name__)
 
 
-_REQUIRED_TRUST_GUIDANCE = (
-    "Important safety and trust notes:\n"
-    "- This tool supports care navigation only and does not diagnose, prescribe, or replace licensed medical advice.\n"
-    "- Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.\n"
-    "- Insurance/network participation, referral requirements, new-patient availability, location, and appointment availability are not verified unless the source explicitly says so. Call the provider and insurer to confirm before seeking care.\n"
-    "- Do not share personal health information such as full names, addresses, Social Security numbers, or medical record numbers.\n"
-    "- If symptoms are severe or life-threatening, call emergency services (911 in the U.S.) or go to the nearest emergency room."
-)
+_REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE = {
+    "english": (
+        "Important safety and trust notes:\n"
+        "- This tool supports care navigation only and does not diagnose, prescribe, or replace licensed medical advice.\n"
+        "- Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.\n"
+        "- Insurance/network participation, referral requirements, new-patient availability, location, and appointment availability are not verified unless the source explicitly says so. Call the provider and insurer to confirm before seeking care.\n"
+        "- Do not share personal health information such as full names, addresses, Social Security numbers, or medical record numbers.\n"
+        "- If symptoms are severe or life-threatening, call emergency services (911 in the U.S.) or go to the nearest emergency room."
+    ),
+    "spanish": (
+        "Notas importantes de seguridad y confianza:\n"
+        "- Esta herramienta solo apoya la navegación de atención y no diagnostica, receta ni reemplaza el consejo médico de profesionales con licencia.\n"
+        "- Las coincidencias del directorio son informativas, no remisiones, endosos ni garantías de ajuste clínico.\n"
+        "- La participación en la red del seguro, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas no están verificadas a menos que la fuente lo indique explícitamente. Llame al proveedor y a la aseguradora para confirmar antes de buscar atención.\n"
+        "- No comparta información personal de salud, como nombres completos, direcciones, números de Seguro Social o números de expediente médico.\n"
+        "- Si los síntomas son graves o potencialmente mortales, llame a los servicios de emergencia (911 en EE. UU.) o vaya a la sala de emergencias más cercana."
+    ),
+    "chinese": (
+        "重要的安全和信任提示：\n"
+        "- 此工具仅支持护理导航，不会诊断、开药或替代持证医疗专业人员的建议。\n"
+        "- 目录匹配结果仅供参考，不是转诊、背书或临床适配性的保证。\n"
+        "- 除非来源明确说明，否则保险网络参与情况、转诊要求、新患者接收情况、地点和预约可用性均未经过验证。就医前请致电服务提供者和保险公司确认。\n"
+        "- 请勿分享个人健康信息，例如全名、地址、社会安全号码或病历号码。\n"
+        "- 如果症状严重或危及生命，请拨打紧急服务电话（美国为 911）或前往最近的急诊室。"
+    ),
+}
+
+_REQUIRED_TRUST_GUIDANCE = _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE["english"]
+
+_REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES = {
+    "en": "english",
+    "eng": "english",
+    "english": "english",
+    "es": "spanish",
+    "esp": "spanish",
+    "espanol": "spanish",
+    "spanish": "spanish",
+    "zh": "chinese",
+    "zh-cn": "chinese",
+    "zh-hans": "chinese",
+    "zh-hant": "chinese",
+    "chinese": "chinese",
+    "mandarin": "chinese",
+    "mandarin chinese": "chinese",
+    "cantonese": "chinese",
+    "cantonese chinese": "chinese",
+    "中文": "chinese",
+    "普通话": "chinese",
+    "廣東話": "chinese",
+    "广东话": "chinese",
+}
+
+
+def _get_required_trust_guidance(response_language: Optional[str]) -> str:
+    if not response_language:
+        return _REQUIRED_TRUST_GUIDANCE
+
+    normalized_language = unicodedata.normalize("NFKD", str(response_language).strip().lower())
+    normalized_language = "".join(
+        character for character in normalized_language if not unicodedata.combining(character)
+    )
+    normalized_language = re.sub(r"\s+", " ", normalized_language)
+    language_key = _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.get(normalized_language)
+
+    if language_key is None:
+        for alias, alias_language_key in _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.items():
+            if (
+                normalized_language.startswith(f"{alias} ")
+                or normalized_language.startswith(f"{alias}-")
+                or normalized_language.startswith(f"{alias} (")
+            ):
+                language_key = alias_language_key
+                break
+
+    if language_key is None:
+        return _REQUIRED_TRUST_GUIDANCE
+
+    return _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key]
 
 
 def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -2329,7 +2400,8 @@ class CareLocatorAgent:
         top_p: float,
         template_key: str = "response_template",
     ) -> str:
-        response_language = payload["query"].get("response_language", "English")
+        query = payload.get("query", {})
+        response_language = query.get("response_language") or query.get("detected_language") or "English"
         summary_prompt = self.prompts.get("response_system") or (
             "You are a care navigation assistant responding to users in their preferred language."
         )
@@ -2402,14 +2474,15 @@ class CareLocatorAgent:
         if not isinstance(content, str):
             content = str(content)
 
-        return self._append_required_trust_guidance(content.strip())
+        return self._append_required_trust_guidance(content.strip(), response_language)
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _append_required_trust_guidance(content: str) -> str:
-        if _REQUIRED_TRUST_GUIDANCE in content:
+    def _append_required_trust_guidance(content: str, response_language: Optional[str] = None) -> str:
+        trust_guidance = _get_required_trust_guidance(response_language)
+        if trust_guidance in content:
             return content
-        return f"{content}\n\n{_REQUIRED_TRUST_GUIDANCE}"
+        return f"{content}\n\n{trust_guidance}"
 
     # ------------------------------------------------------------------
     def _should_use_fallback_only_template(self) -> bool:
