@@ -76,6 +76,28 @@ _UNKNOWN_LANGUAGE_MARKERS = {
     "n/a",
 }
 
+_TRUST_GUIDANCE_PROTECTED_TOKENS = {
+    "scope": "[[CARE_NAVIGATION_ONLY]]",
+    "advice": "[[LICENSED_MEDICAL_ADVICE]]",
+    "directory": "[[DIRECTORY_INFORMATIONAL_ONLY]]",
+    "insurance": "[[INSURANCE_NETWORK_UNVERIFIED]]",
+    "confirm": "[[CALL_PROVIDER_AND_INSURER]]",
+    "privacy": "[[DO_NOT_SHARE_PHI]]",
+    "emergency": "[[EMERGENCY_SERVICES_911]]",
+}
+
+_TRUST_GUIDANCE_ENGLISH_LEAK_PHRASES = (
+    "important safety and trust notes",
+    "this tool supports care navigation only",
+    "directory matches are informational",
+    "insurance/network participation",
+    "do not share personal health information",
+)
+
+_TRANSLATED_TRUST_GUIDANCE_MIN_LENGTH_RATIO = 0.45
+_TRANSLATED_TRUST_GUIDANCE_MAX_LENGTH_RATIO = 2.5
+_TRANSLATED_TRUST_GUIDANCE_MIN_ABSOLUTE_LENGTH = 240
+
 
 def _normalize_response_language(response_language: Optional[str]) -> str:
     if not response_language:
@@ -117,6 +139,9 @@ def _get_prewritten_required_trust_guidance(response_language: Optional[str]) ->
 
 
 def _build_trust_guidance_translation_messages(target_language: str) -> List[Dict[str, str]]:
+    protected_token_list = "\n".join(
+        f"- {token}" for token in _TRUST_GUIDANCE_PROTECTED_TOKENS.values()
+    )
     return normalize_chat_messages(
         [
             {
@@ -125,18 +150,79 @@ def _build_trust_guidance_translation_messages(target_language: str) -> List[Dic
                     "You translate fixed safety and trust guidance for a healthcare navigation assistant. "
                     "Translate only the text provided. Preserve all meaning, cautions, emergency instructions, "
                     "and insurance/network verification limits. Do not add, remove, or reinterpret medical advice. "
-                    "Return only the translated text."
+                    "Do not translate or remove bracketed placeholder tokens. Return only the translated text."
                 ),
             },
             {
                 "role": "user",
                 "content": (
                     f"Translate the following canonical English safety/trust note into {target_language}:\n\n"
-                    f"{_REQUIRED_TRUST_GUIDANCE}"
+                    f"{_required_trust_guidance_with_protected_tokens()}\n\n"
+                    "The translated text must preserve these exact placeholder tokens:\n"
+                    f"{protected_token_list}"
                 ),
             },
         ]
     )
+
+
+def _required_trust_guidance_with_protected_tokens() -> str:
+    return (
+        "Important safety and trust notes:\n"
+        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['scope']} This tool supports care navigation only and does not diagnose, prescribe, or replace licensed medical advice {_TRUST_GUIDANCE_PROTECTED_TOKENS['advice']}.\n"
+        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['directory']} Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.\n"
+        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['insurance']} Insurance/network participation, referral requirements, new-patient availability, location, and appointment availability are not verified unless the source explicitly says so. Call the provider and insurer to confirm before seeking care {_TRUST_GUIDANCE_PROTECTED_TOKENS['confirm']}.\n"
+        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['privacy']} Do not share personal health information such as full names, addresses, Social Security numbers, or medical record numbers.\n"
+        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['emergency']} If symptoms are severe or life-threatening, call emergency services (911 in the U.S.) or go to the nearest emergency room."
+    )
+
+
+def _strip_trust_guidance_protected_tokens(translated_guidance: str) -> str:
+    stripped_guidance = translated_guidance
+    for token in _TRUST_GUIDANCE_PROTECTED_TOKENS.values():
+        stripped_guidance = stripped_guidance.replace(token, "")
+    stripped_guidance = re.sub(r"[ \t]+", " ", stripped_guidance)
+    stripped_guidance = re.sub(r"\s+([.,;:!?])", r"\1", stripped_guidance)
+    return stripped_guidance.strip()
+
+
+def _translated_trust_guidance_is_valid(
+    translated_guidance: str,
+    target_language: Optional[str],
+) -> bool:
+    stripped_guidance = translated_guidance.strip()
+    if not stripped_guidance:
+        return False
+
+    missing_tokens = [
+        token
+        for token in _TRUST_GUIDANCE_PROTECTED_TOKENS.values()
+        if token not in stripped_guidance
+    ]
+    if missing_tokens:
+        return False
+
+    guidance_without_tokens = _strip_trust_guidance_protected_tokens(stripped_guidance)
+    if not guidance_without_tokens:
+        return False
+
+    canonical_length = len(_REQUIRED_TRUST_GUIDANCE)
+    min_length = max(
+        int(canonical_length * _TRANSLATED_TRUST_GUIDANCE_MIN_LENGTH_RATIO),
+        _TRANSLATED_TRUST_GUIDANCE_MIN_ABSOLUTE_LENGTH,
+    )
+    max_length = int(canonical_length * _TRANSLATED_TRUST_GUIDANCE_MAX_LENGTH_RATIO)
+    translated_length = len(guidance_without_tokens)
+    if translated_length < min_length or translated_length > max_length:
+        return False
+
+    normalized_target_language = _normalize_response_language(target_language)
+    if normalized_target_language not in {"english", "en", "eng"}:
+        normalized_guidance = _normalize_response_language(guidance_without_tokens)
+        if any(phrase in normalized_guidance for phrase in _TRUST_GUIDANCE_ENGLISH_LEAK_PHRASES):
+            return False
+
+    return True
 
 
 def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -2576,7 +2662,15 @@ class CareLocatorAgent:
         if not translated_guidance:
             return None
 
-        return translated_guidance.strip()
+        translated_guidance = translated_guidance.strip()
+        if not _translated_trust_guidance_is_valid(translated_guidance, response_language):
+            logger.warning(
+                "Trust guidance translation failed validation. language=%s",
+                response_language,
+            )
+            return None
+
+        return _strip_trust_guidance_protected_tokens(translated_guidance)
 
     # ------------------------------------------------------------------
     def _should_use_fallback_only_template(self) -> bool:
