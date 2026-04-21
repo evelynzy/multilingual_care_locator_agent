@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import logging
@@ -14,6 +14,32 @@ from config_loader import get_prompt, get_search_settings
 from retriever import ProviderRepository, SearchCriteria
 
 logger = logging.getLogger(__name__)
+
+
+_REQUIRED_TRUST_GUIDANCE = (
+    "Important safety and trust notes:\n"
+    "- This tool supports care navigation only and does not diagnose, prescribe, or replace licensed medical advice.\n"
+    "- Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.\n"
+    "- Insurance/network participation, referral requirements, new-patient availability, location, and appointment availability are not verified unless the source explicitly says so. Call the provider and insurer to confirm before seeking care.\n"
+    "- Do not share personal health information such as full names, addresses, Social Security numbers, or medical record numbers.\n"
+    "- If symptoms are severe or life-threatening, call emergency services (911 in the U.S.) or go to the nearest emergency room."
+)
+
+
+def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized_messages: List[Dict[str, Any]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        if "role" not in message or "content" not in message:
+            continue
+        normalized_messages.append(
+            {
+                "role": message["role"],
+                "content": message["content"],
+            }
+        )
+    return normalized_messages
 
 
 _US_STATE_CODES = {
@@ -146,6 +172,106 @@ _LOCATION_NOISE_TOKENS = {
     "province",
 }
 
+_EMERGENCY_PATTERNS = (
+    "emergency",
+    "life-threatening",
+    "life threatening",
+    "chest pain",
+    "trouble breathing",
+    "difficulty breathing",
+    "can't breathe",
+    "cannot breathe",
+    "cant breathe",
+    "shortness of breath",
+    "stroke",
+    "heart attack",
+    "overdose",
+    "seizure",
+    "anaphylaxis",
+    "weakness on one side",
+    "numbness on one side",
+    "severe bleeding",
+    "unconscious",
+    "suicidal",
+    "suicide",
+)
+
+_URGENT_PATTERNS = (
+    "same-day",
+    "same day",
+    "today",
+    "urgent",
+    "asap",
+    "right away",
+    "immediate",
+)
+
+_ROUTINE_PATTERNS = (
+    "routine",
+    "ongoing",
+    "follow-up",
+    "follow up",
+    "checkup",
+    "check-up",
+    "annual",
+    "preventive",
+    "primary care",
+    "pcp",
+)
+
+_SPECIALIST_PATTERNS = (
+    "specialist",
+    "specialty",
+    "referral",
+    "cardiologist",
+    "dermatologist",
+    "neurologist",
+    "psychiatrist",
+    "ent",
+    "orthopedic",
+    "orthopaedic",
+    "gastroenterologist",
+    "endocrinologist",
+    "urologist",
+    "oncologist",
+)
+
+_INSURANCE_PATTERNS = (
+    "insurance",
+    "covered",
+    "coverage",
+    "plan",
+    "hmo",
+    "ppo",
+    "pos",
+    "medicaid",
+    "medicare",
+    "chip",
+)
+
+_LANGUAGE_PATTERNS = (
+    "speaks",
+    "speaker",
+    "bilingual",
+    "language",
+    "spanish",
+    "mandarin",
+    "cantonese",
+    "french",
+    "arabic",
+    "hindi",
+)
+
+_REFERRAL_PATTERNS = (
+    "referral",
+    "referrals",
+    "referred",
+    "need a referral",
+    "needs a referral",
+)
+
+_PLAN_TYPE_PATTERNS = ("hmo", "ppo", "pos")
+
 
 @dataclass
 class ParsedCareQuery:
@@ -161,6 +287,10 @@ class ParsedCareQuery:
     preferred_languages: List[str]
     keywords: List[str]
     patient_context: Optional[str]
+    care_setting: Optional[str] = None
+    urgency: Optional[str] = None
+    needs_clarification: bool = False
+    follow_up_focus: List[str] = field(default_factory=list)
 
 
 class CareLocatorAgent:
@@ -172,6 +302,12 @@ class CareLocatorAgent:
             "interpret": get_prompt("interpret_user_need"),
             "response_system": get_prompt("response_system"),
             "response_template": get_prompt("response_user_template"),
+            "response_template_clarification_needed": get_prompt(
+                "response_user_template_clarification_needed"
+            ),
+            "response_template_emergency": get_prompt(
+                "response_user_template_emergency"
+            ),
             "response_template_fallback_only": get_prompt(
                 "response_user_template_fallback_only"
             ),
@@ -324,6 +460,74 @@ class CareLocatorAgent:
             latest_only_query = self._interpret_user_need(client, message, [])
             parsed_query = self._merge_parsed_queries(parsed_query, latest_only_query)
 
+        has_emergency_signal = self._contains_emergency_signal(message.lower())
+        navigation_guidance = (
+            self._build_navigation_guidance(parsed_query, message)
+            if parsed_query.medical_need or has_emergency_signal
+            else {
+                "mode": "search",
+                "care_setting_guidance": None,
+                "follow_up_questions": [],
+                "specialist_plan_guidance": None,
+                "location_only": False,
+            }
+        )
+
+        response_payload = {
+            "query": {
+                "detected_language": parsed_query.detected_language,
+                "response_language": parsed_query.response_language,
+                "summary": parsed_query.summary,
+                "medical_need": parsed_query.medical_need or has_emergency_signal,
+                "location": parsed_query.location,
+                "specialties": parsed_query.specialties,
+                "insurance": parsed_query.insurance,
+                "preferred_languages": parsed_query.preferred_languages,
+                "keywords": parsed_query.keywords,
+                "patient_context": parsed_query.patient_context,
+                "care_setting": parsed_query.care_setting,
+                "urgency": parsed_query.urgency,
+                "needs_clarification": parsed_query.needs_clarification,
+                "follow_up_focus": parsed_query.follow_up_focus,
+            },
+            "local_results": [],
+            "fallback_results": [],
+            "verification_guidance": self._verification_guidance(),
+        }
+
+        if navigation_guidance.get("care_setting_guidance"):
+            response_payload["care_setting_guidance"] = navigation_guidance["care_setting_guidance"]
+        if navigation_guidance.get("follow_up_questions"):
+            response_payload["follow_up_questions"] = navigation_guidance["follow_up_questions"]
+        if navigation_guidance.get("specialist_plan_guidance"):
+            response_payload["specialist_plan_guidance"] = navigation_guidance["specialist_plan_guidance"]
+
+        if navigation_guidance.get("mode") == "emergency":
+            response_payload["emergency_guidance"] = navigation_guidance.get("care_setting_guidance")
+            return self._compose_response(
+                client,
+                response_payload,
+                max_tokens,
+                temperature,
+                top_p,
+                template_key="response_template_emergency",
+            )
+
+        if navigation_guidance.get("follow_up_questions"):
+            template_key = (
+                "response_template_location_needed"
+                if navigation_guidance.get("location_only")
+                else "response_template_clarification_needed"
+            )
+            return self._compose_response(
+                client,
+                response_payload,
+                max_tokens,
+                temperature,
+                top_p,
+                template_key=template_key,
+            )
+
         local_results: List[dict] = []
         fallback_results: List[dict] = []
 
@@ -338,7 +542,10 @@ class CareLocatorAgent:
                 keywords=parsed_query.keywords,
             )
 
-            local_results = self.provider_repository.search(search_criteria)
+            local_results = [
+                self._normalize_result_trust_metadata(result)
+                for result in self.provider_repository.search(search_criteria)
+            ]
             logger.info("Local semantic search results=%s", len(local_results))
 
             if not local_results:
@@ -346,16 +553,28 @@ class CareLocatorAgent:
                     parsed_query,
                     limit=self.ctss_max_results,
                 )
+                fallback_results = [
+                    self._normalize_result_trust_metadata(result)
+                    for result in fallback_results
+                ]
                 logger.info(
                     "ClinicalTables fallback results=%s", len(fallback_results)
                 )
                 if not fallback_results and not missing_location_hint:
-                    fallback_results = self._trusted_resource_fallback(parsed_query)
+                    fallback_results = [
+                        self._normalize_result_trust_metadata(result)
+                        for result in self._trusted_resource_fallback(parsed_query)
+                    ]
                     logger.info(
                         "Trusted resource fallback results=%s", len(fallback_results)
                     )
         else:
             logger.info("Parsed request marked as non-medical; skipping provider search")
+
+        if navigation_guidance.get("care_setting_guidance") and "care_setting_guidance" not in response_payload:
+            response_payload["care_setting_guidance"] = navigation_guidance["care_setting_guidance"]
+        if navigation_guidance.get("specialist_plan_guidance") and "specialist_plan_guidance" not in response_payload:
+            response_payload["specialist_plan_guidance"] = navigation_guidance["specialist_plan_guidance"]
 
         no_results_found = (
             parsed_query.medical_need
@@ -363,23 +582,8 @@ class CareLocatorAgent:
             and not fallback_results
             and not missing_location_hint
         )
-
-        response_payload = {
-            "query": {
-                "detected_language": parsed_query.detected_language,
-                "response_language": parsed_query.response_language,
-                "summary": parsed_query.summary,
-                "medical_need": parsed_query.medical_need,
-                "location": parsed_query.location,
-                "specialties": parsed_query.specialties,
-                "insurance": parsed_query.insurance,
-                "preferred_languages": parsed_query.preferred_languages,
-                "keywords": parsed_query.keywords,
-                "patient_context": parsed_query.patient_context,
-            },
-            "local_results": local_results,
-            "fallback_results": fallback_results,
-        }
+        response_payload["local_results"] = local_results
+        response_payload["fallback_results"] = fallback_results
 
         fallback_only_mode = self._should_use_fallback_only_template()
 
@@ -424,12 +628,12 @@ class CareLocatorAgent:
             "You are a healthcare triage analyst. Given a user request in any language, "
             "extract structured search criteria for finding care providers. Respond with "
             "strict JSON describing detected language, response language, summary, a boolean medical_need, location, "
-            "specialties, insurance, preferred languages, keywords, and patient context."
+            "specialties, insurance, preferred languages, keywords, patient context, care_setting, urgency, needs_clarification, and follow_up_focus."
         )
 
-        logger.debug("Interpret prompt=%s", guidance)
+        logger.debug("Interpret prompt loaded. length=%s", len(guidance))
 
-        messages = (
+        messages = normalize_chat_messages(
             [{"role": "system", "content": guidance}]
             + history
             + [{"role": "user", "content": message}]
@@ -443,12 +647,12 @@ class CareLocatorAgent:
         )
 
         content = completion.choices[0].message["content"] if completion.choices else ""
-        logger.debug("Interpret response=%s", content)
+        logger.debug("Interpret response received. length=%s", len(content))
         parsed_payload = self._safe_json_parse(content)
 
         if not parsed_payload:
             logger.warning("Interpret response did not yield valid JSON; retrying with clarification prompt")
-            retry_messages = (
+            retry_messages = normalize_chat_messages(
                 messages
                 + [{"role": "assistant", "content": content}]
                 + [
@@ -472,7 +676,7 @@ class CareLocatorAgent:
                 if retry_completion.choices
                 else ""
             )
-            logger.debug("Interpret retry response=%s", retry_content)
+            logger.debug("Interpret retry response received. length=%s", len(retry_content))
             parsed_payload = self._safe_json_parse(retry_content)
 
         if not parsed_payload:
@@ -487,6 +691,10 @@ class CareLocatorAgent:
                 "preferred_languages": [],
                 "keywords": [],
                 "patient_context": None,
+                "care_setting": None,
+                "urgency": None,
+                "needs_clarification": False,
+                "follow_up_focus": [],
             }
 
         detected_language = str(parsed_payload.get("detected_language", "unknown"))
@@ -511,6 +719,10 @@ class CareLocatorAgent:
             preferred_languages=self._ensure_list(parsed_payload.get("preferred_languages")),
             keywords=self._ensure_list(parsed_payload.get("keywords")),
             patient_context=parsed_payload.get("patient_context"),
+            care_setting=parsed_payload.get("care_setting"),
+            urgency=parsed_payload.get("urgency"),
+            needs_clarification=bool(parsed_payload.get("needs_clarification", False)),
+            follow_up_focus=self._ensure_list(parsed_payload.get("follow_up_focus")),
         )
 
     # ------------------------------------------------------------------
@@ -537,6 +749,9 @@ class CareLocatorAgent:
         keywords = _merge_lists(latest.keywords, full.keywords)
         patient_context = latest.patient_context or full.patient_context
         summary = latest.summary or full.summary
+        care_setting = latest.care_setting or full.care_setting
+        urgency = latest.urgency or full.urgency
+        follow_up_focus = _merge_lists(latest.follow_up_focus, full.follow_up_focus)
 
         latest_need = latest.medical_need
         full_need = full.medical_need
@@ -552,6 +767,8 @@ class CareLocatorAgent:
         if not medical_need and specialties:
             medical_need = True
 
+        needs_clarification = bool(latest.needs_clarification or full.needs_clarification)
+
         return ParsedCareQuery(
             detected_language=detected_language or full.detected_language,
             response_language=response_language or full.response_language,
@@ -563,7 +780,219 @@ class CareLocatorAgent:
             preferred_languages=preferred_languages,
             keywords=keywords,
             patient_context=patient_context,
+            care_setting=care_setting,
+            urgency=urgency,
+            needs_clarification=needs_clarification,
+            follow_up_focus=follow_up_focus,
         )
+
+    # ------------------------------------------------------------------
+    def _build_navigation_guidance(
+        self, query: ParsedCareQuery, message: str
+    ) -> Dict[str, Any]:
+        request_text = self._combined_request_text(query, message)
+        care_setting = self._classify_care_setting(query, request_text)
+
+        follow_up_questions: List[str] = []
+
+        if query.medical_need and not self._has_specific_location(query, request_text):
+            follow_up_questions.append(
+                "What city and state or ZIP code should I search?"
+            )
+
+        if query.medical_need and not self._has_clear_care_need(query, request_text):
+            follow_up_questions.append(
+                "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?"
+            )
+
+        insurance_requested = self._contains_any(request_text, _INSURANCE_PATTERNS)
+        if insurance_requested and not query.insurance:
+            follow_up_questions.append(
+                "Which insurance plan should I use when tailoring listed-insurance guidance?"
+            )
+
+        language_requested = self._contains_any(request_text, _LANGUAGE_PATTERNS)
+        if language_requested and not query.preferred_languages:
+            follow_up_questions.append(
+                "Do you want a provider who speaks a specific language?"
+            )
+
+        specialist_plan_guidance = None
+        if care_setting == "specialist":
+            specialist_plan_guidance = (
+                "For specialist searches, HMO and POS plans often require a PCP referral; PPO plans may not, but you should confirm the rule with your insurer and plan documents."
+            )
+            if (
+                self._contains_any(request_text, _REFERRAL_PATTERNS)
+                and not self._has_plan_type(query, request_text)
+            ):
+                follow_up_questions.append(
+                    "What plan type do you have, if you want me to tailor referral guidance (for example HMO, PPO, or POS)?"
+                )
+
+        if care_setting == "emergency":
+            return {
+                "mode": "emergency",
+                "care_setting_guidance": (
+                    "If symptoms are severe or life-threatening, call emergency services now or go to the nearest emergency room."
+                ),
+                "follow_up_questions": [],
+                "specialist_plan_guidance": None,
+                "location_only": False,
+            }
+
+        if not follow_up_questions:
+            guidance_parts = []
+            if care_setting == "urgent_care":
+                guidance_parts.append(
+                    "For same-day, non-emergency care, urgent care is usually the best fit."
+                )
+            elif care_setting == "pcp":
+                guidance_parts.append(
+                    "For routine or ongoing care, primary care is usually the best fit."
+                )
+            elif care_setting == "specialist":
+                guidance_parts.append(
+                    "For a known specialty or referral need, a specialist is usually the right route."
+                )
+
+            return {
+                "mode": "search",
+                "care_setting_guidance": " ".join(guidance_parts).strip() or None,
+                "follow_up_questions": [],
+                "specialist_plan_guidance": specialist_plan_guidance,
+                "location_only": False,
+            }
+
+        location_only = (
+            len(follow_up_questions) == 1
+            and follow_up_questions[0].startswith("What city and state or ZIP code")
+        )
+
+        if query.medical_need and care_setting == "specialist" and specialist_plan_guidance:
+            follow_up_questions = self._dedupe_preserve_order(follow_up_questions)
+        elif care_setting == "specialist" and specialist_plan_guidance:
+            follow_up_questions = self._dedupe_preserve_order(follow_up_questions)
+
+        care_setting_note = None
+        if care_setting == "urgent_care":
+            care_setting_note = (
+                "For same-day, non-emergency care, urgent care is usually the best fit."
+            )
+        elif care_setting == "pcp":
+            care_setting_note = (
+                "For routine or ongoing care, primary care is usually the best fit."
+            )
+        elif care_setting == "specialist":
+            care_setting_note = (
+                "For a known specialty or referral need, a specialist is usually the right route."
+            )
+
+        return {
+            "mode": "clarification",
+            "care_setting_guidance": care_setting_note,
+            "follow_up_questions": self._dedupe_preserve_order(follow_up_questions),
+            "specialist_plan_guidance": specialist_plan_guidance,
+            "location_only": location_only,
+        }
+
+    # ------------------------------------------------------------------
+    def _combined_request_text(self, query: ParsedCareQuery, message: str) -> str:
+        parts = [
+            message,
+            query.summary,
+            " ".join(query.specialties),
+            " ".join(query.insurance),
+            " ".join(query.preferred_languages),
+            " ".join(query.keywords),
+            query.patient_context or "",
+            query.care_setting or "",
+            query.urgency or "",
+        ]
+        return " ".join(part for part in parts if part).lower()
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _contains_any(text: str, patterns: Tuple[str, ...]) -> bool:
+        normalized_text = text.lower()
+        return any(
+            CareLocatorAgent._contains_phrase(normalized_text, pattern)
+            for pattern in patterns
+        )
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _contains_phrase(text: str, phrase: str) -> bool:
+        normalized_phrase = phrase.lower().strip()
+        if not normalized_phrase:
+            return False
+
+        escaped_parts = [
+            re.escape(part)
+            for part in re.split(r"\s+", normalized_phrase)
+            if part
+        ]
+        if not escaped_parts:
+            return False
+
+        pattern = (
+            r"(?<![A-Za-z0-9])"
+            + r"[\s-]+".join(escaped_parts)
+            + r"(?![A-Za-z0-9])"
+        )
+        return re.search(pattern, text) is not None
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _contains_emergency_signal(text: str) -> bool:
+        if re.search(r"(?<!\d)911(?!\d)", text):
+            return True
+        if re.search(r"\b9[\s-]*1[\s-]*1\b", text):
+            return True
+        return CareLocatorAgent._contains_any(text, _EMERGENCY_PATTERNS)
+
+    # ------------------------------------------------------------------
+    def _has_plan_type(self, query: ParsedCareQuery, text: str) -> bool:
+        if self._contains_any(text, _PLAN_TYPE_PATTERNS):
+            return True
+        return any(self._contains_any(item.lower(), _PLAN_TYPE_PATTERNS) for item in query.insurance)
+
+    # ------------------------------------------------------------------
+    def _has_specific_location(self, query: ParsedCareQuery, text: str) -> bool:
+        if query.location and self._location_has_city(query.location):
+            return True
+        return bool(self._match_city_state(text)) or bool(self._extract_zip_code(text))
+
+    # ------------------------------------------------------------------
+    def _has_clear_care_need(self, query: ParsedCareQuery, text: str) -> bool:
+        if query.specialties:
+            return True
+        if self._contains_any(
+            text, _SPECIALIST_PATTERNS + _ROUTINE_PATTERNS + _URGENT_PATTERNS
+        ):
+            return True
+        return False
+
+    # ------------------------------------------------------------------
+    def _classify_care_setting(self, query: ParsedCareQuery, text: str) -> str:
+        if self._contains_emergency_signal(text):
+            return "emergency"
+        if self._contains_any(text, _URGENT_PATTERNS):
+            return "urgent_care"
+        if self._contains_any(text, _ROUTINE_PATTERNS):
+            return "pcp"
+        if query.specialties or self._contains_any(text, _SPECIALIST_PATTERNS):
+            return "specialist"
+        return "unclear"
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _dedupe_preserve_order(values: List[str]) -> List[str]:
+        deduped: List[str] = []
+        for value in values:
+            if value not in deduped:
+                deduped.append(value)
+        return deduped
 
     # ------------------------------------------------------------------
     def _search_clinicaltables(
@@ -578,9 +1007,9 @@ class CareLocatorAgent:
             state_hint,
         ) = self._compose_clinicaltables_query_parts(query)
         logger.debug(
-            "ClinicalTables combined search_terms=%s filter=%s",
-            search_terms,
-            query_filter,
+            "ClinicalTables combined query prepared. search_terms_length=%s has_filter=%s",
+            len(search_terms),
+            bool(query_filter),
         )
 
         if not search_terms.strip():
@@ -610,10 +1039,10 @@ class CareLocatorAgent:
         for variant_terms, variant_filter, variant_label in search_variants:
             variant_results: List[dict] = []
             logger.debug(
-                "ClinicalTables search variant=%s terms=%s filter=%s",
+                "ClinicalTables search variant=%s terms_length=%s has_filter=%s",
                 variant_label,
-                variant_terms,
-                variant_filter,
+                len(variant_terms),
+                bool(variant_filter),
             )
             for dataset in self._ctss_dataset_priority:
                 dataset_results = self._clinicaltables_search_dataset(
@@ -664,9 +1093,9 @@ class CareLocatorAgent:
             response.raise_for_status()
         except Exception as exc:
             logger.warning(
-                "ClinicalTables %s search failed for terms='%s': %s",
+                "ClinicalTables %s search failed. terms_length=%s error=%s",
                 dataset,
-                search_terms,
+                len(search_terms),
                 exc,
             )
             return []
@@ -1603,9 +2032,9 @@ class CareLocatorAgent:
         }
 
         logger.debug(
-            "ClinicalTables values request dataset=%s term=%s field_index=%s",
+            "ClinicalTables values request dataset=%s term_length=%s field_index=%s",
             dataset,
-            term,
+            len(term),
             field_index,
         )
 
@@ -1614,9 +2043,9 @@ class CareLocatorAgent:
             response.raise_for_status()
         except Exception as exc:
             logger.warning(
-                "ClinicalTables values failed dataset=%s term=%s field_index=%s error=%s",
+                "ClinicalTables values failed dataset=%s term_length=%s field_index=%s error=%s",
                 dataset,
-                term,
+                len(term),
                 field_index,
                 exc,
             )
@@ -1825,6 +2254,72 @@ class CareLocatorAgent:
         return suggestions
 
     # ------------------------------------------------------------------
+    def _normalize_result_trust_metadata(self, result: dict) -> dict:
+        if not isinstance(result, dict):
+            return result
+
+        normalized = dict(result)
+
+        provenance = normalized.get("provenance")
+        if not isinstance(provenance, dict):
+            provenance = {}
+
+        source_value = normalized.get("source")
+        if isinstance(source_value, str) and source_value.strip():
+            provenance.setdefault("source", source_value.strip())
+        else:
+            provenance.setdefault("source", "Unknown source")
+
+        normalized["provenance"] = provenance
+
+        reported_insurance = normalized.pop("insurance", None)
+        if reported_insurance is None:
+            reported_insurance = normalized.pop("accepted_insurance", None)
+        if reported_insurance is None:
+            reported_insurance = normalized.get("insurance_reported")
+        normalized["insurance_reported"] = self._ensure_list(reported_insurance)
+
+        insurance_verification = normalized.get("insurance_network_verification")
+        if not isinstance(insurance_verification, dict):
+            insurance_verification = {}
+        insurance_verification.setdefault("status", "unverified")
+        insurance_verification.setdefault("verified", False)
+        insurance_verification.setdefault(
+            "basis",
+            "Insurance/network participation is not confirmed by source data.",
+        )
+        insurance_verification.setdefault("source", provenance["source"])
+        normalized["insurance_network_verification"] = insurance_verification
+
+        new_patient_status = normalized.get("accepting_new_patients_status")
+        if not isinstance(new_patient_status, dict):
+            new_patient_status = {}
+        new_patient_status.setdefault("status", "unknown")
+        new_patient_status.setdefault("verified", False)
+        new_patient_status.setdefault(
+            "basis",
+            "Source data does not confirm new-patient availability.",
+        )
+        new_patient_status.setdefault("source", provenance["source"])
+        normalized["accepting_new_patients_status"] = new_patient_status
+
+        normalized.setdefault(
+            "insurance_display",
+            "Reported/listed insurance (not verified).",
+        )
+
+        return normalized
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _verification_guidance() -> str:
+        return (
+            "Call the provider and insurer to confirm network status, accepted insurance plan, "
+            "referral requirements, new-patient availability, location, and "
+            "appointment availability."
+        )
+
+    # ------------------------------------------------------------------
     def _compose_response(
         self,
         client: InferenceClient,
@@ -1852,13 +2347,15 @@ class CareLocatorAgent:
         )
         user_instructions = template.format(payload_json=payload_json)
 
-        messages = [
-            {"role": "system", "content": summary_prompt},
-            {"role": "user", "content": user_instructions},
-        ]
+        messages = normalize_chat_messages(
+            [
+                {"role": "system", "content": summary_prompt},
+                {"role": "user", "content": user_instructions},
+            ]
+        )
 
-        logger.debug("Compose prompt system=%s", summary_prompt)
-        logger.debug("Compose payload JSON=%s", payload_json)
+        logger.debug("Compose prompt prepared. system_length=%s", len(summary_prompt))
+        logger.debug("Compose payload prepared. json_length=%s", len(payload_json))
 
         completion = client.chat_completion(
             messages,
@@ -1905,7 +2402,14 @@ class CareLocatorAgent:
         if not isinstance(content, str):
             content = str(content)
 
-        return content.strip()
+        return self._append_required_trust_guidance(content.strip())
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _append_required_trust_guidance(content: str) -> str:
+        if _REQUIRED_TRUST_GUIDANCE in content:
+            return content
+        return f"{content}\n\n{_REQUIRED_TRUST_GUIDANCE}"
 
     # ------------------------------------------------------------------
     def _should_use_fallback_only_template(self) -> bool:
@@ -1942,7 +2446,7 @@ class CareLocatorAgent:
                 except json.JSONDecodeError:
                     logger.warning("Interpret payload repair failed", exc_info=True)
             logger.warning("Interpret payload JSON parse failed: %s", exc)
-            logger.debug("Interpret payload raw text=%s", trimmed)
+            logger.debug("Interpret payload raw text omitted. length=%s", len(trimmed))
             return None
 
     # ------------------------------------------------------------------
