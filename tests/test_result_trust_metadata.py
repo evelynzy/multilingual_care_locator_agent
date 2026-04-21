@@ -196,6 +196,15 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertEqual(local_result["accepting_new_patients_status"]["status"], "unknown")
         self.assertFalse(local_result["accepting_new_patients_status"]["verified"])
         self.assertEqual(local_result["provenance"]["source"], "Local provider dataset")
+        self.assertEqual(
+            local_result["trust_labels"],
+            [
+                "Source: Local provider dataset",
+                "Insurance/network: unverified",
+                "New patients: unknown",
+                "Medicare opt-out: unknown",
+            ],
+        )
         self.assertIn("verification_guidance", payload)
 
     def test_provider_record_uses_reported_insurance_metadata(self) -> None:
@@ -246,6 +255,23 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
 
         self.assertEqual(record.accepted_insurance, ["Medicaid"])
         self.assertEqual(record.to_dict()["insurance_reported"], ["Medicaid"])
+
+    def test_trust_labels_include_medicare_opt_out_status(self) -> None:
+        result = self.agent._normalize_result_trust_metadata(
+            {
+                "name": "Specialty Clinic",
+                "source": "NPI Registry",
+                "insurance_reported": ["Medicare"],
+                "insurance_network_verification": {"status": "unverified"},
+                "accepting_new_patients_status": {"status": "unknown"},
+                "medicare_opt_out": {"opted_out": True},
+            }
+        )
+
+        self.assertIn("Source: NPI Registry", result["trust_labels"])
+        self.assertIn("Insurance/network: unverified", result["trust_labels"])
+        self.assertIn("New patients: unknown", result["trust_labels"])
+        self.assertIn("Medicare opt-out: opted out", result["trust_labels"])
 
     def test_compose_response_appends_required_trust_guidance(self) -> None:
         client = self._client_with_response("Model-rendered answer.")

@@ -109,8 +109,20 @@ if "gradio" not in sys.modules:
         def launch(self):
             return None
 
+    class _StubAccordion:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
     gradio_stub.ChatInterface = _StubChatInterface
     gradio_stub.Blocks = _StubBlocks
+    gradio_stub.Accordion = _StubAccordion
     gradio_stub.Markdown = lambda *args, **kwargs: object()
     sys.modules["gradio"] = gradio_stub
 
@@ -134,6 +146,16 @@ class AppLoggingTests(unittest.TestCase):
         self.assertIn("message_length=", log_output)
         self.assertNotIn("Jane Doe", log_output)
         self.assertNotIn("123 Main St", log_output)
+
+    def test_ui_notes_are_collapsible_panel_ready_and_chat_area_is_larger(self) -> None:
+        app = importlib.import_module("app")
+
+        self.assertIn("Directory matches are informational", app.SAFETY_TRUST_NOTES)
+        self.assertIn("Do not share PHI", app.SAFETY_TRUST_NOTES)
+        self.assertIn("NPI Records - Individuals", app.DATA_SOURCE_LIMITATIONS_NOTES)
+        self.assertIn("Public sources may be incomplete", app.DATA_SOURCE_LIMITATIONS_NOTES)
+        self.assertIn("min-height: 620px", app.custom_css)
+        self.assertIn("max-height: 72vh", app.custom_css)
 
 
 if __name__ == "__main__":
