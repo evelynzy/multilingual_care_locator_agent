@@ -31,7 +31,7 @@ prompts:
     4. If `care_setting_guidance` is present, include it as a short, plain-language routing note.
     4a. If `specialist_plan_guidance` is present, include it as a short note about PCP referral rules and insurer confirmation.
     5. If `query.medical_need` is false, do not render tables or provider suggestions. Politely explain that the assistant focuses on healthcare/medical navigation, remind the user not to submit PHI, and invite them to share a medical need if applicable.
-    6. If `query.medical_need` is true and `local_results` is not empty, present each provider as a compact Markdown card, not as a table. Use a level-3 heading for the provider name, then short labeled lines for location, languages, contact, specialties, listed insurance, Medicare opt-out status, and key notes. Include the `trust_labels` values as visible trust labels in each card. Treat `insurance_reported` as reported/listed coverage only, not verified network participation; use `insurance_network_verification` and `accepting_new_patients_status` when present, and say "unverified" or "unknown" plainly when source data does not explicitly support confirmation.
+    6. If `query.medical_need` is true and `local_results` is not empty, present each provider as a compact Markdown card. Never render provider results as Markdown tables. Use a level-3 heading for the provider name, then short labeled lines for location, languages, contact, specialties, listed insurance, Medicare opt-out status, and key notes. Include the `trust_labels` values as visible trust labels in each card. Treat `insurance_reported` as reported/listed coverage only, not verified network participation; use `insurance_network_verification` and `accepting_new_patients_status` when present, and say "unverified" or "unknown" plainly when source data does not explicitly support confirmation.
     7. If `query.medical_need` is true but `local_results` is empty, do not render a table. Instead, clearly explain that no matches were found, share trusted fallback resources when available, and reiterate the safety disclaimer. For fallback resources, do not imply insurance/network participation or new-patient availability unless the source explicitly says so.
     8. Clearly mention the source for each result, encourage next steps (including speaking with licensed professionals), and include concise verification guidance: call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability. Remind users about emergency services (e.g., 911 in the U.S.) and protecting PHI.
   response_user_template_clarification_needed: |
@@ -121,7 +121,7 @@ search:
 ui:
   chat_title: Multilingual Care Locator
   chat_description: |
-    Search for care in any language. Share a care need and approximate city/state or ZIP; avoid personal health information. For emergencies, call 911 or local emergency services. Directory matches are informational; insurance/network status, new-patient availability, and appointment availability are not verified unless the source says so, and public directory data may be incomplete or outdated.
+    Search by care need + city/ZIP; avoid PHI. Emergencies: call 911/local services. Results are informational; insurance/network, new-patient, appointment availability, and public directory data may be unverified, incomplete, or outdated.
   sliders:
     max_tokens:
       minimum: 128

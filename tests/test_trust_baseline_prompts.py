@@ -12,7 +12,7 @@ class TrustBaselinePromptTests(unittest.TestCase):
             template,
         )
         self.assertIn("compact Markdown card", template)
-        self.assertIn("not as a table", template)
+        self.assertIn("Never render provider results as Markdown tables", template)
         self.assertIn("trust_labels", template)
         self.assertIn(
             "call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability",
@@ -57,15 +57,16 @@ class TrustBaselinePromptTests(unittest.TestCase):
     def test_ui_description_is_compact_and_phi_safe(self) -> None:
         description = get_ui_settings()["description"]
 
-        self.assertIn("Share a care need and approximate city/state or ZIP", description)
-        self.assertIn("avoid personal health information", description)
-        self.assertIn("For emergencies, call 911 or local emergency services", description)
-        self.assertIn("Directory matches are informational", description)
-        self.assertIn("insurance/network status", description)
-        self.assertIn("new-patient availability", description)
+        self.assertIn("Search by care need + city/ZIP", description)
+        self.assertIn("avoid PHI", description)
+        self.assertIn("Emergencies: call 911/local services", description)
+        self.assertIn("Results are informational", description)
+        self.assertIn("insurance/network", description)
+        self.assertIn("new-patient", description)
         self.assertIn("appointment availability", description)
-        self.assertIn("public directory data may be incomplete or outdated", description)
-        self.assertLess(len(description), 500)
+        self.assertIn("public directory data", description)
+        self.assertIn("unverified, incomplete, or outdated", description)
+        self.assertLess(len(description), 260)
 
 
 if __name__ == "__main__":

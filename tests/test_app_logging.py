@@ -90,8 +90,12 @@ if "gradio" not in sys.modules:
     gradio_stub = types.ModuleType("gradio")
 
     class _StubChatInterface:
+        instances = []
+
         def __init__(self, *args, **kwargs):
-            pass
+            self.args = args
+            self.kwargs = kwargs
+            self.__class__.instances.append(self)
 
         def render(self):
             return None
@@ -154,8 +158,16 @@ class AppLoggingTests(unittest.TestCase):
         self.assertIn("Do not share PHI", app.SAFETY_TRUST_NOTES)
         self.assertIn("NPI Records - Individuals", app.DATA_SOURCE_LIMITATIONS_NOTES)
         self.assertIn("Public sources may be incomplete", app.DATA_SOURCE_LIMITATIONS_NOTES)
-        self.assertIn("min-height: 620px", app.custom_css)
-        self.assertIn("max-height: 72vh", app.custom_css)
+        self.assertIn("height: calc(100vh - 220px)", app.custom_css)
+        self.assertIn("min-height: 680px", app.custom_css)
+
+    def test_examples_are_collapsed_markdown_not_chatinterface_examples(self) -> None:
+        app = importlib.import_module("app")
+
+        self.assertNotIn("examples", app.chatbot.kwargs)
+        self.assertIn("primary care 75001", app.EXAMPLE_PROMPTS_MARKDOWN)
+        self.assertIn("儿科 10013", app.EXAMPLE_PROMPTS_MARKDOWN)
+        self.assertIn("dentista 33012", app.EXAMPLE_PROMPTS_MARKDOWN)
 
 
 if __name__ == "__main__":
