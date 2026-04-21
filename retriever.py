@@ -38,7 +38,17 @@ class ProviderRecord:
             "name": self.name,
             "specialties": self.specialties,
             "languages": self.languages,
-            "accepted_insurance": self.accepted_insurance,
+            "insurance_reported": self.accepted_insurance,
+            "insurance_network_verification": {
+                "status": "unverified",
+                "verified": False,
+                "basis": "Insurance/network participation is not confirmed by source data.",
+            },
+            "accepting_new_patients_status": {
+                "status": "unknown",
+                "verified": False,
+                "basis": "Source data does not confirm new-patient availability.",
+            },
             "address": self.address,
             "city": self.city,
             "state": self.state,
@@ -47,6 +57,9 @@ class ProviderRecord:
             "website": self.website,
             "telehealth": self.telehealth,
             "description": self.description,
+            "provenance": {
+                "source": "Local provider dataset",
+            },
         }
 
     def as_document(self) -> Document:
@@ -57,7 +70,7 @@ class ProviderRecord:
             f"Location: {', '.join(chunk for chunk in [self.address, self.city, self.state, self.country] if chunk)}",
             f"Specialties: {', '.join(self.specialties) or 'Unknown'}",
             f"Languages: {', '.join(self.languages) or 'Unknown'}",
-            f"Accepted insurance: {', '.join(self.accepted_insurance) or 'Unknown'}",
+            f"Listed insurance (reported, not verified): {', '.join(self.accepted_insurance) or 'Unknown'}",
             f"Telehealth: {'Yes' if self.telehealth else 'No'}" if self.telehealth is not None else "",
             f"Description: {self.description}" if self.description else "",
         ]
@@ -72,7 +85,7 @@ class ProviderRecord:
             "country": self.country,
             "languages": self.languages,
             "specialties": self.specialties,
-            "insurance": self.accepted_insurance,
+            "insurance_reported": self.accepted_insurance,
         }
 
         return Document(text=text, metadata=metadata)
@@ -178,7 +191,9 @@ class ProviderRepository:
             name=str(row.get("name", "Unknown Provider")),
             specialties=_ensure_list(row.get("specialties")),
             languages=_ensure_list(row.get("languages")),
-            accepted_insurance=_ensure_list(row.get("accepted_insurance")),
+            accepted_insurance=_ensure_list(
+                row.get("insurance_reported", row.get("accepted_insurance"))
+            ),
             address=str(row.get("address", "")),
             city=str(row.get("city", "")),
             state=str(row.get("state", "")),
@@ -198,7 +213,7 @@ class ProviderRepository:
         if not query.strip():
             return []
 
-        logger.debug("Semantic query=%s", query)
+        logger.debug("Semantic query prepared. length=%s", len(query))
         retriever = self.index.as_retriever(similarity_top_k=max(limit, self.default_top_k))
         nodes = retriever.retrieve(query)
         logger.info("Retriever returned %s nodes", len(nodes))
@@ -218,6 +233,7 @@ class ProviderRepository:
                 for chunk in [provider.city, provider.state, provider.country]
                 if chunk
             )
+            metadata["source"] = "Local provider dataset"
             metadata["retriever_metadata"] = {
                 "similarity": float(node.score or 0.0),
                 "node_id": node.node_id,
