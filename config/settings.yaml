@@ -121,7 +121,7 @@ search:
 ui:
   chat_title: Multilingual Care Locator
   chat_description: |
-    Search for care in any language. Share a care need and approximate city/state or ZIP; avoid personal health information.
+    Search for care in any language. Share a care need and approximate city/state or ZIP; avoid personal health information. For emergencies, call 911 or local emergency services. Directory matches are informational; insurance/network status, new-patient availability, and appointment availability are not verified unless the source says so, and public directory data may be incomplete or outdated.
   sliders:
     max_tokens:
       minimum: 128
