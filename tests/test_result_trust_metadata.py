@@ -104,6 +104,31 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
             }
         ]
 
+    @staticmethod
+    def _client_with_response(response_text: str):
+        return type(
+            "Client",
+            (),
+            {
+                "chat_completion": lambda self, messages, max_tokens, temperature, top_p: type(
+                    "Completion",
+                    (),
+                    {
+                        "choices": [
+                            type(
+                                "Choice",
+                                (),
+                                {
+                                    "message": {"content": response_text},
+                                    "finish_reason": "stop",
+                                },
+                            )()
+                        ]
+                    },
+                )()
+            },
+        )()
+
     def test_handle_request_normalizes_local_provider_trust_metadata(self) -> None:
         query = ParsedCareQuery(
             detected_language="English",
@@ -207,28 +232,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertEqual(record.to_dict()["insurance_reported"], ["Medicaid"])
 
     def test_compose_response_appends_required_trust_guidance(self) -> None:
-        client = type(
-            "Client",
-            (),
-            {
-                "chat_completion": lambda self, messages, max_tokens, temperature, top_p: type(
-                    "Completion",
-                    (),
-                    {
-                        "choices": [
-                            type(
-                                "Choice",
-                                (),
-                                {
-                                    "message": {"content": "Model-rendered answer."},
-                                    "finish_reason": "stop",
-                                },
-                            )()
-                        ]
-                    },
-                )()
-            },
-        )()
+        client = self._client_with_response("Model-rendered answer.")
         payload = {
             "query": {
                 "response_language": "English",
@@ -253,6 +257,90 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("Directory matches are informational", response)
         self.assertIn("Call the provider and insurer to confirm", response)
         self.assertIn("Do not share personal health information", response)
+
+    def test_compose_response_localizes_required_trust_guidance_for_spanish(self) -> None:
+        client = self._client_with_response("Respuesta generada por el modelo.")
+        payload = {
+            "query": {
+                "response_language": "Español",
+                "medical_need": True,
+                "summary": "atencion primaria",
+            },
+            "local_results": [],
+            "fallback_results": [],
+            "verification_guidance": "Call the provider and insurer to confirm network status.",
+        }
+
+        first_response = self.agent._compose_response(
+            client,
+            payload,
+            max_tokens=128,
+            temperature=0.1,
+            top_p=0.9,
+        )
+        second_response = self.agent._compose_response(
+            client,
+            payload,
+            max_tokens=128,
+            temperature=0.1,
+            top_p=0.9,
+        )
+
+        self.assertEqual(first_response, second_response)
+        self.assertIn("Respuesta generada por el modelo.", first_response)
+        self.assertIn("Notas importantes de seguridad y confianza:", first_response)
+        self.assertIn("Llame al proveedor y a la aseguradora", first_response)
+        self.assertNotIn("Important safety and trust notes:", first_response)
+
+    def test_compose_response_localizes_required_trust_guidance_for_chinese(self) -> None:
+        client = self._client_with_response("模型生成的答复。")
+        payload = {
+            "query": {
+                "response_language": "中文",
+                "medical_need": True,
+                "summary": "初级保健",
+            },
+            "local_results": [],
+            "fallback_results": [],
+            "verification_guidance": "Call the provider and insurer to confirm network status.",
+        }
+
+        response = self.agent._compose_response(
+            client,
+            payload,
+            max_tokens=128,
+            temperature=0.1,
+            top_p=0.9,
+        )
+
+        self.assertIn("模型生成的答复。", response)
+        self.assertIn("重要的安全和信任提示：", response)
+        self.assertIn("就医前请致电服务提供者和保险公司确认。", response)
+        self.assertNotIn("Important safety and trust notes:", response)
+
+    def test_compose_response_falls_back_to_english_trust_guidance_for_unknown_language(self) -> None:
+        client = self._client_with_response("Model answer.")
+        payload = {
+            "query": {
+                "response_language": "Klingon",
+                "medical_need": True,
+                "summary": "primary care",
+            },
+            "local_results": [],
+            "fallback_results": [],
+            "verification_guidance": "Call the provider and insurer to confirm network status.",
+        }
+
+        response = self.agent._compose_response(
+            client,
+            payload,
+            max_tokens=128,
+            temperature=0.1,
+            top_p=0.9,
+        )
+
+        self.assertIn("Important safety and trust notes:", response)
+        self.assertIn("Directory matches are informational", response)
 
     def test_compose_response_logs_omit_phi_bearing_payload(self) -> None:
         client = type(
