@@ -6,7 +6,7 @@ import gradio as gr
 from huggingface_hub import InferenceClient
 from dotenv import load_dotenv
 
-from care_agent import CareLocatorAgent
+from care_agent import CareLocatorAgent, normalize_chat_messages
 from retriever import ProviderRepository
 from config_loader import (
     get_chat_model_settings,
@@ -48,8 +48,8 @@ def _augment_history(
     if system_message:
         messages.append({"role": "system", "content": system_message})
     if history:
-        messages.extend(history)
-    return messages
+        messages.extend(normalize_chat_messages(history))
+    return normalize_chat_messages(messages)
 
 
 def respond(
@@ -67,7 +67,7 @@ def respond(
     augmented_history = _augment_history(history, ui_settings.get("default_system_message"))
 
     try:
-        logger.info("Invoking care locator. message=%s", message[:1000])
+        logger.info("Invoking care locator. message_length=%s", len(message))
         reply = care_locator_agent.handle_request(
             client=client,
             message=message,
