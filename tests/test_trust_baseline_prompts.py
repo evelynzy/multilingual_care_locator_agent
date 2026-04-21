@@ -59,7 +59,13 @@ class TrustBaselinePromptTests(unittest.TestCase):
 
         self.assertIn("Share a care need and approximate city/state or ZIP", description)
         self.assertIn("avoid personal health information", description)
-        self.assertNotIn("Directory matches are informational", description)
+        self.assertIn("For emergencies, call 911 or local emergency services", description)
+        self.assertIn("Directory matches are informational", description)
+        self.assertIn("insurance/network status", description)
+        self.assertIn("new-patient availability", description)
+        self.assertIn("appointment availability", description)
+        self.assertIn("public directory data may be incomplete or outdated", description)
+        self.assertLess(len(description), 500)
 
 
 if __name__ == "__main__":
