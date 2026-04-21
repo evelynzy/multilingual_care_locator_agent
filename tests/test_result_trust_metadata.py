@@ -80,20 +80,15 @@ if "llama_index" not in sys.modules:
     sys.modules["llama_index.embeddings.huggingface"] = llama_hf_stub
 
 
-from care_agent import (
-    CareLocatorAgent,
-    ParsedCareQuery,
-    _TRUST_GUIDANCE_PROTECTED_TOKENS,
-)
+from care_agent import CareLocatorAgent, ParsedCareQuery
 from retriever import ProviderRecord, ProviderRepository
 
 
 class _SequencedChatClient:
-    def __init__(self, response_texts, fail_on_call: Optional[int] = None):
+    def __init__(self, response_texts):
         if isinstance(response_texts, str):
             response_texts = [response_texts]
         self.response_texts = list(response_texts)
-        self.fail_on_call = fail_on_call
         self.calls = []
 
     def chat_completion(self, messages, max_tokens, temperature, top_p):
@@ -106,9 +101,6 @@ class _SequencedChatClient:
             }
         )
         call_number = len(self.calls)
-        if self.fail_on_call == call_number:
-            raise RuntimeError("translation unavailable")
-
         response_index = min(call_number - 1, len(self.response_texts) - 1)
         response_text = self.response_texts[response_index]
         return type(
@@ -127,18 +119,6 @@ class _SequencedChatClient:
                 ]
             },
         )()
-
-
-def _valid_french_translated_trust_guidance() -> str:
-    tokens = _TRUST_GUIDANCE_PROTECTED_TOKENS
-    return (
-        "Notes importantes de sécurité et de confiance :\n"
-        f"- {tokens['scope']} Cet outil sert uniquement à orienter les personnes dans la recherche de soins et ne pose pas de diagnostic, ne prescrit pas de traitement et ne remplace pas les conseils d'un professionnel de santé autorisé {tokens['advice']}.\n"
-        f"- {tokens['directory']} Les résultats du répertoire sont fournis à titre informatif seulement; ils ne constituent pas des recommandations, des approbations ni des garanties d'adéquation clinique.\n"
-        f"- {tokens['insurance']} La participation au réseau d'assurance, les exigences de recommandation, l'accueil de nouveaux patients, le lieu et les disponibilités de rendez-vous ne sont pas vérifiés sauf si la source l'indique explicitement. Appelez le prestataire et l'assureur pour confirmer avant de chercher des soins {tokens['confirm']}.\n"
-        f"- {tokens['privacy']} Ne partagez pas d'informations personnelles de santé comme le nom complet, l'adresse, le numéro de sécurité sociale ou le numéro de dossier médical.\n"
-        f"- {tokens['emergency']} Si les symptômes sont graves ou mettent la vie en danger, appelez les services d'urgence (911 aux États-Unis) ou allez aux urgences les plus proches."
-    )
 
 
 class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
@@ -295,7 +275,56 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("Do not share personal health information", response)
         self.assertEqual(len(client.calls), 1)
 
-    def test_compose_response_localizes_required_trust_guidance_for_spanish(self) -> None:
+    def test_compose_response_uses_prewritten_required_trust_guidance_for_supported_languages(self) -> None:
+        note_headings = (
+            "Important safety and trust notes:",
+            "Notas importantes de seguridad y confianza:",
+            "重要的安全和信任提示：",
+            "Ghi chú quan trọng về an toàn và độ tin cậy:",
+            "Mahahalagang tala sa kaligtasan at pagtitiwala:",
+            "ملاحظات مهمة حول السلامة والثقة:",
+            "중요한 안전 및 신뢰 안내:",
+        )
+        supported_languages = [
+            ("English", "Important safety and trust notes:", "Directory matches are informational"),
+            ("Español", "Notas importantes de seguridad y confianza:", "Llame al proveedor y a la aseguradora"),
+            ("中文", "重要的安全和信任提示：", "就医前请致电服务提供者和保险公司确认。"),
+            ("Vietnamese", "Ghi chú quan trọng về an toàn và độ tin cậy:", "Hãy gọi cho nhà cung cấp và công ty bảo hiểm"),
+            ("Tagalog", "Mahahalagang tala sa kaligtasan at pagtitiwala:", "Tawagan ang provider at insurer"),
+            ("Filipino", "Mahahalagang tala sa kaligtasan at pagtitiwala:", "Tawagan ang provider at insurer"),
+            ("Arabic", "ملاحظات مهمة حول السلامة والثقة:", "اتصل بمقدم الخدمة وشركة التأمين"),
+            ("Korean", "중요한 안전 및 신뢰 안내:", "제공자와 보험사에 전화해 확인하세요"),
+        ]
+
+        for language, heading, required_phrase in supported_languages:
+            with self.subTest(language=language):
+                client = self._client_with_response("Model-rendered answer.")
+                payload = {
+                    "query": {
+                        "response_language": language,
+                        "medical_need": True,
+                        "summary": "primary care",
+                    },
+                    "local_results": [],
+                    "fallback_results": [],
+                    "verification_guidance": "Call the provider and insurer to confirm network status.",
+                }
+
+                response = self.agent._compose_response(
+                    client,
+                    payload,
+                    max_tokens=128,
+                    temperature=0.1,
+                    top_p=0.9,
+                )
+
+                self.assertIn("Model-rendered answer.", response)
+                self.assertIn(heading, response)
+                self.assertIn(required_phrase, response)
+                self.assertEqual(sum(response.count(note_heading) for note_heading in note_headings), 1)
+                self.assertEqual(len(client.calls), 1)
+
+    def test_compose_response_uses_same_deterministic_supported_language_note_each_time(self) -> None:
         client = self._client_with_response("Respuesta generada por el modelo.")
         payload = {
             "query": {
@@ -324,42 +353,11 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         )
 
         self.assertEqual(first_response, second_response)
-        self.assertIn("Respuesta generada por el modelo.", first_response)
         self.assertIn("Notas importantes de seguridad y confianza:", first_response)
-        self.assertIn("Llame al proveedor y a la aseguradora", first_response)
-        self.assertNotIn("Important safety and trust notes:", first_response)
         self.assertEqual(len(client.calls), 2)
 
-    def test_compose_response_uses_prewritten_required_trust_guidance_for_simplified_chinese(self) -> None:
-        client = self._client_with_response("模型生成的答复。")
-        payload = {
-            "query": {
-                "response_language": "中文",
-                "medical_need": True,
-                "summary": "初级保健",
-            },
-            "local_results": [],
-            "fallback_results": [],
-            "verification_guidance": "Call the provider and insurer to confirm network status.",
-        }
-
-        response = self.agent._compose_response(
-            client,
-            payload,
-            max_tokens=128,
-            temperature=0.1,
-            top_p=0.9,
-        )
-
-        self.assertIn("模型生成的答复。", response)
-        self.assertIn("重要的安全和信任提示：", response)
-        self.assertIn("就医前请致电服务提供者和保险公司确认。", response)
-        self.assertNotIn("Important safety and trust notes:", response)
-        self.assertEqual(len(client.calls), 1)
-
-    def test_compose_response_translates_required_trust_guidance_for_unsupported_detected_language(self) -> None:
-        translated_note = _valid_french_translated_trust_guidance()
-        client = _SequencedChatClient(["Réponse du modèle.", translated_note])
+    def test_compose_response_falls_back_to_english_for_unsupported_detected_language_without_translation(self) -> None:
+        client = _SequencedChatClient(["Réponse du modèle.", "Unexpected translated note"])
         payload = {
             "query": {
                 "detected_language": "French",
@@ -379,200 +377,12 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
             top_p=0.9,
         )
 
-        expected_note = (
-            "Notes importantes de sécurité et de confiance:\n"
-            "- Cet outil sert uniquement à orienter les personnes dans la recherche de soins et ne pose pas de diagnostic, ne prescrit pas de traitement et ne remplace pas les conseils d'un professionnel de santé autorisé.\n"
-            "- Les résultats du répertoire sont fournis à titre informatif seulement; ils ne constituent pas des recommandations, des approbations ni des garanties d'adéquation clinique.\n"
-            "- La participation au réseau d'assurance, les exigences de recommandation, l'accueil de nouveaux patients, le lieu et les disponibilités de rendez-vous ne sont pas vérifiés sauf si la source l'indique explicitement. Appelez le prestataire et l'assureur pour confirmer avant de chercher des soins.\n"
-            "- Ne partagez pas d'informations personnelles de santé comme le nom complet, l'adresse, le numéro de sécurité sociale ou le numéro de dossier médical.\n"
-            "- Si les symptômes sont graves ou mettent la vie en danger, appelez les services d'urgence (911 aux États-Unis) ou allez aux urgences les plus proches."
-        )
-        self.assertEqual(response, f"Réponse du modèle.\n\n{expected_note}")
-        self.assertEqual(len(client.calls), 2)
-        translation_call = client.calls[1]
-        self.assertEqual(translation_call["temperature"], 0)
-        self.assertEqual(translation_call["top_p"], 1.0)
-        translation_messages = translation_call["messages"]
-        self.assertIn("Translate only the text provided", translation_messages[0]["content"])
-        self.assertIn("Do not add, remove, or reinterpret medical advice", translation_messages[0]["content"])
-        self.assertIn("Do not translate or remove bracketed placeholder tokens", translation_messages[0]["content"])
-        self.assertIn("into French", translation_messages[1]["content"])
-        self.assertIn(_TRUST_GUIDANCE_PROTECTED_TOKENS["emergency"], translation_messages[1]["content"])
-        self.assertNotIn("Important safety and trust notes:", response)
-        self.assertNotIn("Notas importantes de seguridad y confianza:", response)
-        for token in _TRUST_GUIDANCE_PROTECTED_TOKENS.values():
-            self.assertNotIn(token, response)
-
-    def test_compose_response_rejects_empty_translated_trust_guidance(self) -> None:
-        client = _SequencedChatClient(["Model answer.", "   "])
-        payload = {
-            "query": {
-                "response_language": "French",
-                "medical_need": True,
-                "summary": "primary care",
-            },
-            "local_results": [],
-            "fallback_results": [],
-            "verification_guidance": "Call the provider and insurer to confirm network status.",
-        }
-
-        response = self.agent._compose_response(
-            client,
-            payload,
-            max_tokens=128,
-            temperature=0.1,
-            top_p=0.9,
-        )
-
-        self.assertEqual(len(client.calls), 2)
-        self.assertIn("Model answer.", response)
+        self.assertIn("Réponse du modèle.", response)
         self.assertIn("Important safety and trust notes:", response)
-
-    def test_compose_response_rejects_too_short_translated_trust_guidance(self) -> None:
-        tokens = " ".join(_TRUST_GUIDANCE_PROTECTED_TOKENS.values())
-        client = _SequencedChatClient(["Model answer.", f"{tokens} Trop court."])
-        payload = {
-            "query": {
-                "response_language": "French",
-                "medical_need": True,
-                "summary": "primary care",
-            },
-            "local_results": [],
-            "fallback_results": [],
-            "verification_guidance": "Call the provider and insurer to confirm network status.",
-        }
-
-        response = self.agent._compose_response(
-            client,
-            payload,
-            max_tokens=128,
-            temperature=0.1,
-            top_p=0.9,
-        )
-
-        self.assertEqual(len(client.calls), 2)
-        self.assertIn("Important safety and trust notes:", response)
-        self.assertNotIn("Trop court.", response)
-
-    def test_compose_response_rejects_malformed_translated_trust_guidance_missing_tokens(self) -> None:
-        client = _SequencedChatClient(
-            [
-                "Model answer.",
-                "Notes importantes de sécurité et de confiance :\n"
-                "- Cet outil donne quelques informations générales sur les soins.",
-            ]
-        )
-        payload = {
-            "query": {
-                "response_language": "French",
-                "medical_need": True,
-                "summary": "primary care",
-            },
-            "local_results": [],
-            "fallback_results": [],
-            "verification_guidance": "Call the provider and insurer to confirm network status.",
-        }
-
-        response = self.agent._compose_response(
-            client,
-            payload,
-            max_tokens=128,
-            temperature=0.1,
-            top_p=0.9,
-        )
-
-        self.assertEqual(len(client.calls), 2)
-        self.assertIn("Important safety and trust notes:", response)
-        self.assertNotIn("Cet outil donne quelques informations générales", response)
-
-    def test_compose_response_rejects_meaning_missing_translated_trust_guidance(self) -> None:
-        tokens = _TRUST_GUIDANCE_PROTECTED_TOKENS
-        translated_note = _valid_french_translated_trust_guidance().replace(
-            tokens["emergency"],
-            "",
-        )
-        client = _SequencedChatClient(["Model answer.", translated_note])
-        payload = {
-            "query": {
-                "response_language": "French",
-                "medical_need": True,
-                "summary": "primary care",
-            },
-            "local_results": [],
-            "fallback_results": [],
-            "verification_guidance": "Call the provider and insurer to confirm network status.",
-        }
-
-        response = self.agent._compose_response(
-            client,
-            payload,
-            max_tokens=128,
-            temperature=0.1,
-            top_p=0.9,
-        )
-
-        self.assertEqual(len(client.calls), 2)
-        self.assertIn("Important safety and trust notes:", response)
-        self.assertNotIn("Notes importantes de sécurité", response)
-
-    def test_compose_response_rejects_english_translation_for_non_english_target(self) -> None:
-        tokens = _TRUST_GUIDANCE_PROTECTED_TOKENS
-        translated_note = (
-            "Important safety and trust notes:\n"
-            f"- {tokens['scope']} This tool supports care navigation only and does not diagnose, prescribe, or replace licensed medical advice {tokens['advice']}.\n"
-            f"- {tokens['directory']} Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.\n"
-            f"- {tokens['insurance']} Insurance/network participation, referral requirements, new-patient availability, location, and appointment availability are not verified unless the source explicitly says so. Call the provider and insurer to confirm before seeking care {tokens['confirm']}.\n"
-            f"- {tokens['privacy']} Do not share personal health information such as full names, addresses, Social Security numbers, or medical record numbers.\n"
-            f"- {tokens['emergency']} If symptoms are severe or life-threatening, call emergency services (911 in the U.S.) or go to the nearest emergency room."
-        )
-        client = _SequencedChatClient(["Model answer.", translated_note])
-        payload = {
-            "query": {
-                "response_language": "French",
-                "medical_need": True,
-                "summary": "primary care",
-            },
-            "local_results": [],
-            "fallback_results": [],
-            "verification_guidance": "Call the provider and insurer to confirm network status.",
-        }
-
-        response = self.agent._compose_response(
-            client,
-            payload,
-            max_tokens=128,
-            temperature=0.1,
-            top_p=0.9,
-        )
-
+        self.assertIn("Directory matches are informational", response)
         self.assertEqual(response.count("Important safety and trust notes:"), 1)
-        self.assertIn("Model answer.", response)
-        self.assertIn("Directory matches are informational", response)
-
-    def test_compose_response_falls_back_to_english_when_trust_guidance_translation_fails(self) -> None:
-        client = _SequencedChatClient(["Model answer."], fail_on_call=2)
-        payload = {
-            "query": {
-                "response_language": "French",
-                "medical_need": True,
-                "summary": "primary care",
-            },
-            "local_results": [],
-            "fallback_results": [],
-            "verification_guidance": "Call the provider and insurer to confirm network status.",
-        }
-
-        response = self.agent._compose_response(
-            client,
-            payload,
-            max_tokens=128,
-            temperature=0.1,
-            top_p=0.9,
-        )
-
-        self.assertEqual(len(client.calls), 2)
-        self.assertIn("Important safety and trust notes:", response)
-        self.assertIn("Directory matches are informational", response)
+        self.assertNotIn("Unexpected translated note", response)
+        self.assertEqual(len(client.calls), 1)
 
     def test_compose_response_falls_back_to_english_trust_guidance_for_unknown_language(self) -> None:
         client = self._client_with_response("Model answer.")
@@ -597,6 +407,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
 
         self.assertIn("Important safety and trust notes:", response)
         self.assertIn("Directory matches are informational", response)
+        self.assertEqual(response.count("Important safety and trust notes:"), 1)
         self.assertEqual(len(client.calls), 1)
 
     def test_compose_response_logs_omit_phi_bearing_payload(self) -> None:

@@ -42,6 +42,38 @@ _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE = {
         "- 请勿分享个人健康信息，例如全名、地址、社会安全号码或病历号码。\n"
         "- 如果症状严重或危及生命，请拨打紧急服务电话（美国为 911）或前往最近的急诊室。"
     ),
+    "vietnamese": (
+        "Ghi chú quan trọng về an toàn và độ tin cậy:\n"
+        "- Công cụ này chỉ hỗ trợ điều hướng chăm sóc và không chẩn đoán, kê đơn hoặc thay thế lời khuyên y tế từ chuyên gia có giấy phép.\n"
+        "- Các kết quả khớp trong danh bạ chỉ mang tính thông tin, không phải là giới thiệu, chứng thực hoặc bảo đảm phù hợp lâm sàng.\n"
+        "- Việc tham gia mạng lưới bảo hiểm, yêu cầu giấy giới thiệu, tình trạng nhận bệnh nhân mới, địa điểm và lịch hẹn chưa được xác minh trừ khi nguồn nêu rõ. Hãy gọi cho nhà cung cấp và công ty bảo hiểm để xác nhận trước khi tìm kiếm dịch vụ chăm sóc.\n"
+        "- Không chia sẻ thông tin sức khỏe cá nhân như họ tên đầy đủ, địa chỉ, số An sinh Xã hội hoặc số hồ sơ y tế.\n"
+        "- Nếu triệu chứng nghiêm trọng hoặc đe dọa tính mạng, hãy gọi dịch vụ khẩn cấp (911 tại Hoa Kỳ) hoặc đến phòng cấp cứu gần nhất."
+    ),
+    "tagalog": (
+        "Mahahalagang tala sa kaligtasan at pagtitiwala:\n"
+        "- Ang tool na ito ay sumusuporta lamang sa paggabay sa paghahanap ng pangangalaga at hindi nagdi-diagnose, nagrereseta, o pumapalit sa payong medikal ng lisensiyadong propesyonal.\n"
+        "- Ang mga tugma sa direktoryo ay para sa impormasyon lamang, hindi referral, pag-endorso, o garantiya ng klinikal na pagiging angkop.\n"
+        "- Hindi beripikado ang paglahok sa insurance/network, mga kinakailangan sa referral, pagtanggap ng bagong pasyente, lokasyon, at availability ng appointment maliban kung tahasang sinasabi ng pinagmulan. Tawagan ang provider at insurer upang kumpirmahin bago humingi ng pangangalaga.\n"
+        "- Huwag magbahagi ng personal na impormasyong pangkalusugan tulad ng buong pangalan, address, Social Security number, o medical record number.\n"
+        "- Kung malubha o nagbabanta sa buhay ang mga sintomas, tumawag sa emergency services (911 sa U.S.) o pumunta sa pinakamalapit na emergency room."
+    ),
+    "arabic": (
+        "ملاحظات مهمة حول السلامة والثقة:\n"
+        "- تدعم هذه الأداة التنقل في الرعاية فقط ولا تشخص أو تصف أدوية أو تحل محل المشورة الطبية من مختصين مرخصين.\n"
+        "- نتائج الدليل معلوماتية فقط، وليست إحالات أو تزكيات أو ضمانات للملاءمة السريرية.\n"
+        "- لا يتم التحقق من المشاركة في شبكة التأمين، أو متطلبات الإحالة، أو توفر استقبال مرضى جدد، أو الموقع، أو توفر المواعيد ما لم يذكر المصدر ذلك صراحة. اتصل بمقدم الخدمة وشركة التأمين للتأكيد قبل طلب الرعاية.\n"
+        "- لا تشارك معلومات صحية شخصية مثل الأسماء الكاملة أو العناوين أو أرقام الضمان الاجتماعي أو أرقام السجلات الطبية.\n"
+        "- إذا كانت الأعراض شديدة أو مهددة للحياة، فاتصل بخدمات الطوارئ (911 في الولايات المتحدة) أو اذهب إلى أقرب غرفة طوارئ."
+    ),
+    "korean": (
+        "중요한 안전 및 신뢰 안내:\n"
+        "- 이 도구는 진료 탐색만 지원하며 진단, 처방 또는 면허가 있는 의료 전문가의 조언을 대체하지 않습니다.\n"
+        "- 디렉터리 일치 결과는 정보 제공용일 뿐이며, 의뢰, 보증 또는 임상적 적합성 보장이 아닙니다.\n"
+        "- 출처가 명시적으로 밝히지 않는 한 보험 네트워크 참여, 의뢰 요건, 신규 환자 접수 여부, 위치 및 예약 가능 여부는 확인된 것이 아닙니다. 진료를 받기 전에 제공자와 보험사에 전화해 확인하세요.\n"
+        "- 전체 이름, 주소, 사회보장번호 또는 의무기록 번호와 같은 개인 건강 정보를 공유하지 마세요.\n"
+        "- 증상이 심각하거나 생명을 위협하는 경우 응급 서비스(미국에서는 911)에 전화하거나 가장 가까운 응급실로 가세요."
+    ),
 }
 
 _REQUIRED_TRUST_GUIDANCE = _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE["english"]
@@ -64,6 +96,22 @@ _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES = {
     "中文": "simplified_chinese",
     "简体中文": "simplified_chinese",
     "普通话": "simplified_chinese",
+    "vi": "vietnamese",
+    "vie": "vietnamese",
+    "vietnamese": "vietnamese",
+    "tiếng việt": "vietnamese",
+    "tagalog": "tagalog",
+    "filipino": "tagalog",
+    "tl": "tagalog",
+    "fil": "tagalog",
+    "ar": "arabic",
+    "ara": "arabic",
+    "arabic": "arabic",
+    "العربية": "arabic",
+    "ko": "korean",
+    "kor": "korean",
+    "korean": "korean",
+    "한국어": "korean",
 }
 
 _UNKNOWN_LANGUAGE_MARKERS = {
@@ -75,28 +123,6 @@ _UNKNOWN_LANGUAGE_MARKERS = {
     "null",
     "n/a",
 }
-
-_TRUST_GUIDANCE_PROTECTED_TOKENS = {
-    "scope": "[[CARE_NAVIGATION_ONLY]]",
-    "advice": "[[LICENSED_MEDICAL_ADVICE]]",
-    "directory": "[[DIRECTORY_INFORMATIONAL_ONLY]]",
-    "insurance": "[[INSURANCE_NETWORK_UNVERIFIED]]",
-    "confirm": "[[CALL_PROVIDER_AND_INSURER]]",
-    "privacy": "[[DO_NOT_SHARE_PHI]]",
-    "emergency": "[[EMERGENCY_SERVICES_911]]",
-}
-
-_TRUST_GUIDANCE_ENGLISH_LEAK_PHRASES = (
-    "important safety and trust notes",
-    "this tool supports care navigation only",
-    "directory matches are informational",
-    "insurance/network participation",
-    "do not share personal health information",
-)
-
-_TRANSLATED_TRUST_GUIDANCE_MIN_LENGTH_RATIO = 0.45
-_TRANSLATED_TRUST_GUIDANCE_MAX_LENGTH_RATIO = 2.5
-_TRANSLATED_TRUST_GUIDANCE_MIN_ABSOLUTE_LENGTH = 240
 
 
 def _normalize_response_language(response_language: Optional[str]) -> str:
@@ -136,93 +162,6 @@ def _get_prewritten_required_trust_guidance(response_language: Optional[str]) ->
         return None
 
     return _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key]
-
-
-def _build_trust_guidance_translation_messages(target_language: str) -> List[Dict[str, str]]:
-    protected_token_list = "\n".join(
-        f"- {token}" for token in _TRUST_GUIDANCE_PROTECTED_TOKENS.values()
-    )
-    return normalize_chat_messages(
-        [
-            {
-                "role": "system",
-                "content": (
-                    "You translate fixed safety and trust guidance for a healthcare navigation assistant. "
-                    "Translate only the text provided. Preserve all meaning, cautions, emergency instructions, "
-                    "and insurance/network verification limits. Do not add, remove, or reinterpret medical advice. "
-                    "Do not translate or remove bracketed placeholder tokens. Return only the translated text."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Translate the following canonical English safety/trust note into {target_language}:\n\n"
-                    f"{_required_trust_guidance_with_protected_tokens()}\n\n"
-                    "The translated text must preserve these exact placeholder tokens:\n"
-                    f"{protected_token_list}"
-                ),
-            },
-        ]
-    )
-
-
-def _required_trust_guidance_with_protected_tokens() -> str:
-    return (
-        "Important safety and trust notes:\n"
-        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['scope']} This tool supports care navigation only and does not diagnose, prescribe, or replace licensed medical advice {_TRUST_GUIDANCE_PROTECTED_TOKENS['advice']}.\n"
-        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['directory']} Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.\n"
-        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['insurance']} Insurance/network participation, referral requirements, new-patient availability, location, and appointment availability are not verified unless the source explicitly says so. Call the provider and insurer to confirm before seeking care {_TRUST_GUIDANCE_PROTECTED_TOKENS['confirm']}.\n"
-        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['privacy']} Do not share personal health information such as full names, addresses, Social Security numbers, or medical record numbers.\n"
-        f"- {_TRUST_GUIDANCE_PROTECTED_TOKENS['emergency']} If symptoms are severe or life-threatening, call emergency services (911 in the U.S.) or go to the nearest emergency room."
-    )
-
-
-def _strip_trust_guidance_protected_tokens(translated_guidance: str) -> str:
-    stripped_guidance = translated_guidance
-    for token in _TRUST_GUIDANCE_PROTECTED_TOKENS.values():
-        stripped_guidance = stripped_guidance.replace(token, "")
-    stripped_guidance = re.sub(r"[ \t]+", " ", stripped_guidance)
-    stripped_guidance = re.sub(r"\s+([.,;:!?])", r"\1", stripped_guidance)
-    return stripped_guidance.strip()
-
-
-def _translated_trust_guidance_is_valid(
-    translated_guidance: str,
-    target_language: Optional[str],
-) -> bool:
-    stripped_guidance = translated_guidance.strip()
-    if not stripped_guidance:
-        return False
-
-    missing_tokens = [
-        token
-        for token in _TRUST_GUIDANCE_PROTECTED_TOKENS.values()
-        if token not in stripped_guidance
-    ]
-    if missing_tokens:
-        return False
-
-    guidance_without_tokens = _strip_trust_guidance_protected_tokens(stripped_guidance)
-    if not guidance_without_tokens:
-        return False
-
-    canonical_length = len(_REQUIRED_TRUST_GUIDANCE)
-    min_length = max(
-        int(canonical_length * _TRANSLATED_TRUST_GUIDANCE_MIN_LENGTH_RATIO),
-        _TRANSLATED_TRUST_GUIDANCE_MIN_ABSOLUTE_LENGTH,
-    )
-    max_length = int(canonical_length * _TRANSLATED_TRUST_GUIDANCE_MAX_LENGTH_RATIO)
-    translated_length = len(guidance_without_tokens)
-    if translated_length < min_length or translated_length > max_length:
-        return False
-
-    normalized_target_language = _normalize_response_language(target_language)
-    if normalized_target_language not in {"english", "en", "eng"}:
-        normalized_guidance = _normalize_response_language(guidance_without_tokens)
-        if any(phrase in normalized_guidance for phrase in _TRUST_GUIDANCE_ENGLISH_LEAK_PHRASES):
-            return False
-
-    return True
 
 
 def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -2584,7 +2523,7 @@ class CareLocatorAgent:
         if not isinstance(content, str):
             content = str(content)
 
-        return self._append_required_trust_guidance(content.strip(), client, response_language)
+        return self._append_required_trust_guidance(content.strip(), response_language)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -2618,12 +2557,9 @@ class CareLocatorAgent:
     def _append_required_trust_guidance(
         self,
         content: str,
-        client: Optional[InferenceClient] = None,
         response_language: Optional[str] = None,
     ) -> str:
         trust_guidance = _get_prewritten_required_trust_guidance(response_language)
-        if trust_guidance is None:
-            trust_guidance = self._translate_required_trust_guidance(client, response_language)
         if trust_guidance is None:
             trust_guidance = _REQUIRED_TRUST_GUIDANCE
 
@@ -2632,45 +2568,6 @@ class CareLocatorAgent:
         if trust_guidance in content:
             return content
         return f"{content}\n\n{trust_guidance}"
-
-    # ------------------------------------------------------------------
-    def _translate_required_trust_guidance(
-        self,
-        client: Optional[InferenceClient],
-        response_language: Optional[str],
-    ) -> Optional[str]:
-        if client is None or _is_unknown_response_language(response_language):
-            return None
-
-        try:
-            completion = client.chat_completion(
-                _build_trust_guidance_translation_messages(str(response_language)),
-                max_tokens=700,
-                temperature=0,
-                top_p=1.0,
-            )
-        except Exception as exc:
-            logger.warning("Trust guidance translation failed. language=%s error=%s", response_language, exc)
-            return None
-
-        choices = getattr(completion, "choices", None) or []
-        first_choice = choices[0] if choices else None
-        if first_choice is None:
-            return None
-
-        translated_guidance = self._content_from_completion_choice(first_choice)
-        if not translated_guidance:
-            return None
-
-        translated_guidance = translated_guidance.strip()
-        if not _translated_trust_guidance_is_valid(translated_guidance, response_language):
-            logger.warning(
-                "Trust guidance translation failed validation. language=%s",
-                response_language,
-            )
-            return None
-
-        return _strip_trust_guidance_protected_tokens(translated_guidance)
 
     # ------------------------------------------------------------------
     def _should_use_fallback_only_template(self) -> bool:
