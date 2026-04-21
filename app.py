@@ -53,6 +53,13 @@ DATA_SOURCE_LIMITATIONS_NOTES = """
 - Public sources may be incomplete, delayed, or missing appointment and network details. Confirm directly before seeking care.
 """
 
+EXAMPLE_PROMPTS = (
+    "primary care 75001",
+    "儿科 10013",
+    "dentista 33012",
+)
+EXAMPLE_PROMPTS_MARKDOWN = "\n".join(f"- `{example}`" for example in EXAMPLE_PROMPTS)
+
 
 # Initialize repository and agent once so we do not reload data per request.
 provider_repository = ProviderRepository()
@@ -105,26 +112,22 @@ chatbot = gr.ChatInterface(
     respond,
     type="messages",
     # textbox=gr.Textbox(placeholder="e.g., primary care 90048"),
-    examples=[
-        "primary care 75001",
-        "儿科 10013",
-        "dentista 33012",
-    ],
     description=ui_settings.get("description", ""),
     title=ui_settings.get("title", "Multilingual Care Locator"),
 )
 
 custom_css = """
 .gradio-container .gr-chatbot {
-    min-height: 620px;
-    max-height: 72vh;
+    height: calc(100vh - 220px);
+    min-height: 680px;
+    max-height: none;
     overflow-y: auto;
 }
 
 @media (max-width: 640px) {
     .gradio-container .gr-chatbot {
-        min-height: 460px;
-        max-height: 68vh;
+        height: 68vh;
+        min-height: 480px;
     }
 }
 
@@ -149,6 +152,8 @@ custom_css = """
 
 with gr.Blocks(fill_height=True, css=custom_css) as demo:
     chatbot.render()
+    with gr.Accordion("Examples", open=False):
+        gr.Markdown(EXAMPLE_PROMPTS_MARKDOWN)
     with gr.Accordion("Safety and trust notes", open=False):
         gr.Markdown(SAFETY_TRUST_NOTES)
     with gr.Accordion("Data sources and limitations", open=False):
