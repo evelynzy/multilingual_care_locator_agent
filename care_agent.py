@@ -2445,8 +2445,50 @@ class CareLocatorAgent:
             "insurance_display",
             "Reported/listed insurance (not verified).",
         )
+        normalized["trust_labels"] = self._build_result_trust_labels(normalized)
 
         return normalized
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _build_result_trust_labels(result: dict) -> List[str]:
+        result_data = result if isinstance(result, dict) else {}
+        provenance = result_data.get("provenance")
+        if not isinstance(provenance, dict):
+            provenance = {}
+
+        source = provenance.get("source") or result_data.get("source") or "Unknown source"
+        labels = [f"Source: {source}"]
+
+        insurance_verification = result_data.get("insurance_network_verification")
+        if not isinstance(insurance_verification, dict):
+            insurance_verification = {}
+        insurance_status = str(
+            insurance_verification.get("status") or "unverified"
+        ).replace("_", " ")
+        labels.append(f"Insurance/network: {insurance_status}")
+
+        new_patient_status = result_data.get("accepting_new_patients_status")
+        if not isinstance(new_patient_status, dict):
+            new_patient_status = {}
+        accepting_status = str(new_patient_status.get("status") or "unknown").replace(
+            "_", " "
+        )
+        labels.append(f"New patients: {accepting_status}")
+
+        medicare_opt_out = result_data.get("medicare_opt_out")
+        if isinstance(medicare_opt_out, dict):
+            opted_out = medicare_opt_out.get("opted_out")
+            if opted_out is True:
+                labels.append("Medicare opt-out: opted out")
+            elif opted_out is False:
+                labels.append("Medicare opt-out: no opt-out record found")
+            else:
+                labels.append("Medicare opt-out: unknown")
+        else:
+            labels.append("Medicare opt-out: unknown")
+
+        return labels
 
     # ------------------------------------------------------------------
     @staticmethod

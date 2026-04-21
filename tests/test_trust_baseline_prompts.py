@@ -11,6 +11,9 @@ class TrustBaselinePromptTests(unittest.TestCase):
             "insurance_reported",
             template,
         )
+        self.assertIn("compact Markdown card", template)
+        self.assertIn("not as a table", template)
+        self.assertIn("trust_labels", template)
         self.assertIn(
             "call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability",
             template,
@@ -51,17 +54,12 @@ class TrustBaselinePromptTests(unittest.TestCase):
         self.assertIn("emergency services", template)
         self.assertIn("Do not ask follow-up questions", template)
 
-    def test_ui_description_includes_user_facing_disclaimer(self) -> None:
+    def test_ui_description_is_compact_and_phi_safe(self) -> None:
         description = get_ui_settings()["description"]
 
-        self.assertIn(
-            "Insurance/network participation, referral requirements, new-patient status, and appointment availability are not verified unless a source explicitly says so.",
-            description,
-        )
-        self.assertIn(
-            "Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.",
-            description,
-        )
+        self.assertIn("Share a care need and approximate city/state or ZIP", description)
+        self.assertIn("avoid personal health information", description)
+        self.assertNotIn("Directory matches are informational", description)
 
 
 if __name__ == "__main__":

@@ -35,6 +35,24 @@ ERROR_MESSAGE = get_message(
     "I encountered an unexpected error while processing your request. Please retry in a moment.",
 )
 
+SAFETY_TRUST_NOTES = """
+- This assistant helps with care navigation only. It does not diagnose, prescribe, or replace licensed medical advice.
+- Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.
+- Insurance/network participation, referral requirements, new-patient status, location, and appointment availability are not verified unless a source explicitly says so.
+- Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.
+- Do not share PHI such as full names, addresses, Social Security numbers, or medical record numbers.
+- For severe or life-threatening symptoms, call emergency services (911 in the U.S.) or go to the nearest emergency room.
+"""
+
+DATA_SOURCE_LIMITATIONS_NOTES = """
+- Local sample provider directory, when available.
+- NPI Records - Individuals public API: https://clinicaltables.nlm.nih.gov/apidoc/npi_idv/v3/doc.html
+- NPI Records - Organizations public API: https://clinicaltables.nlm.nih.gov/apidoc/npi_org/v3/doc.html
+- NPPES API public registry: https://npiregistry.cms.hhs.gov/api-page
+- Medicare Opt Out Records public data: https://data.cms.gov/data-api/v1/dataset/9887a515-7552-4693-bf58-735c77af46d7/data
+- Public sources may be incomplete, delayed, or missing appointment and network details. Confirm directly before seeking care.
+"""
+
 
 # Initialize repository and agent once so we do not reload data per request.
 provider_repository = ProviderRepository()
@@ -98,20 +116,15 @@ chatbot = gr.ChatInterface(
 
 custom_css = """
 .gradio-container .gr-chatbot {
-    min-height: 420px;
-    max-height: 560px;
+    min-height: 620px;
+    max-height: 72vh;
     overflow-y: auto;
 }
 
 @media (max-width: 640px) {
     .gradio-container .gr-chatbot {
-        min-height: 320px;
-        max-height: 420px;
-    }
-
-    .gradio-container .gr-chatbot {
-        min-height: 320px;
-        max-height: 420px;
+        min-height: 460px;
+        max-height: 68vh;
     }
 }
 
@@ -136,15 +149,10 @@ custom_css = """
 
 with gr.Blocks(fill_height=True, css=custom_css) as demo:
     chatbot.render()
-    gr.Markdown(
-        """
-        **Data sources**
-        - [NPI Records - Individuals](https://clinicaltables.nlm.nih.gov/apidoc/npi_idv/v3/doc.html) public API
-        - [NPI Records - Organizations](https://clinicaltables.nlm.nih.gov/apidoc/npi_org/v3/doc.html) public API
-        - [NPPES API](https://npiregistry.cms.hhs.gov/api-page) public API
-        - [Medicare Opt Out Records](https://data.cms.gov/data-api/v1/dataset/9887a515-7552-4693-bf58-735c77af46d7/data) public data
-        """
-    )
+    with gr.Accordion("Safety and trust notes", open=False):
+        gr.Markdown(SAFETY_TRUST_NOTES)
+    with gr.Accordion("Data sources and limitations", open=False):
+        gr.Markdown(DATA_SOURCE_LIMITATIONS_NOTES)
 
 
 if __name__ == "__main__":
