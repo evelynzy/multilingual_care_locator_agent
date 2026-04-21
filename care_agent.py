@@ -34,7 +34,7 @@ _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE = {
         "- No comparta información personal de salud, como nombres completos, direcciones, números de Seguro Social o números de expediente médico.\n"
         "- Si los síntomas son graves o potencialmente mortales, llame a los servicios de emergencia (911 en EE. UU.) o vaya a la sala de emergencias más cercana."
     ),
-    "chinese": (
+    "simplified_chinese": (
         "重要的安全和信任提示：\n"
         "- 此工具仅支持护理导航，不会诊断、开药或替代持证医疗专业人员的建议。\n"
         "- 目录匹配结果仅供参考，不是转诊、背书或临床适配性的保证。\n"
@@ -54,31 +54,50 @@ _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES = {
     "esp": "spanish",
     "espanol": "spanish",
     "spanish": "spanish",
-    "zh": "chinese",
-    "zh-cn": "chinese",
-    "zh-hans": "chinese",
-    "zh-hant": "chinese",
-    "chinese": "chinese",
-    "mandarin": "chinese",
-    "mandarin chinese": "chinese",
-    "cantonese": "chinese",
-    "cantonese chinese": "chinese",
-    "中文": "chinese",
-    "普通话": "chinese",
-    "廣東話": "chinese",
-    "广东话": "chinese",
+    "zh": "simplified_chinese",
+    "zh-cn": "simplified_chinese",
+    "zh-hans": "simplified_chinese",
+    "chinese": "simplified_chinese",
+    "simplified chinese": "simplified_chinese",
+    "mandarin": "simplified_chinese",
+    "mandarin chinese": "simplified_chinese",
+    "中文": "simplified_chinese",
+    "简体中文": "simplified_chinese",
+    "普通话": "simplified_chinese",
+}
+
+_UNKNOWN_LANGUAGE_MARKERS = {
+    "unknown",
+    "undetected",
+    "undetermined",
+    "unspecified",
+    "none",
+    "null",
+    "n/a",
 }
 
 
-def _get_required_trust_guidance(response_language: Optional[str]) -> str:
+def _normalize_response_language(response_language: Optional[str]) -> str:
     if not response_language:
-        return _REQUIRED_TRUST_GUIDANCE
+        return ""
 
     normalized_language = unicodedata.normalize("NFKD", str(response_language).strip().lower())
     normalized_language = "".join(
         character for character in normalized_language if not unicodedata.combining(character)
     )
-    normalized_language = re.sub(r"\s+", " ", normalized_language)
+    return re.sub(r"\s+", " ", normalized_language)
+
+
+def _is_unknown_response_language(response_language: Optional[str]) -> bool:
+    normalized_language = _normalize_response_language(response_language)
+    return not normalized_language or normalized_language in _UNKNOWN_LANGUAGE_MARKERS
+
+
+def _get_prewritten_required_trust_guidance(response_language: Optional[str]) -> Optional[str]:
+    if _is_unknown_response_language(response_language):
+        return _REQUIRED_TRUST_GUIDANCE
+
+    normalized_language = _normalize_response_language(response_language)
     language_key = _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.get(normalized_language)
 
     if language_key is None:
@@ -92,9 +111,32 @@ def _get_required_trust_guidance(response_language: Optional[str]) -> str:
                 break
 
     if language_key is None:
-        return _REQUIRED_TRUST_GUIDANCE
+        return None
 
     return _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key]
+
+
+def _build_trust_guidance_translation_messages(target_language: str) -> List[Dict[str, str]]:
+    return normalize_chat_messages(
+        [
+            {
+                "role": "system",
+                "content": (
+                    "You translate fixed safety and trust guidance for a healthcare navigation assistant. "
+                    "Translate only the text provided. Preserve all meaning, cautions, emergency instructions, "
+                    "and insurance/network verification limits. Do not add, remove, or reinterpret medical advice. "
+                    "Return only the translated text."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Translate the following canonical English safety/trust note into {target_language}:\n\n"
+                    f"{_REQUIRED_TRUST_GUIDANCE}"
+                ),
+            },
+        ]
+    )
 
 
 def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -2448,6 +2490,19 @@ class CareLocatorAgent:
         if first_choice is None:
             raise RuntimeError("Model did not return any choices")
 
+        content = self._content_from_completion_choice(first_choice)
+
+        if not content:
+            raise RuntimeError("Model response missing content")
+
+        if not isinstance(content, str):
+            content = str(content)
+
+        return self._append_required_trust_guidance(content.strip(), client, response_language)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _content_from_completion_choice(first_choice: Any) -> Optional[str]:
         message = getattr(first_choice, "message", None)
         content = None
 
@@ -2468,21 +2523,60 @@ class CareLocatorAgent:
                     text_chunks.append(str(item.get("text", "")))
             content = "".join(text_chunks)
 
-        if not content:
-            raise RuntimeError("Model response missing content")
-
-        if not isinstance(content, str):
+        if content is not None and not isinstance(content, str):
             content = str(content)
 
-        return self._append_required_trust_guidance(content.strip(), response_language)
+        return content
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _append_required_trust_guidance(content: str, response_language: Optional[str] = None) -> str:
-        trust_guidance = _get_required_trust_guidance(response_language)
+    def _append_required_trust_guidance(
+        self,
+        content: str,
+        client: Optional[InferenceClient] = None,
+        response_language: Optional[str] = None,
+    ) -> str:
+        trust_guidance = _get_prewritten_required_trust_guidance(response_language)
+        if trust_guidance is None:
+            trust_guidance = self._translate_required_trust_guidance(client, response_language)
+        if trust_guidance is None:
+            trust_guidance = _REQUIRED_TRUST_GUIDANCE
+
+        if any(note in content for note in _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE.values()):
+            return content
         if trust_guidance in content:
             return content
         return f"{content}\n\n{trust_guidance}"
+
+    # ------------------------------------------------------------------
+    def _translate_required_trust_guidance(
+        self,
+        client: Optional[InferenceClient],
+        response_language: Optional[str],
+    ) -> Optional[str]:
+        if client is None or _is_unknown_response_language(response_language):
+            return None
+
+        try:
+            completion = client.chat_completion(
+                _build_trust_guidance_translation_messages(str(response_language)),
+                max_tokens=700,
+                temperature=0,
+                top_p=1.0,
+            )
+        except Exception as exc:
+            logger.warning("Trust guidance translation failed. language=%s error=%s", response_language, exc)
+            return None
+
+        choices = getattr(completion, "choices", None) or []
+        first_choice = choices[0] if choices else None
+        if first_choice is None:
+            return None
+
+        translated_guidance = self._content_from_completion_choice(first_choice)
+        if not translated_guidance:
+            return None
+
+        return translated_guidance.strip()
 
     # ------------------------------------------------------------------
     def _should_use_fallback_only_template(self) -> bool:
