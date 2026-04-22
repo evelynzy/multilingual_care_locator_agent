@@ -55,10 +55,9 @@ DATA_SOURCE_LIMITATIONS_NOTES = """
 
 EXAMPLE_PROMPTS = (
     "primary care 75001",
-    "儿科 10013",
+    "儿科10013",
     "dentista 33012",
 )
-EXAMPLE_PROMPTS_MARKDOWN = "\n".join(f"- `{example}`" for example in EXAMPLE_PROMPTS)
 
 
 # Initialize repository and agent once so we do not reload data per request.
@@ -112,6 +111,7 @@ chatbot = gr.ChatInterface(
     respond,
     type="messages",
     # textbox=gr.Textbox(placeholder="e.g., primary care 90048"),
+    examples=list(EXAMPLE_PROMPTS),
     description=ui_settings.get("description", ""),
     title=ui_settings.get("title", "Multilingual Care Locator"),
 )
@@ -147,13 +147,22 @@ custom_css = """
     display: block;
     overflow-x: auto;
 }
+
+.gradio-container .examples,
+.gradio-container .gr-examples {
+    margin: 0 0 6px;
+    padding: 0;
+}
+
+.gradio-container .examples table,
+.gradio-container .gr-examples table {
+    font-size: 0.9rem;
+}
 """
 
 
 with gr.Blocks(fill_height=True, css=custom_css) as demo:
     chatbot.render()
-    with gr.Accordion("Examples", open=False):
-        gr.Markdown(EXAMPLE_PROMPTS_MARKDOWN)
     with gr.Accordion("Safety and trust notes", open=False):
         gr.Markdown(SAFETY_TRUST_NOTES)
     with gr.Accordion("Data sources and limitations", open=False):

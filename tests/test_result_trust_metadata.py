@@ -135,9 +135,11 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
             {
                 "id": "provider_001",
                 "name": "Harmony Family Clinic",
+                "specialties": ["Primary Care"],
                 "insurance": ["Medicare", "Aetna"],
                 "source": "Local provider dataset",
                 "location": "San Francisco, CA",
+                "phone": "415-555-0100",
             }
         ]
 
@@ -159,24 +161,15 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
             patient_context=None,
         )
 
-        captured: dict = {}
-
-        def _capture_response(client, payload, max_tokens, temperature, top_p, template_key="response_template"):
-            captured["payload"] = payload
-            captured["template_key"] = template_key
-            return "ok"
+        client = _SequencedChatClient("Model table should not be used.")
 
         with patch.object(
             self.agent,
             "_interpret_user_need",
             return_value=query,
-        ), patch.object(
-            self.agent,
-            "_compose_response",
-            side_effect=_capture_response,
         ):
             result = self.agent.handle_request(
-                Mock(),
+                client,
                 "primary care 94110",
                 [],
                 max_tokens=256,
@@ -184,28 +177,19 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(result, "ok")
-        payload = captured["payload"]
-        local_result = payload["local_results"][0]
-
-        self.assertEqual(local_result["insurance_reported"], ["Medicare", "Aetna"])
-        self.assertNotIn("insurance", local_result)
-        self.assertNotIn("accepted_insurance", local_result)
-        self.assertEqual(local_result["insurance_network_verification"]["status"], "unverified")
-        self.assertFalse(local_result["insurance_network_verification"]["verified"])
-        self.assertEqual(local_result["accepting_new_patients_status"]["status"], "unknown")
-        self.assertFalse(local_result["accepting_new_patients_status"]["verified"])
-        self.assertEqual(local_result["provenance"]["source"], "Local provider dataset")
-        self.assertEqual(
-            local_result["trust_labels"],
-            [
-                "Source: Local provider dataset",
-                "Insurance/network: unverified",
-                "New patients: unknown",
-                "Medicare opt-out: unknown",
-            ],
-        )
-        self.assertIn("verification_guidance", payload)
+        self.assertEqual(len(client.calls), 0)
+        self.assertIn("### 1. Harmony Family Clinic", result)
+        self.assertIn("**Specialty/type:** Primary Care", result)
+        self.assertIn("**Address:** San Francisco, CA", result)
+        self.assertIn("**Phone:** 415-555-0100", result)
+        self.assertIn("**Source:** Local provider dataset", result)
+        self.assertIn("**Listed insurance:** Medicare, Aetna (reported only; network participation is not verified here)", result)
+        self.assertIn("**Insurance/network verification:** unverified", result)
+        self.assertIn("**Accepting new patients:** unknown", result)
+        self.assertIn("**Appointment availability:** Not verified", result)
+        self.assertIn("**Referral/verification reminder:** Call the provider and insurer to confirm", result)
+        self.assertIn("Important safety and trust notes:", result)
+        self.assertNotIn("|", result)
 
     def test_provider_record_uses_reported_insurance_metadata(self) -> None:
         record = ProviderRecord(

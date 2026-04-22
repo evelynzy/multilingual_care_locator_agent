@@ -161,13 +161,14 @@ class AppLoggingTests(unittest.TestCase):
         self.assertIn("height: calc(100vh - 220px)", app.custom_css)
         self.assertIn("min-height: 680px", app.custom_css)
 
-    def test_examples_are_collapsed_markdown_not_chatinterface_examples(self) -> None:
+    def test_examples_are_compact_clickable_chatinterface_examples(self) -> None:
         app = importlib.import_module("app")
 
-        self.assertNotIn("examples", app.chatbot.kwargs)
-        self.assertIn("primary care 75001", app.EXAMPLE_PROMPTS_MARKDOWN)
-        self.assertIn("儿科 10013", app.EXAMPLE_PROMPTS_MARKDOWN)
-        self.assertIn("dentista 33012", app.EXAMPLE_PROMPTS_MARKDOWN)
+        self.assertEqual(
+            app.chatbot.kwargs["examples"],
+            ["primary care 75001", "儿科10013", "dentista 33012"],
+        )
+        self.assertNotIn("儿科 10013", app.chatbot.kwargs["examples"])
 
 
 if __name__ == "__main__":
