@@ -261,6 +261,36 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("New patients: unknown", result["trust_labels"])
         self.assertIn("Medicare opt-out: opted out", result["trust_labels"])
 
+    def test_styled_provider_card_preserves_dynamic_trust_labels(self) -> None:
+        result = self.agent._normalize_result_trust_metadata(
+            {
+                "name": "Specialty Clinic",
+                "location": "Austin, TX",
+                "phone": "512-555-0100",
+                "taxonomy": "Cardiology",
+                "source": "NPI Registry",
+                "insurance_reported": ["Medicare"],
+                "insurance_network_verification": {"status": "unverified"},
+                "accepting_new_patients_status": {"status": "unknown"},
+                "medicare_opt_out": {"opted_out": True},
+            }
+        )
+
+        card_html = self.agent._format_provider_result_card(
+            result,
+            index=1,
+            query={"specialties": ["Cardiology"], "keywords": []},
+        )
+
+        self.assertIn('<span class="provider-card__badge">Informational match</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Insurance/network not verified</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Accepting new patients not verified</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Appointment availability not verified</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Source: NPI Registry</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Insurance/network: unverified</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">New patients: unknown</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Medicare opt-out: opted out</span>', card_html)
+
     def test_compose_response_appends_required_trust_guidance(self) -> None:
         client = self._client_with_response("Model-rendered answer.")
         payload = {
