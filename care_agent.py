@@ -279,6 +279,10 @@ _DETERMINISTIC_RENDER_TRANSLATIONS = {
         "spanish": "Los datos de la fuente no confirman la disponibilidad para pacientes nuevos.",
         "simplified_chinese": "来源数据未确认是否接收新患者。",
     },
+    "Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.": {
+        "spanish": "Llame al proveedor y a la aseguradora para confirmar el estado de la red, el plan de seguro aceptado, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas.",
+        "simplified_chinese": "请致电服务提供者和保险公司，确认网络状态、接受的保险计划、转诊要求、新患者接收情况、地点和预约可用性。",
+    },
 }
 
 
