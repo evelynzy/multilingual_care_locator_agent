@@ -858,12 +858,16 @@ class CareLocatorAgent:
         if website:
             phone_source_parts.append(self._render_card_meta_item("Website", website))
 
-        trust_badges = [
+        explicit_trust_badges = [
             "Informational match",
             "Insurance/network not verified",
             "Accepting new patients not verified",
             "Appointment availability not verified",
         ]
+        dynamic_trust_badges = self._ensure_list(result.get("trust_labels"))
+        trust_badges = self._dedupe_preserve_order(
+            explicit_trust_badges + dynamic_trust_badges
+        )
 
         return "\n".join(
             [
