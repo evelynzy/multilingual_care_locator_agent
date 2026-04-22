@@ -160,6 +160,9 @@ class AppLoggingTests(unittest.TestCase):
         self.assertIn("Public sources may be incomplete", app.DATA_SOURCE_LIMITATIONS_NOTES)
         self.assertIn("height: calc(100vh - 220px)", app.custom_css)
         self.assertIn("min-height: 680px", app.custom_css)
+        self.assertIn(".provider-card", app.custom_css)
+        self.assertIn(".provider-card__badge", app.custom_css)
+        self.assertIn("border-radius: 8px", app.custom_css)
 
     def test_examples_are_compact_clickable_chatinterface_examples(self) -> None:
         app = importlib.import_module("app")
