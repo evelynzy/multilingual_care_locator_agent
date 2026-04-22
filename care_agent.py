@@ -125,6 +125,145 @@ _UNKNOWN_LANGUAGE_MARKERS = {
     "n/a",
 }
 
+_DETERMINISTIC_RENDER_COPY = {
+    "english": {
+        "results_intro": "Here are care navigation results for {summary}.",
+        "care_route_label": "Care route",
+        "referral_note_label": "Referral note",
+        "note_label": "Note",
+        "before_contact_label": "Before you contact a provider",
+        "specialty_type_label": "Specialty/type",
+        "address_label": "Address",
+        "phone_label": "Phone",
+        "source_label": "Source",
+        "website_label": "Website",
+        "why_matched_label": "Why matched",
+        "listed_insurance_label": "Listed insurance",
+        "insurance_verification_label": "Insurance/network verification",
+        "accepting_patients_label": "Accepting new patients",
+        "appointment_availability_label": "Appointment availability",
+        "next_step_label": "Next step",
+        "care_directory_result": "Care directory result",
+        "not_listed": "Not listed",
+        "listed_insurance_suffix": "reported only; network participation is not verified here",
+        "appointment_availability_value": "Not verified; call the provider to confirm.",
+        "verification_reminder": "Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.",
+        "matched_requested_terms": "Matched requested care terms: {terms}",
+        "listed_provider_type": "Listed provider type: {taxonomy}",
+        "matched_available_result": "Matched available care directory result for the search criteria.",
+        "informational_badge": "Informational",
+        "network_unverified_badge": "Network unverified",
+        "new_patients_unknown_badge": "New patients unknown",
+        "appointments_unverified_badge": "Appointments unverified",
+        "status_unverified": "unverified",
+        "status_unknown": "unknown",
+        "trust_label_source": "Source: {value}",
+        "trust_label_insurance": "Insurance/network: {value}",
+        "trust_label_new_patients": "New patients: {value}",
+        "trust_label_medicare_opt_out": "Medicare opt-out: {value}",
+        "medicare_opted_out": "opted out",
+        "medicare_no_record": "no opt-out record found",
+        "medicare_unknown": "unknown",
+    },
+    "spanish": {
+        "results_intro": "Aquí están los resultados de navegación de atención para {summary}.",
+        "care_route_label": "Ruta de atención",
+        "referral_note_label": "Nota sobre remisión",
+        "note_label": "Nota",
+        "before_contact_label": "Antes de contactar a un proveedor",
+        "specialty_type_label": "Especialidad/tipo",
+        "address_label": "Dirección",
+        "phone_label": "Teléfono",
+        "source_label": "Fuente",
+        "website_label": "Sitio web",
+        "why_matched_label": "Por qué coincide",
+        "listed_insurance_label": "Seguro listado",
+        "insurance_verification_label": "Verificación de seguro/red",
+        "accepting_patients_label": "Acepta pacientes nuevos",
+        "appointment_availability_label": "Disponibilidad de citas",
+        "next_step_label": "Siguiente paso",
+        "care_directory_result": "Resultado del directorio de atención",
+        "not_listed": "No figura",
+        "listed_insurance_suffix": "solo informado; la participación en la red no está verificada aquí",
+        "appointment_availability_value": "No verificada; llame al proveedor para confirmarla.",
+        "verification_reminder": "Llame al proveedor y a la aseguradora para confirmar el estado de la red, el plan de seguro aceptado, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas.",
+        "matched_requested_terms": "Coincidió con los términos de atención solicitados: {terms}",
+        "listed_provider_type": "Tipo de proveedor listado: {taxonomy}",
+        "matched_available_result": "Coincidió con un resultado disponible del directorio de atención para los criterios de búsqueda.",
+        "informational_badge": "Informativo",
+        "network_unverified_badge": "Red no verificada",
+        "new_patients_unknown_badge": "Pacientes nuevos desconocido",
+        "appointments_unverified_badge": "Citas sin verificar",
+        "status_unverified": "no verificado",
+        "status_unknown": "desconocido",
+        "trust_label_source": "Fuente: {value}",
+        "trust_label_insurance": "Seguro/red: {value}",
+        "trust_label_new_patients": "Pacientes nuevos: {value}",
+        "trust_label_medicare_opt_out": "Exclusión de Medicare: {value}",
+        "medicare_opted_out": "excluido",
+        "medicare_no_record": "sin registro de exclusión",
+        "medicare_unknown": "desconocido",
+    },
+    "simplified_chinese": {
+        "results_intro": "{summary}的护理导航结果如下。",
+        "care_route_label": "就医路线",
+        "referral_note_label": "转诊提示",
+        "note_label": "说明",
+        "before_contact_label": "联系机构前",
+        "specialty_type_label": "专科/类型",
+        "address_label": "地址",
+        "phone_label": "电话",
+        "source_label": "来源",
+        "website_label": "网站",
+        "why_matched_label": "匹配原因",
+        "listed_insurance_label": "列出的保险",
+        "insurance_verification_label": "保险/网络验证",
+        "accepting_patients_label": "是否接收新患者",
+        "appointment_availability_label": "预约可用性",
+        "next_step_label": "下一步",
+        "care_directory_result": "护理目录结果",
+        "not_listed": "未列出",
+        "listed_insurance_suffix": "仅为列出信息；此处未验证网络参与情况",
+        "appointment_availability_value": "尚未验证；请致电服务提供者确认。",
+        "verification_reminder": "请致电服务提供者和保险公司，确认网络状态、接受的保险计划、转诊要求、新患者接收情况、地点和预约可用性。",
+        "matched_requested_terms": "匹配到您请求的护理关键词：{terms}",
+        "listed_provider_type": "列出的提供者类型：{taxonomy}",
+        "matched_available_result": "根据搜索条件匹配到可用的护理目录结果。",
+        "informational_badge": "信息性匹配",
+        "network_unverified_badge": "网络未验证",
+        "new_patients_unknown_badge": "新患者情况未知",
+        "appointments_unverified_badge": "预约未验证",
+        "status_unverified": "未验证",
+        "status_unknown": "未知",
+        "trust_label_source": "来源：{value}",
+        "trust_label_insurance": "保险/网络：{value}",
+        "trust_label_new_patients": "新患者：{value}",
+        "trust_label_medicare_opt_out": "Medicare退出：{value}",
+        "medicare_opted_out": "已退出",
+        "medicare_no_record": "未找到退出记录",
+        "medicare_unknown": "未知",
+    },
+}
+
+_DETERMINISTIC_RENDER_TRANSLATIONS = {
+    "For same-day, non-emergency care, urgent care is usually the best fit.": {
+        "spanish": "Para atención el mismo día que no sea una emergencia, urgent care suele ser la mejor opción.",
+        "simplified_chinese": "对于当天且非紧急的就医需求，急诊门诊通常更合适。",
+    },
+    "For routine or ongoing care, primary care is usually the best fit.": {
+        "spanish": "Para la atención rutinaria o continua, la atención primaria suele ser la mejor opción.",
+        "simplified_chinese": "对于常规或持续性的就医需求，初级保健通常更合适。",
+    },
+    "For a known specialty or referral need, a specialist is usually the right route.": {
+        "spanish": "Para una necesidad conocida de especialista o remisión, un especialista suele ser la ruta correcta.",
+        "simplified_chinese": "如果已经明确需要某个专科或需要转诊，专科医生通常是合适的路线。",
+    },
+    "For specialist searches, HMO and POS plans often require a PCP referral; PPO plans may not, but you should confirm the rule with your insurer and plan documents.": {
+        "spanish": "Para buscar especialistas, los planes HMO y POS suelen requerir una remisión de atención primaria; los PPO pueden no requerirla, pero debe confirmarlo con su aseguradora y los documentos del plan.",
+        "simplified_chinese": "查找专科医生时，HMO 和 POS 计划通常需要初级保健医生转诊；PPO 计划可能不需要，但仍应与保险公司和计划文件确认。",
+    },
+}
+
 
 def _normalize_response_language(response_language: Optional[str]) -> str:
     if not response_language:
@@ -163,6 +302,28 @@ def _get_prewritten_required_trust_guidance(response_language: Optional[str]) ->
         return None
 
     return _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key]
+
+
+def _resolved_supported_language_key(response_language: Optional[str]) -> str:
+    if _is_unknown_response_language(response_language):
+        return "english"
+
+    normalized_language = _normalize_response_language(response_language)
+    language_key = _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.get(normalized_language)
+
+    if language_key is None:
+        for alias, alias_language_key in _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.items():
+            if (
+                normalized_language.startswith(f"{alias} ")
+                or normalized_language.startswith(f"{alias}-")
+                or normalized_language.startswith(f"{alias} (")
+            ):
+                language_key = alias_language_key
+                break
+
+    if language_key not in _DETERMINISTIC_RENDER_COPY:
+        return "english"
+    return language_key or "english"
 
 
 def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -770,41 +931,70 @@ class CareLocatorAgent:
             or query.get("detected_language")
             or "English"
         )
+        language_key = _resolved_supported_language_key(response_language)
         summary = self._clean_card_value(query.get("summary")) or "your care search"
         results = list(payload.get("local_results") or []) + list(
             payload.get("fallback_results") or []
         )
 
-        lines = [f"Here are care navigation results for {summary}."]
+        lines = [self._render_copy(language_key, "results_intro", summary=summary)]
 
-        care_setting_guidance = self._clean_card_value(
+        care_setting_guidance = self._translate_deterministic_text(
             payload.get("care_setting_guidance")
+            or "",
+            language_key,
         )
         if care_setting_guidance:
-            lines.extend(["", f"**Care route:** {care_setting_guidance}"])
+            lines.extend(
+                [
+                    "",
+                    f"**{self._render_copy(language_key, 'care_route_label')}:** {care_setting_guidance}",
+                ]
+            )
 
-        specialist_guidance = self._clean_card_value(
+        specialist_guidance = self._translate_deterministic_text(
             payload.get("specialist_plan_guidance")
+            or "",
+            language_key,
         )
         if specialist_guidance:
-            lines.extend(["", f"**Referral note:** {specialist_guidance}"])
+            lines.extend(
+                [
+                    "",
+                    f"**{self._render_copy(language_key, 'referral_note_label')}:** {specialist_guidance}",
+                ]
+            )
 
         notes = self._clean_card_value(payload.get("notes"))
         if notes:
-            lines.extend(["", f"**Note:** {notes}"])
+            lines.extend(
+                ["", f"**{self._render_copy(language_key, 'note_label')}:** {notes}"]
+            )
 
         for index, result in enumerate(results, start=1):
             if isinstance(result, dict):
                 lines.extend(
-                    ["", self._format_provider_result_card(result, index, query)]
+                    [
+                        "",
+                        self._format_provider_result_card(
+                            result,
+                            index,
+                            query,
+                            language_key=language_key,
+                        ),
+                    ]
                 )
 
-        verification_guidance = self._clean_card_value(
-            payload.get("verification_guidance")
+        verification_guidance = self._translate_deterministic_text(
+            payload.get("verification_guidance") or "",
+            language_key,
         )
         if verification_guidance:
             lines.extend(
-                ["", f"**Before you contact a provider:** {verification_guidance}"]
+                [
+                    "",
+                    f"**{self._render_copy(language_key, 'before_contact_label')}:** {verification_guidance}",
+                ]
             )
 
         return self._append_required_trust_guidance(
@@ -818,6 +1008,7 @@ class CareLocatorAgent:
         result: Dict[str, Any],
         index: int,
         query: Dict[str, Any],
+        language_key: str = "english",
     ) -> str:
         name = self._clean_card_value(result.get("name")) or f"Result {index}"
         specialty = self._result_specialty_label(result)
@@ -833,45 +1024,75 @@ class CareLocatorAgent:
             or "Unknown source"
         )
         insurance = self._ensure_list(result.get("insurance_reported"))
-        why_matched = self._result_match_reason(result, query)
+        why_matched = self._result_match_reason(result, query, language_key)
         listed_insurance = (
-            ", ".join(insurance) if insurance else "Not listed"
-        ) + " (reported only; network participation is not verified here)"
+            ", ".join(insurance)
+            if insurance
+            else self._render_copy(language_key, "not_listed")
+        ) + f" ({self._render_copy(language_key, 'listed_insurance_suffix')})"
         insurance_status = self._verification_status_label(
             result.get("insurance_network_verification"),
             "unverified",
+            language_key,
         )
         new_patient_status = self._verification_status_label(
             result.get("accepting_new_patients_status"),
             "unknown",
+            language_key,
         )
-        verification_reminder = (
-            "Call the provider and insurer to confirm network status, accepted insurance plan, "
-            "referral requirements, new-patient availability, location, and appointment availability."
-        )
+        verification_reminder = self._render_copy(language_key, "verification_reminder")
 
         subtitle_parts = [part for part in [specialty, address] if part]
         phone_source_parts = [
-            self._render_card_meta_item("Phone", phone or "Not listed"),
-            self._render_card_meta_item("Source", source),
+            self._render_card_meta_item(
+                self._render_copy(language_key, "phone_label"),
+                phone or self._render_copy(language_key, "not_listed"),
+            ),
+            self._render_card_meta_item(
+                self._render_copy(language_key, "source_label"),
+                source,
+            ),
         ]
         if website:
-            phone_source_parts.append(self._render_card_meta_item("Website", website))
+            phone_source_parts.append(
+                self._render_card_meta_item(
+                    self._render_copy(language_key, "website_label"),
+                    website,
+                )
+            )
 
         explicit_trust_badges = [
-            "Informational",
-            "Network unverified",
-            "New patients unknown",
-            "Appointments unverified",
+            self._render_copy(language_key, "informational_badge"),
+            self._render_copy(language_key, "network_unverified_badge"),
+            self._render_copy(language_key, "new_patients_unknown_badge"),
+            self._render_copy(language_key, "appointments_unverified_badge"),
+        ]
+        dynamic_trust_badges = [
+            self._translate_trust_label(label, language_key)
+            for label in self._ensure_list(result.get("trust_labels"))
+            if self._translate_trust_label(label, language_key)
         ]
         dynamic_trust_badges = [
             label
-            for label in self._ensure_list(result.get("trust_labels"))
-            if not label.startswith("Source:")
+            for label in dynamic_trust_badges
+            if label
             and label not in {
-                "Insurance/network: unverified",
-                "New patients: unknown",
-                "Medicare opt-out: unknown",
+                self._render_copy(language_key, "trust_label_source", value=source),
+                self._render_copy(
+                    language_key,
+                    "trust_label_insurance",
+                    value=self._render_copy(language_key, "status_unverified"),
+                ),
+                self._render_copy(
+                    language_key,
+                    "trust_label_new_patients",
+                    value=self._render_copy(language_key, "status_unknown"),
+                ),
+                self._render_copy(
+                    language_key,
+                    "trust_label_medicare_opt_out",
+                    value=self._render_copy(language_key, "medicare_unknown"),
+                ),
             }
         ]
         trust_badges = self._dedupe_preserve_order(
@@ -883,18 +1104,18 @@ class CareLocatorAgent:
                 '<div class="provider-card">',
                 '  <div class="provider-card__header">',
                 f'    <div class="provider-card__title">{escape(f"{index}. {name}")}</div>',
-                f'    <div class="provider-card__subtitle">{escape(" • ".join(subtitle_parts) or "Care directory result")}</div>',
+                f'    <div class="provider-card__subtitle">{escape(" • ".join(subtitle_parts) or self._render_copy(language_key, "care_directory_result"))}</div>',
                 "  </div>",
                 f'  <div class="provider-card__meta">{"".join(phone_source_parts)}</div>',
                 f'  <div class="provider-card__trust-row">{"".join(self._render_card_badge(label) for label in trust_badges)}</div>',
                 '  <div class="provider-card__body">',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">Why matched</span><span class="provider-card__value">{escape(why_matched)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">Listed insurance</span><span class="provider-card__value">{escape(listed_insurance)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">Insurance/network verification</span><span class="provider-card__value">{escape(insurance_status)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">Accepting new patients</span><span class="provider-card__value">{escape(new_patient_status)}</span></div>',
-                '    <div class="provider-card__detail"><span class="provider-card__label">Appointment availability</span><span class="provider-card__value">Not verified; call the provider to confirm.</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "why_matched_label"))}</span><span class="provider-card__value">{escape(why_matched)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "listed_insurance_label"))}</span><span class="provider-card__value">{escape(listed_insurance)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "insurance_verification_label"))}</span><span class="provider-card__value">{escape(insurance_status)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "accepting_patients_label"))}</span><span class="provider-card__value">{escape(new_patient_status)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "appointment_availability_label"))}</span><span class="provider-card__value">{escape(self._render_copy(language_key, "appointment_availability_value"))}</span></div>',
                 "  </div>",
-                f'  <div class="provider-card__footer"><span class="provider-card__label">Next step</span><span class="provider-card__value">{escape(verification_reminder)}</span></div>',
+                f'  <div class="provider-card__footer"><span class="provider-card__label">{escape(self._render_copy(language_key, "next_step_label"))}</span><span class="provider-card__value">{escape(verification_reminder)}</span></div>',
                 "</div>",
             ]
         )
@@ -930,33 +1151,123 @@ class CareLocatorAgent:
         self,
         result: Dict[str, Any],
         query: Dict[str, Any],
+        language_key: str = "english",
     ) -> str:
         query_parts = self._ensure_list(query.get("specialties")) + self._ensure_list(
             query.get("keywords")
         )
         if query_parts:
-            return "Matched requested care terms: " + ", ".join(query_parts)
+            return self._render_copy(
+                language_key,
+                "matched_requested_terms",
+                terms=", ".join(query_parts),
+            )
 
         taxonomy = self._clean_card_value(result.get("taxonomy"))
         if taxonomy:
-            return f"Listed provider type: {taxonomy}"
+            return self._render_copy(
+                language_key,
+                "listed_provider_type",
+                taxonomy=taxonomy,
+            )
 
         description = self._clean_card_value(result.get("description"))
         if description:
             return description
 
-        return "Matched available care directory result for the search criteria."
+        return self._render_copy(language_key, "matched_available_result")
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _verification_status_label(value: Any, default: str) -> str:
+    def _verification_status_label(
+        value: Any,
+        default: str,
+        language_key: str = "english",
+    ) -> str:
         if isinstance(value, dict):
-            status = value.get("status") or default
+            status = str(value.get("status") or default)
             basis = value.get("basis")
+            localized_status = CareLocatorAgent._translate_status_value(
+                status,
+                language_key,
+            )
             if basis:
-                return f"{status} ({basis})"
-            return str(status)
-        return default
+                return f"{localized_status} ({CareLocatorAgent._translate_deterministic_text(str(basis), language_key)})"
+            return localized_status
+        return CareLocatorAgent._translate_status_value(str(default), language_key)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _translate_status_value(status: str, language_key: str) -> str:
+        normalized_status = str(status).strip().lower().replace("_", " ")
+        if normalized_status == "unverified":
+            return CareLocatorAgent._render_copy(language_key, "status_unverified")
+        if normalized_status == "unknown":
+            return CareLocatorAgent._render_copy(language_key, "status_unknown")
+        return str(status)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _render_copy(language_key: str, key: str, **kwargs: Any) -> str:
+        copy = _DETERMINISTIC_RENDER_COPY.get(language_key) or _DETERMINISTIC_RENDER_COPY["english"]
+        template = copy.get(key) or _DETERMINISTIC_RENDER_COPY["english"].get(key, key)
+        return template.format(**kwargs)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _translate_deterministic_text(text: str, language_key: str) -> str:
+        cleaned_text = str(text).strip()
+        if not cleaned_text:
+            return ""
+        translations = _DETERMINISTIC_RENDER_TRANSLATIONS.get(cleaned_text, {})
+        return translations.get(language_key, cleaned_text)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _translate_trust_label(label: str, language_key: str) -> str:
+        cleaned_label = str(label).strip()
+        if not cleaned_label:
+            return ""
+        if cleaned_label.startswith("Source: "):
+            source_value = cleaned_label[len("Source: ") :]
+            return CareLocatorAgent._render_copy(
+                language_key,
+                "trust_label_source",
+                value=source_value,
+            )
+        if cleaned_label.startswith("Insurance/network: "):
+            insurance_value = cleaned_label[len("Insurance/network: ") :]
+            return CareLocatorAgent._render_copy(
+                language_key,
+                "trust_label_insurance",
+                value=CareLocatorAgent._translate_status_value(
+                    insurance_value,
+                    language_key,
+                ),
+            )
+        if cleaned_label.startswith("New patients: "):
+            new_patient_value = cleaned_label[len("New patients: ") :]
+            return CareLocatorAgent._render_copy(
+                language_key,
+                "trust_label_new_patients",
+                value=CareLocatorAgent._translate_status_value(
+                    new_patient_value,
+                    language_key,
+                ),
+            )
+        if cleaned_label.startswith("Medicare opt-out: "):
+            medicare_value = cleaned_label[len("Medicare opt-out: ") :]
+            localized_value = {
+                "opted out": CareLocatorAgent._render_copy(language_key, "medicare_opted_out"),
+                "no opt-out record found": CareLocatorAgent._render_copy(language_key, "medicare_no_record"),
+                "unknown": CareLocatorAgent._render_copy(language_key, "medicare_unknown"),
+            }.get(medicare_value, medicare_value)
+            return CareLocatorAgent._render_copy(
+                language_key,
+                "trust_label_medicare_opt_out",
+                value=localized_value,
+            )
+        return CareLocatorAgent._translate_deterministic_text(cleaned_label, language_key)
 
     # ------------------------------------------------------------------
     @staticmethod
