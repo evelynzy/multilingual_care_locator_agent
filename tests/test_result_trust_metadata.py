@@ -354,11 +354,13 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("保险/网络验证</span><span class=\"provider-card__value\">未验证 (来源数据未确认保险或网络参与情况。)</span>", response)
         self.assertIn("是否接收新患者</span><span class=\"provider-card__value\">未知 (来源数据未确认是否接收新患者。)</span>", response)
         self.assertIn("预约可用性</span><span class=\"provider-card__value\">尚未验证；请致电服务提供者确认。</span>", response)
+        self.assertIn("**联系机构前:** 请致电服务提供者和保险公司，确认网络状态、接受的保险计划、转诊要求、新患者接收情况、地点和预约可用性。", response)
         self.assertIn("来源</span><span class=\"provider-card__meta-value\">Local provider dataset</span>", response)
         self.assertNotIn("Here are care navigation results for", response)
         self.assertNotIn("**Care route:**", response)
         self.assertNotIn("**Referral note:**", response)
         self.assertNotIn("Why matched", response)
+        self.assertNotIn("**联系机构前:** Call the provider and insurer to confirm", response)
         self.assertNotIn("Pediatrics, pediatric, child health", response)
 
     def test_compose_result_card_response_localizes_spanish_deterministic_copy(self) -> None:
@@ -400,11 +402,13 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("Verificación de seguro/red</span><span class=\"provider-card__value\">no verificado (Los datos de la fuente no confirman la participación en la red o el seguro.)</span>", response)
         self.assertIn("Acepta pacientes nuevos</span><span class=\"provider-card__value\">desconocido (Los datos de la fuente no confirman la disponibilidad para pacientes nuevos.)</span>", response)
         self.assertIn("Disponibilidad de citas</span><span class=\"provider-card__value\">No verificada; llame al proveedor para confirmarla.</span>", response)
+        self.assertIn("**Antes de contactar a un proveedor:** Llame al proveedor y a la aseguradora para confirmar el estado de la red, el plan de seguro aceptado, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas.", response)
         self.assertIn("Exclusión de Medicare: excluido", response)
         self.assertNotIn("Here are care navigation results for", response)
         self.assertNotIn("**Care route:**", response)
         self.assertNotIn("**Referral note:**", response)
         self.assertNotIn("Why matched", response)
+        self.assertNotIn("**Antes de contactar a un proveedor:** Call the provider and insurer to confirm", response)
 
     def test_compose_result_card_response_uses_localized_match_reason_instead_of_raw_keywords(self) -> None:
         payload = {
