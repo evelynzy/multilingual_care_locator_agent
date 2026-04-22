@@ -135,9 +135,11 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
             {
                 "id": "provider_001",
                 "name": "Harmony Family Clinic",
+                "specialties": ["Primary Care"],
                 "insurance": ["Medicare", "Aetna"],
                 "source": "Local provider dataset",
                 "location": "San Francisco, CA",
+                "phone": "415-555-0100",
             }
         ]
 
@@ -159,24 +161,15 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
             patient_context=None,
         )
 
-        captured: dict = {}
-
-        def _capture_response(client, payload, max_tokens, temperature, top_p, template_key="response_template"):
-            captured["payload"] = payload
-            captured["template_key"] = template_key
-            return "ok"
+        client = _SequencedChatClient("Model table should not be used.")
 
         with patch.object(
             self.agent,
             "_interpret_user_need",
             return_value=query,
-        ), patch.object(
-            self.agent,
-            "_compose_response",
-            side_effect=_capture_response,
         ):
             result = self.agent.handle_request(
-                Mock(),
+                client,
                 "primary care 94110",
                 [],
                 max_tokens=256,
@@ -184,19 +177,24 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(result, "ok")
-        payload = captured["payload"]
-        local_result = payload["local_results"][0]
-
-        self.assertEqual(local_result["insurance_reported"], ["Medicare", "Aetna"])
-        self.assertNotIn("insurance", local_result)
-        self.assertNotIn("accepted_insurance", local_result)
-        self.assertEqual(local_result["insurance_network_verification"]["status"], "unverified")
-        self.assertFalse(local_result["insurance_network_verification"]["verified"])
-        self.assertEqual(local_result["accepting_new_patients_status"]["status"], "unknown")
-        self.assertFalse(local_result["accepting_new_patients_status"]["verified"])
-        self.assertEqual(local_result["provenance"]["source"], "Local provider dataset")
-        self.assertIn("verification_guidance", payload)
+        self.assertEqual(len(client.calls), 0)
+        self.assertIn('<div class="provider-card">', result)
+        self.assertIn('<div class="provider-card__title">1. Harmony Family Clinic</div>', result)
+        self.assertIn('<div class="provider-card__subtitle">Primary Care • San Francisco, CA</div>', result)
+        self.assertIn('Phone</span><span class="provider-card__meta-value">415-555-0100</span>', result)
+        self.assertIn('Source</span><span class="provider-card__meta-value">Local provider dataset</span>', result)
+        self.assertIn('<span class="provider-card__badge">Informational</span>', result)
+        self.assertIn('<span class="provider-card__badge">Network unverified</span>', result)
+        self.assertIn('<span class="provider-card__badge">New patients unknown</span>', result)
+        self.assertIn('<span class="provider-card__badge">Appointments unverified</span>', result)
+        self.assertNotIn('<span class="provider-card__badge">Source: Local provider dataset</span>', result)
+        self.assertIn('Listed insurance</span><span class="provider-card__value">Medicare, Aetna (reported only; network participation is not verified here)</span>', result)
+        self.assertIn('Insurance/network verification</span><span class="provider-card__value">unverified', result)
+        self.assertIn('Accepting new patients</span><span class="provider-card__value">unknown', result)
+        self.assertIn('Appointment availability</span><span class="provider-card__value">Not verified; call the provider to confirm.</span>', result)
+        self.assertIn('Next step</span><span class="provider-card__value">Call the provider and insurer to confirm', result)
+        self.assertIn("Important safety and trust notes:", result)
+        self.assertNotIn("### 1. Harmony Family Clinic", result)
 
     def test_provider_record_uses_reported_insurance_metadata(self) -> None:
         record = ProviderRecord(
@@ -246,6 +244,130 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
 
         self.assertEqual(record.accepted_insurance, ["Medicaid"])
         self.assertEqual(record.to_dict()["insurance_reported"], ["Medicaid"])
+
+    def test_trust_labels_include_medicare_opt_out_status(self) -> None:
+        result = self.agent._normalize_result_trust_metadata(
+            {
+                "name": "Specialty Clinic",
+                "source": "NPI Registry",
+                "insurance_reported": ["Medicare"],
+                "insurance_network_verification": {"status": "unverified"},
+                "accepting_new_patients_status": {"status": "unknown"},
+                "medicare_opt_out": {"opted_out": True},
+            }
+        )
+
+        self.assertIn("Source: NPI Registry", result["trust_labels"])
+        self.assertIn("Insurance/network: unverified", result["trust_labels"])
+        self.assertIn("New patients: unknown", result["trust_labels"])
+        self.assertIn("Medicare opt-out: opted out", result["trust_labels"])
+
+    def test_styled_provider_card_preserves_dynamic_trust_labels(self) -> None:
+        result = self.agent._normalize_result_trust_metadata(
+            {
+                "name": "Specialty Clinic",
+                "location": "Austin, TX",
+                "phone": "512-555-0100",
+                "taxonomy": "Cardiology",
+                "source": "NPI Registry",
+                "insurance_reported": ["Medicare"],
+                "insurance_network_verification": {"status": "unverified"},
+                "accepting_new_patients_status": {"status": "unknown"},
+                "medicare_opt_out": {"opted_out": True},
+            }
+        )
+
+        card_html = self.agent._format_provider_result_card(
+            result,
+            index=1,
+            query={"specialties": ["Cardiology"], "keywords": []},
+        )
+
+        self.assertIn('<span class="provider-card__badge">Informational</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Network unverified</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">New patients unknown</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Appointments unverified</span>', card_html)
+        self.assertNotIn('<span class="provider-card__badge">Source: NPI Registry</span>', card_html)
+        self.assertNotIn('<span class="provider-card__badge">Insurance/network: unverified</span>', card_html)
+        self.assertNotIn('<span class="provider-card__badge">New patients: unknown</span>', card_html)
+        self.assertIn('<span class="provider-card__badge">Medicare opt-out: opted out</span>', card_html)
+
+    def test_compose_result_card_response_localizes_chinese_deterministic_copy(self) -> None:
+        payload = {
+            "query": {
+                "response_language": "中文",
+                "summary": "儿科10013",
+            },
+            "care_setting_guidance": "For routine or ongoing care, primary care is usually the best fit.",
+            "specialist_plan_guidance": "For specialist searches, HMO and POS plans often require a PCP referral; PPO plans may not, but you should confirm the rule with your insurer and plan documents.",
+            "local_results": [
+                self.agent._normalize_result_trust_metadata(
+                    {
+                        "name": "Harmony Family Clinic",
+                        "specialties": ["Pediatrics"],
+                        "location": "New York, NY",
+                        "phone": "212-555-0100",
+                        "source": "Local provider dataset",
+                        "insurance_reported": ["Medicaid"],
+                    }
+                )
+            ],
+            "fallback_results": [],
+            "verification_guidance": "Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.",
+        }
+
+        response = self.agent._compose_result_card_response(payload)
+
+        self.assertIn("儿科10013的护理导航结果如下。", response)
+        self.assertIn("**就医路线:** 对于常规或持续性的就医需求，初级保健通常更合适。", response)
+        self.assertIn("**转诊提示:** 查找专科医生时，HMO 和 POS 计划通常需要初级保健医生转诊；PPO 计划可能不需要，但仍应与保险公司和计划文件确认。", response)
+        self.assertIn("电话</span>", response)
+        self.assertIn("匹配原因</span>", response)
+        self.assertIn("下一步</span>", response)
+        self.assertIn("来源</span><span class=\"provider-card__meta-value\">Local provider dataset</span>", response)
+        self.assertNotIn("Here are care navigation results for", response)
+        self.assertNotIn("**Care route:**", response)
+        self.assertNotIn("**Referral note:**", response)
+        self.assertNotIn("Why matched", response)
+
+    def test_compose_result_card_response_localizes_spanish_deterministic_copy(self) -> None:
+        payload = {
+            "query": {
+                "response_language": "Español",
+                "summary": "atención primaria en Austin",
+            },
+            "care_setting_guidance": "For a known specialty or referral need, a specialist is usually the right route.",
+            "specialist_plan_guidance": "For specialist searches, HMO and POS plans often require a PCP referral; PPO plans may not, but you should confirm the rule with your insurer and plan documents.",
+            "local_results": [
+                self.agent._normalize_result_trust_metadata(
+                    {
+                        "name": "Specialty Clinic",
+                        "taxonomy": "Cardiology",
+                        "location": "Austin, TX",
+                        "phone": "512-555-0100",
+                        "source": "NPI Registry",
+                        "insurance_reported": ["Medicare"],
+                        "medicare_opt_out": {"opted_out": True},
+                    }
+                )
+            ],
+            "fallback_results": [],
+            "verification_guidance": "Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.",
+        }
+
+        response = self.agent._compose_result_card_response(payload)
+
+        self.assertIn("Aquí están los resultados de navegación de atención para atención primaria en Austin.", response)
+        self.assertIn("**Ruta de atención:** Para una necesidad conocida de especialista o remisión, un especialista suele ser la ruta correcta.", response)
+        self.assertIn("**Nota sobre remisión:** Para buscar especialistas, los planes HMO y POS suelen requerir una remisión de atención primaria; los PPO pueden no requerirla, pero debe confirmarlo con su aseguradora y los documentos del plan.", response)
+        self.assertIn("Teléfono</span>", response)
+        self.assertIn("Por qué coincide</span>", response)
+        self.assertIn("Siguiente paso</span>", response)
+        self.assertIn("Exclusión de Medicare: excluido", response)
+        self.assertNotIn("Here are care navigation results for", response)
+        self.assertNotIn("**Care route:**", response)
+        self.assertNotIn("**Referral note:**", response)
+        self.assertNotIn("Why matched", response)
 
     def test_compose_response_appends_required_trust_guidance(self) -> None:
         client = self._client_with_response("Model-rendered answer.")

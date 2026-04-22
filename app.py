@@ -35,6 +35,30 @@ ERROR_MESSAGE = get_message(
     "I encountered an unexpected error while processing your request. Please retry in a moment.",
 )
 
+SAFETY_TRUST_NOTES = """
+- This assistant helps with care navigation only. It does not diagnose, prescribe, or replace licensed medical advice.
+- Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit.
+- Insurance/network participation, referral requirements, new-patient status, location, and appointment availability are not verified unless a source explicitly says so.
+- Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.
+- Do not share PHI such as full names, addresses, Social Security numbers, or medical record numbers.
+- For severe or life-threatening symptoms, call emergency services (911 in the U.S.) or go to the nearest emergency room.
+"""
+
+DATA_SOURCE_LIMITATIONS_NOTES = """
+- Local sample provider directory, when available.
+- NPI Records - Individuals public API: https://clinicaltables.nlm.nih.gov/apidoc/npi_idv/v3/doc.html
+- NPI Records - Organizations public API: https://clinicaltables.nlm.nih.gov/apidoc/npi_org/v3/doc.html
+- NPPES API public registry: https://npiregistry.cms.hhs.gov/api-page
+- Medicare Opt Out Records public data: https://data.cms.gov/data-api/v1/dataset/9887a515-7552-4693-bf58-735c77af46d7/data
+- Public sources may be incomplete, delayed, or missing appointment and network details. Confirm directly before seeking care.
+"""
+
+EXAMPLE_PROMPTS = (
+    "primary care 75001",
+    "儿科10013",
+    "dentista 33012",
+)
+
 
 # Initialize repository and agent once so we do not reload data per request.
 provider_repository = ProviderRepository()
@@ -87,31 +111,23 @@ chatbot = gr.ChatInterface(
     respond,
     type="messages",
     # textbox=gr.Textbox(placeholder="e.g., primary care 90048"),
-    examples=[
-        "primary care 75001",
-        "儿科 10013",
-        "dentista 33012",
-    ],
+    examples=list(EXAMPLE_PROMPTS),
     description=ui_settings.get("description", ""),
     title=ui_settings.get("title", "Multilingual Care Locator"),
 )
 
 custom_css = """
 .gradio-container .gr-chatbot {
-    min-height: 420px;
-    max-height: 560px;
+    height: calc(100vh - 220px);
+    min-height: 680px;
+    max-height: none;
     overflow-y: auto;
 }
 
 @media (max-width: 640px) {
     .gradio-container .gr-chatbot {
-        min-height: 320px;
-        max-height: 420px;
-    }
-
-    .gradio-container .gr-chatbot {
-        min-height: 320px;
-        max-height: 420px;
+        height: 68vh;
+        min-height: 480px;
     }
 }
 
@@ -131,20 +147,110 @@ custom_css = """
     display: block;
     overflow-x: auto;
 }
+
+.gradio-container .examples,
+.gradio-container .gr-examples {
+    margin: 0 0 6px;
+    padding: 0;
+}
+
+.gradio-container .examples table,
+.gradio-container .gr-examples table {
+    font-size: 0.9rem;
+}
+
+.gradio-container .provider-card {
+    border: 1px solid #d7dbe4;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 14px 0;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.gradio-container .provider-card__header {
+    margin-bottom: 10px;
+}
+
+.gradio-container .provider-card__title {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: #111827;
+}
+
+.gradio-container .provider-card__subtitle {
+    margin-top: 3px;
+    font-size: 0.92rem;
+    color: #4b5563;
+}
+
+.gradio-container .provider-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-bottom: 10px;
+    font-size: 0.88rem;
+    color: #374151;
+}
+
+.gradio-container .provider-card__meta-item {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.gradio-container .provider-card__meta-label,
+.gradio-container .provider-card__label {
+    font-weight: 600;
+    color: #111827;
+}
+
+.gradio-container .provider-card__trust-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0 12px;
+}
+
+.gradio-container .provider-card__badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    color: #374151;
+}
+
+.gradio-container .provider-card__body,
+.gradio-container .provider-card__footer {
+    display: grid;
+    gap: 8px;
+}
+
+.gradio-container .provider-card__detail,
+.gradio-container .provider-card__footer {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: #374151;
+}
+
+.gradio-container .provider-card__detail .provider-card__value,
+.gradio-container .provider-card__footer .provider-card__value {
+    margin-left: 6px;
+}
 """
 
 
 with gr.Blocks(fill_height=True, css=custom_css) as demo:
     chatbot.render()
-    gr.Markdown(
-        """
-        **Data sources**
-        - [NPI Records - Individuals](https://clinicaltables.nlm.nih.gov/apidoc/npi_idv/v3/doc.html) public API
-        - [NPI Records - Organizations](https://clinicaltables.nlm.nih.gov/apidoc/npi_org/v3/doc.html) public API
-        - [NPPES API](https://npiregistry.cms.hhs.gov/api-page) public API
-        - [Medicare Opt Out Records](https://data.cms.gov/data-api/v1/dataset/9887a515-7552-4693-bf58-735c77af46d7/data) public data
-        """
-    )
+    with gr.Accordion("Safety and trust notes", open=False):
+        gr.Markdown(SAFETY_TRUST_NOTES)
+    with gr.Accordion("Data sources and limitations", open=False):
+        gr.Markdown(DATA_SOURCE_LIMITATIONS_NOTES)
 
 
 if __name__ == "__main__":
