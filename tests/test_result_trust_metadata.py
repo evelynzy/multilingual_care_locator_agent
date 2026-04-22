@@ -188,11 +188,12 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn('<span class="provider-card__badge">New patients unknown</span>', result)
         self.assertIn('<span class="provider-card__badge">Appointments unverified</span>', result)
         self.assertNotIn('<span class="provider-card__badge">Source: Local provider dataset</span>', result)
-        self.assertIn('Listed insurance</span><span class="provider-card__value">Medicare, Aetna (reported only; network participation is not verified here)</span>', result)
-        self.assertIn('Insurance/network verification</span><span class="provider-card__value">unverified', result)
-        self.assertIn('Accepting new patients</span><span class="provider-card__value">unknown', result)
-        self.assertIn('Appointment availability</span><span class="provider-card__value">Not verified; call the provider to confirm.</span>', result)
-        self.assertIn('Next step</span><span class="provider-card__value">Call the provider and insurer to confirm', result)
+        self.assertIn('Why matched</span><span class="provider-card__value">Relevant to your search for primary care in San Francisco.</span>', result)
+        self.assertNotIn("Listed insurance</span>", result)
+        self.assertNotIn("Insurance/network verification</span>", result)
+        self.assertNotIn("Accepting new patients</span>", result)
+        self.assertNotIn("Appointment availability</span>", result)
+        self.assertIn('Next step</span><span class="provider-card__value">Call to confirm network status, referral needs, new-patient status, and appointment availability.</span>', result)
         self.assertIn("Important safety and trust notes:", result)
         self.assertNotIn("### 1. Harmony Family Clinic", result)
 
@@ -291,6 +292,26 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertNotIn('<span class="provider-card__badge">Insurance/network: unverified</span>', card_html)
         self.assertNotIn('<span class="provider-card__badge">New patients: unknown</span>', card_html)
         self.assertIn('<span class="provider-card__badge">Medicare opt-out: opted out</span>', card_html)
+        self.assertIn('Why matched</span><span class="provider-card__value">Listed under Cardiology.</span>', card_html)
+        self.assertNotIn("Listed insurance</span>", card_html)
+
+    def test_provider_card_omits_low_signal_subtitle_fragments(self) -> None:
+        card_html = self.agent._format_provider_result_card(
+            self.agent._normalize_result_trust_metadata(
+                {
+                    "name": "Fallback Clinic",
+                    "specialties": ["M"],
+                    "location": "BOYD",
+                    "phone": "512-555-0199",
+                    "source": "Local provider dataset",
+                }
+            ),
+            index=1,
+            query={"summary": "child care"},
+        )
+
+        self.assertNotIn('provider-card__subtitle">M • BOYD</div>', card_html)
+        self.assertNotIn('provider-card__subtitle">', card_html)
 
     def test_compose_result_card_response_localizes_chinese_deterministic_copy(self) -> None:
         payload = {
@@ -324,11 +345,14 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("电话</span>", response)
         self.assertIn("匹配原因</span>", response)
         self.assertIn("下一步</span>", response)
+        self.assertIn("与您搜索的儿科10013相关。", response)
+        self.assertIn("请致电确认网络状态、转诊要求、新患者接收情况和预约可用性。", response)
         self.assertIn("来源</span><span class=\"provider-card__meta-value\">Local provider dataset</span>", response)
         self.assertNotIn("Here are care navigation results for", response)
         self.assertNotIn("**Care route:**", response)
         self.assertNotIn("**Referral note:**", response)
         self.assertNotIn("Why matched", response)
+        self.assertNotIn("Pediatrics, pediatric, child health", response)
 
     def test_compose_result_card_response_localizes_spanish_deterministic_copy(self) -> None:
         payload = {
@@ -363,11 +387,40 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("Teléfono</span>", response)
         self.assertIn("Por qué coincide</span>", response)
         self.assertIn("Siguiente paso</span>", response)
+        self.assertIn("Relacionado con su búsqueda de atención primaria en Austin.", response)
+        self.assertIn("Llame para confirmar la red, la necesidad de remisión, si aceptan pacientes nuevos y la disponibilidad de citas.", response)
         self.assertIn("Exclusión de Medicare: excluido", response)
         self.assertNotIn("Here are care navigation results for", response)
         self.assertNotIn("**Care route:**", response)
         self.assertNotIn("**Referral note:**", response)
         self.assertNotIn("Why matched", response)
+
+    def test_compose_result_card_response_uses_localized_match_reason_instead_of_raw_keywords(self) -> None:
+        payload = {
+            "query": {
+                "response_language": "中文",
+                "summary": "儿童保健",
+                "specialties": ["Pediatrics"],
+                "keywords": ["pediatric", "child health"],
+            },
+            "local_results": [
+                self.agent._normalize_result_trust_metadata(
+                    {
+                        "name": "Harmony Family Clinic",
+                        "specialties": ["Pediatrics"],
+                        "location": "New York, NY",
+                        "phone": "212-555-0100",
+                        "source": "Local provider dataset",
+                    }
+                )
+            ],
+            "fallback_results": [],
+        }
+
+        response = self.agent._compose_result_card_response(payload)
+
+        self.assertIn("匹配原因</span><span class=\"provider-card__value\">与您搜索的儿童保健相关。</span>", response)
+        self.assertNotIn("Pediatrics, pediatric, child health", response)
 
     def test_compose_response_appends_required_trust_guidance(self) -> None:
         client = self._client_with_response("Model-rendered answer.")
