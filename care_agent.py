@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from html import escape
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -832,30 +833,73 @@ class CareLocatorAgent:
             or "Unknown source"
         )
         insurance = self._ensure_list(result.get("insurance_reported"))
-        trust_labels = self._ensure_list(result.get("trust_labels"))
+        why_matched = self._result_match_reason(result, query)
+        listed_insurance = (
+            ", ".join(insurance) if insurance else "Not listed"
+        ) + " (reported only; network participation is not verified here)"
+        insurance_status = self._verification_status_label(
+            result.get("insurance_network_verification"),
+            "unverified",
+        )
+        new_patient_status = self._verification_status_label(
+            result.get("accepting_new_patients_status"),
+            "unknown",
+        )
+        verification_reminder = (
+            "Call the provider and insurer to confirm network status, accepted insurance plan, "
+            "referral requirements, new-patient availability, location, and appointment availability."
+        )
 
-        card_lines = [
-            f"### {index}. {name}",
-            f"- **Specialty/type:** {specialty or 'Not listed'}",
-            f"- **Address:** {address or 'Not listed'}",
-            f"- **Phone:** {phone or 'Not listed'}",
+        subtitle_parts = [part for part in [specialty, address] if part]
+        phone_source_parts = [
+            self._render_card_meta_item("Phone", phone or "Not listed"),
+            self._render_card_meta_item("Source", source),
         ]
         if website:
-            card_lines.append(f"- **Website:** {website}")
+            phone_source_parts.append(self._render_card_meta_item("Website", website))
 
-        card_lines.extend(
+        trust_badges = [
+            "Informational match",
+            "Insurance/network not verified",
+            "Accepting new patients not verified",
+            "Appointment availability not verified",
+        ]
+
+        return "\n".join(
             [
-                f"- **Source:** {source}",
-                f"- **Why matched:** {self._result_match_reason(result, query)}",
-                f"- **Listed insurance:** {', '.join(insurance) if insurance else 'Not listed'} (reported only; network participation is not verified here)",
-                f"- **Insurance/network verification:** {self._verification_status_label(result.get('insurance_network_verification'), 'unverified')}",
-                f"- **Accepting new patients:** {self._verification_status_label(result.get('accepting_new_patients_status'), 'unknown')}",
-                "- **Appointment availability:** Not verified; call the provider to confirm.",
-                f"- **Trust labels:** {', '.join(trust_labels) if trust_labels else 'Source and verification details not listed'}",
-                "- **Referral/verification reminder:** Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.",
+                '<div class="provider-card">',
+                '  <div class="provider-card__header">',
+                f'    <div class="provider-card__title">{escape(f"{index}. {name}")}</div>',
+                f'    <div class="provider-card__subtitle">{escape(" • ".join(subtitle_parts) or "Care directory result")}</div>',
+                "  </div>",
+                f'  <div class="provider-card__meta">{"".join(phone_source_parts)}</div>',
+                f'  <div class="provider-card__trust-row">{"".join(self._render_card_badge(label) for label in trust_badges)}</div>',
+                '  <div class="provider-card__body">',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">Why matched</span><span class="provider-card__value">{escape(why_matched)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">Listed insurance</span><span class="provider-card__value">{escape(listed_insurance)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">Insurance/network verification</span><span class="provider-card__value">{escape(insurance_status)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">Accepting new patients</span><span class="provider-card__value">{escape(new_patient_status)}</span></div>',
+                '    <div class="provider-card__detail"><span class="provider-card__label">Appointment availability</span><span class="provider-card__value">Not verified; call the provider to confirm.</span></div>',
+                "  </div>",
+                f'  <div class="provider-card__footer"><span class="provider-card__label">Next step</span><span class="provider-card__value">{escape(verification_reminder)}</span></div>',
+                "</div>",
             ]
         )
-        return "\n".join(card_lines)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _render_card_meta_item(label: str, value: str) -> str:
+        return (
+            '<span class="provider-card__meta-item">'
+            f'<span class="provider-card__meta-label">{escape(label)}</span>'
+            f'<span class="provider-card__meta-value">{escape(value)}</span>'
+            "</span>"
+        )
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _render_card_badge(label: str) -> str:
+        return f'<span class="provider-card__badge">{escape(label)}</span>'
 
     # ------------------------------------------------------------------
     def _result_specialty_label(self, result: Dict[str, Any]) -> str:

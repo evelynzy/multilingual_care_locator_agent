@@ -158,6 +158,90 @@ custom_css = """
 .gradio-container .gr-examples table {
     font-size: 0.9rem;
 }
+
+.gradio-container .provider-card {
+    border: 1px solid #d7dbe4;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 14px 0;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.gradio-container .provider-card__header {
+    margin-bottom: 10px;
+}
+
+.gradio-container .provider-card__title {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: #111827;
+}
+
+.gradio-container .provider-card__subtitle {
+    margin-top: 3px;
+    font-size: 0.92rem;
+    color: #4b5563;
+}
+
+.gradio-container .provider-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-bottom: 10px;
+    font-size: 0.88rem;
+    color: #374151;
+}
+
+.gradio-container .provider-card__meta-item {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.gradio-container .provider-card__meta-label,
+.gradio-container .provider-card__label {
+    font-weight: 600;
+    color: #111827;
+}
+
+.gradio-container .provider-card__trust-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0 12px;
+}
+
+.gradio-container .provider-card__badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    color: #374151;
+}
+
+.gradio-container .provider-card__body,
+.gradio-container .provider-card__footer {
+    display: grid;
+    gap: 8px;
+}
+
+.gradio-container .provider-card__detail,
+.gradio-container .provider-card__footer {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: #374151;
+}
+
+.gradio-container .provider-card__detail .provider-card__value,
+.gradio-container .provider-card__footer .provider-card__value {
+    margin-left: 6px;
+}
 """
 
 
