@@ -292,6 +292,83 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertNotIn('<span class="provider-card__badge">New patients: unknown</span>', card_html)
         self.assertIn('<span class="provider-card__badge">Medicare opt-out: opted out</span>', card_html)
 
+    def test_compose_result_card_response_localizes_chinese_deterministic_copy(self) -> None:
+        payload = {
+            "query": {
+                "response_language": "中文",
+                "summary": "儿科10013",
+            },
+            "care_setting_guidance": "For routine or ongoing care, primary care is usually the best fit.",
+            "specialist_plan_guidance": "For specialist searches, HMO and POS plans often require a PCP referral; PPO plans may not, but you should confirm the rule with your insurer and plan documents.",
+            "local_results": [
+                self.agent._normalize_result_trust_metadata(
+                    {
+                        "name": "Harmony Family Clinic",
+                        "specialties": ["Pediatrics"],
+                        "location": "New York, NY",
+                        "phone": "212-555-0100",
+                        "source": "Local provider dataset",
+                        "insurance_reported": ["Medicaid"],
+                    }
+                )
+            ],
+            "fallback_results": [],
+            "verification_guidance": "Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.",
+        }
+
+        response = self.agent._compose_result_card_response(payload)
+
+        self.assertIn("儿科10013的护理导航结果如下。", response)
+        self.assertIn("**就医路线:** 对于常规或持续性的就医需求，初级保健通常更合适。", response)
+        self.assertIn("**转诊提示:** 查找专科医生时，HMO 和 POS 计划通常需要初级保健医生转诊；PPO 计划可能不需要，但仍应与保险公司和计划文件确认。", response)
+        self.assertIn("电话</span>", response)
+        self.assertIn("匹配原因</span>", response)
+        self.assertIn("下一步</span>", response)
+        self.assertIn("来源</span><span class=\"provider-card__meta-value\">Local provider dataset</span>", response)
+        self.assertNotIn("Here are care navigation results for", response)
+        self.assertNotIn("**Care route:**", response)
+        self.assertNotIn("**Referral note:**", response)
+        self.assertNotIn("Why matched", response)
+
+    def test_compose_result_card_response_localizes_spanish_deterministic_copy(self) -> None:
+        payload = {
+            "query": {
+                "response_language": "Español",
+                "summary": "atención primaria en Austin",
+            },
+            "care_setting_guidance": "For a known specialty or referral need, a specialist is usually the right route.",
+            "specialist_plan_guidance": "For specialist searches, HMO and POS plans often require a PCP referral; PPO plans may not, but you should confirm the rule with your insurer and plan documents.",
+            "local_results": [
+                self.agent._normalize_result_trust_metadata(
+                    {
+                        "name": "Specialty Clinic",
+                        "taxonomy": "Cardiology",
+                        "location": "Austin, TX",
+                        "phone": "512-555-0100",
+                        "source": "NPI Registry",
+                        "insurance_reported": ["Medicare"],
+                        "medicare_opt_out": {"opted_out": True},
+                    }
+                )
+            ],
+            "fallback_results": [],
+            "verification_guidance": "Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.",
+        }
+
+        response = self.agent._compose_result_card_response(payload)
+
+        self.assertIn("Aquí están los resultados de navegación de atención para atención primaria en Austin.", response)
+        self.assertIn("**Ruta de atención:** Para una necesidad conocida de especialista o remisión, un especialista suele ser la ruta correcta.", response)
+        self.assertIn("**Nota sobre remisión:** Para buscar especialistas, los planes HMO y POS suelen requerir una remisión de atención primaria; los PPO pueden no requerirla, pero debe confirmarlo con su aseguradora y los documentos del plan.", response)
+        self.assertIn("Teléfono</span>", response)
+        self.assertIn("Por qué coincide</span>", response)
+        self.assertIn("Siguiente paso</span>", response)
+        self.assertIn("Exclusión de Medicare: excluido", response)
+        self.assertNotIn("Here are care navigation results for", response)
+        self.assertNotIn("**Care route:**", response)
+        self.assertNotIn("**Referral note:**", response)
+        self.assertNotIn("Why matched", response)
+
     def test_compose_response_appends_required_trust_guidance(self) -> None:
         client = self._client_with_response("Model-rendered answer.")
         payload = {
