@@ -271,6 +271,14 @@ _DETERMINISTIC_RENDER_TRANSLATIONS = {
         "spanish": "Para buscar especialistas, los planes HMO y POS suelen requerir una remisión de atención primaria; los PPO pueden no requerirla, pero debe confirmarlo con su aseguradora y los documentos del plan.",
         "simplified_chinese": "查找专科医生时，HMO 和 POS 计划通常需要初级保健医生转诊；PPO 计划可能不需要，但仍应与保险公司和计划文件确认。",
     },
+    "Insurance/network participation is not confirmed by source data.": {
+        "spanish": "Los datos de la fuente no confirman la participación en la red o el seguro.",
+        "simplified_chinese": "来源数据未确认保险或网络参与情况。",
+    },
+    "Source data does not confirm new-patient availability.": {
+        "spanish": "Los datos de la fuente no confirman la disponibilidad para pacientes nuevos.",
+        "simplified_chinese": "来源数据未确认是否接收新患者。",
+    },
 }
 
 
@@ -1039,7 +1047,27 @@ class CareLocatorAgent:
             or self._clean_card_value(result.get("source"))
             or self._render_copy(language_key, "unknown_source")
         )
+        insurance = self._ensure_list(result.get("insurance_reported"))
         why_matched = self._result_match_reason(result, query, language_key)
+        listed_insurance = (
+            ", ".join(insurance)
+            if insurance
+            else self._render_copy(language_key, "not_listed")
+        ) + f" ({self._render_copy(language_key, 'listed_insurance_suffix')})"
+        insurance_status = self._verification_status_label(
+            result.get("insurance_network_verification"),
+            "unverified",
+            language_key,
+        )
+        new_patient_status = self._verification_status_label(
+            result.get("accepting_new_patients_status"),
+            "unknown",
+            language_key,
+        )
+        appointment_status = self._render_copy(
+            language_key,
+            "appointment_availability_value",
+        )
         verification_reminder = self._render_copy(language_key, "verification_reminder_short")
 
         subtitle_parts = self._dedupe_preserve_order(
@@ -1113,6 +1141,10 @@ class CareLocatorAgent:
                 f'  <div class="provider-card__trust-row">{"".join(self._render_card_badge(label) for label in trust_badges)}</div>',
                 '  <div class="provider-card__body">',
                 f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "why_matched_label"))}</span><span class="provider-card__value">{escape(why_matched)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "listed_insurance_label"))}</span><span class="provider-card__value">{escape(listed_insurance)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "insurance_verification_label"))}</span><span class="provider-card__value">{escape(insurance_status)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "accepting_patients_label"))}</span><span class="provider-card__value">{escape(new_patient_status)}</span></div>',
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "appointment_availability_label"))}</span><span class="provider-card__value">{escape(appointment_status)}</span></div>',
                 "  </div>",
                 f'  <div class="provider-card__footer"><span class="provider-card__label">{escape(self._render_copy(language_key, "next_step_label"))}</span><span class="provider-card__value">{escape(verification_reminder)}</span></div>',
                 "</div>",
