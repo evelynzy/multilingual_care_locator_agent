@@ -739,6 +739,9 @@ class CareLocatorAgent:
                 f"dataset failed: {self.provider_repository.load_error}"
             )
 
+        if parsed_query.medical_need and (local_results or fallback_results) and not missing_location_hint:
+            return self._compose_result_card_response(response_payload)
+
         if missing_location_hint:
             template_key = "response_template_location_needed"
             fallback_only_mode = False
@@ -757,6 +760,155 @@ class CareLocatorAgent:
             top_p,
             template_key=template_key,
         )
+
+    # ------------------------------------------------------------------
+    def _compose_result_card_response(self, payload: Dict[str, Any]) -> str:
+        query = payload.get("query", {})
+        response_language = (
+            query.get("response_language")
+            or query.get("detected_language")
+            or "English"
+        )
+        summary = self._clean_card_value(query.get("summary")) or "your care search"
+        results = list(payload.get("local_results") or []) + list(
+            payload.get("fallback_results") or []
+        )
+
+        lines = [f"Here are care navigation results for {summary}."]
+
+        care_setting_guidance = self._clean_card_value(
+            payload.get("care_setting_guidance")
+        )
+        if care_setting_guidance:
+            lines.extend(["", f"**Care route:** {care_setting_guidance}"])
+
+        specialist_guidance = self._clean_card_value(
+            payload.get("specialist_plan_guidance")
+        )
+        if specialist_guidance:
+            lines.extend(["", f"**Referral note:** {specialist_guidance}"])
+
+        notes = self._clean_card_value(payload.get("notes"))
+        if notes:
+            lines.extend(["", f"**Note:** {notes}"])
+
+        for index, result in enumerate(results, start=1):
+            if isinstance(result, dict):
+                lines.extend(
+                    ["", self._format_provider_result_card(result, index, query)]
+                )
+
+        verification_guidance = self._clean_card_value(
+            payload.get("verification_guidance")
+        )
+        if verification_guidance:
+            lines.extend(
+                ["", f"**Before you contact a provider:** {verification_guidance}"]
+            )
+
+        return self._append_required_trust_guidance(
+            "\n".join(lines).strip(),
+            response_language,
+        )
+
+    # ------------------------------------------------------------------
+    def _format_provider_result_card(
+        self,
+        result: Dict[str, Any],
+        index: int,
+        query: Dict[str, Any],
+    ) -> str:
+        name = self._clean_card_value(result.get("name")) or f"Result {index}"
+        specialty = self._result_specialty_label(result)
+        address = self._clean_card_value(result.get("address")) or self._clean_card_value(
+            result.get("location")
+        )
+        phone = self._clean_card_value(result.get("phone"))
+        website = self._clean_card_value(result.get("website"))
+        provenance = result.get("provenance") if isinstance(result.get("provenance"), dict) else {}
+        source = (
+            self._clean_card_value(provenance.get("source"))
+            or self._clean_card_value(result.get("source"))
+            or "Unknown source"
+        )
+        insurance = self._ensure_list(result.get("insurance_reported"))
+        trust_labels = self._ensure_list(result.get("trust_labels"))
+
+        card_lines = [
+            f"### {index}. {name}",
+            f"- **Specialty/type:** {specialty or 'Not listed'}",
+            f"- **Address:** {address or 'Not listed'}",
+            f"- **Phone:** {phone or 'Not listed'}",
+        ]
+        if website:
+            card_lines.append(f"- **Website:** {website}")
+
+        card_lines.extend(
+            [
+                f"- **Source:** {source}",
+                f"- **Why matched:** {self._result_match_reason(result, query)}",
+                f"- **Listed insurance:** {', '.join(insurance) if insurance else 'Not listed'} (reported only; network participation is not verified here)",
+                f"- **Insurance/network verification:** {self._verification_status_label(result.get('insurance_network_verification'), 'unverified')}",
+                f"- **Accepting new patients:** {self._verification_status_label(result.get('accepting_new_patients_status'), 'unknown')}",
+                "- **Appointment availability:** Not verified; call the provider to confirm.",
+                f"- **Trust labels:** {', '.join(trust_labels) if trust_labels else 'Source and verification details not listed'}",
+                "- **Referral/verification reminder:** Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.",
+            ]
+        )
+        return "\n".join(card_lines)
+
+    # ------------------------------------------------------------------
+    def _result_specialty_label(self, result: Dict[str, Any]) -> str:
+        specialties = self._ensure_list(result.get("specialties"))
+        if specialties:
+            return ", ".join(specialties)
+        for key in ("taxonomy", "provider_type", "description"):
+            value = self._clean_card_value(result.get(key))
+            if value:
+                return value
+        return ""
+
+    # ------------------------------------------------------------------
+    def _result_match_reason(
+        self,
+        result: Dict[str, Any],
+        query: Dict[str, Any],
+    ) -> str:
+        query_parts = self._ensure_list(query.get("specialties")) + self._ensure_list(
+            query.get("keywords")
+        )
+        if query_parts:
+            return "Matched requested care terms: " + ", ".join(query_parts)
+
+        taxonomy = self._clean_card_value(result.get("taxonomy"))
+        if taxonomy:
+            return f"Listed provider type: {taxonomy}"
+
+        description = self._clean_card_value(result.get("description"))
+        if description:
+            return description
+
+        return "Matched available care directory result for the search criteria."
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _verification_status_label(value: Any, default: str) -> str:
+        if isinstance(value, dict):
+            status = value.get("status") or default
+            basis = value.get("basis")
+            if basis:
+                return f"{status} ({basis})"
+            return str(status)
+        return default
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _clean_card_value(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, list):
+            return ", ".join(str(item).strip() for item in value if str(item).strip())
+        return str(value).strip()
 
     # ------------------------------------------------------------------
     def _interpret_user_need(
