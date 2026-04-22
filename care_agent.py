@@ -859,12 +859,21 @@ class CareLocatorAgent:
             phone_source_parts.append(self._render_card_meta_item("Website", website))
 
         explicit_trust_badges = [
-            "Informational match",
-            "Insurance/network not verified",
-            "Accepting new patients not verified",
-            "Appointment availability not verified",
+            "Informational",
+            "Network unverified",
+            "New patients unknown",
+            "Appointments unverified",
         ]
-        dynamic_trust_badges = self._ensure_list(result.get("trust_labels"))
+        dynamic_trust_badges = [
+            label
+            for label in self._ensure_list(result.get("trust_labels"))
+            if not label.startswith("Source:")
+            and label not in {
+                "Insurance/network: unverified",
+                "New patients: unknown",
+                "Medicare opt-out: unknown",
+            }
+        ]
         trust_badges = self._dedupe_preserve_order(
             explicit_trust_badges + dynamic_trust_badges
         )
