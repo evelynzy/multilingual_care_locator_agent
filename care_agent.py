@@ -1054,17 +1054,19 @@ class CareLocatorAgent:
         insurance = self._ensure_list(result.get("insurance_reported"))
         why_matched = self._result_match_reason(result, query, language_key)
         listed_insurance = (
-            ", ".join(insurance)
+            f"{', '.join(insurance)} ({self._render_copy(language_key, 'listed_insurance_suffix')})"
             if insurance
-            else self._render_copy(language_key, "not_listed")
-        ) + f" ({self._render_copy(language_key, 'listed_insurance_suffix')})"
+            else ""
+        )
+        insurance_verification = result.get("insurance_network_verification")
         insurance_status = self._verification_status_label(
-            result.get("insurance_network_verification"),
+            insurance_verification,
             "unverified",
             language_key,
         )
+        new_patient_verification = result.get("accepting_new_patients_status")
         new_patient_status = self._verification_status_label(
-            result.get("accepting_new_patients_status"),
+            new_patient_verification,
             "unknown",
             language_key,
         )
@@ -1138,17 +1140,39 @@ class CareLocatorAgent:
         ]
         if subtitle_html:
             card_lines.append(subtitle_html)
+        card_detail_lines = [
+            f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "why_matched_label"))}</span><span class="provider-card__value">{escape(why_matched)}</span></div>',
+        ]
+        if listed_insurance:
+            card_detail_lines.append(
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "listed_insurance_label"))}</span><span class="provider-card__value">{escape(listed_insurance)}</span></div>'
+            )
+        if self._should_show_verification_detail(
+            insurance_verification,
+            default_status="unverified",
+            default_basis="Insurance/network participation is not confirmed by source data.",
+        ):
+            card_detail_lines.append(
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "insurance_verification_label"))}</span><span class="provider-card__value">{escape(insurance_status)}</span></div>'
+            )
+        if self._should_show_verification_detail(
+            new_patient_verification,
+            default_status="unknown",
+            default_basis="Source data does not confirm new-patient availability.",
+        ):
+            card_detail_lines.append(
+                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "accepting_patients_label"))}</span><span class="provider-card__value">{escape(new_patient_status)}</span></div>'
+            )
+        card_detail_lines.append(
+            f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "appointment_availability_label"))}</span><span class="provider-card__value">{escape(appointment_status)}</span></div>'
+        )
         card_lines.extend(
             [
                 "  </div>",
                 f'  <div class="provider-card__meta">{"".join(phone_source_parts)}</div>',
                 f'  <div class="provider-card__trust-row">{"".join(self._render_card_badge(label) for label in trust_badges)}</div>',
                 '  <div class="provider-card__body">',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "why_matched_label"))}</span><span class="provider-card__value">{escape(why_matched)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "listed_insurance_label"))}</span><span class="provider-card__value">{escape(listed_insurance)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "insurance_verification_label"))}</span><span class="provider-card__value">{escape(insurance_status)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "accepting_patients_label"))}</span><span class="provider-card__value">{escape(new_patient_status)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "appointment_availability_label"))}</span><span class="provider-card__value">{escape(appointment_status)}</span></div>',
+                *card_detail_lines,
                 "  </div>",
                 f'  <div class="provider-card__footer"><span class="provider-card__label">{escape(self._render_copy(language_key, "next_step_label"))}</span><span class="provider-card__value">{escape(verification_reminder)}</span></div>',
                 "</div>",
@@ -1273,6 +1297,25 @@ class CareLocatorAgent:
         if normalized_status == "unknown":
             return CareLocatorAgent._render_copy(language_key, "status_unknown")
         return str(status)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _should_show_verification_detail(
+        value: Any,
+        default_status: str,
+        default_basis: str,
+    ) -> bool:
+        if not isinstance(value, dict):
+            return False
+
+        normalized_status = str(value.get("status") or default_status).strip().lower()
+        normalized_status = normalized_status.replace("_", " ")
+        expected_status = str(default_status).strip().lower().replace("_", " ")
+        if normalized_status != expected_status:
+            return True
+
+        basis = str(value.get("basis") or "").strip()
+        return bool(basis and basis != default_basis)
 
     # ------------------------------------------------------------------
     @staticmethod
