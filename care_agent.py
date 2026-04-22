@@ -128,6 +128,7 @@ _UNKNOWN_LANGUAGE_MARKERS = {
 _DETERMINISTIC_RENDER_COPY = {
     "english": {
         "results_intro": "Here are care navigation results for {summary}.",
+        "result_title_fallback": "Result {index}",
         "care_route_label": "Care route",
         "referral_note_label": "Referral note",
         "note_label": "Note",
@@ -145,11 +146,13 @@ _DETERMINISTIC_RENDER_COPY = {
         "next_step_label": "Next step",
         "care_directory_result": "Care directory result",
         "not_listed": "Not listed",
+        "unknown_source": "Unknown source",
         "listed_insurance_suffix": "reported only; network participation is not verified here",
         "appointment_availability_value": "Not verified; call the provider to confirm.",
         "verification_reminder": "Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.",
-        "matched_requested_terms": "Matched requested care terms: {terms}",
-        "listed_provider_type": "Listed provider type: {taxonomy}",
+        "verification_reminder_short": "Call to confirm network status, referral needs, new-patient status, and appointment availability.",
+        "matched_search_summary": "Relevant to your search for {summary}.",
+        "listed_provider_type": "Listed under {taxonomy}.",
         "matched_available_result": "Matched available care directory result for the search criteria.",
         "informational_badge": "Informational",
         "network_unverified_badge": "Network unverified",
@@ -167,6 +170,7 @@ _DETERMINISTIC_RENDER_COPY = {
     },
     "spanish": {
         "results_intro": "Aquí están los resultados de navegación de atención para {summary}.",
+        "result_title_fallback": "Resultado {index}",
         "care_route_label": "Ruta de atención",
         "referral_note_label": "Nota sobre remisión",
         "note_label": "Nota",
@@ -184,11 +188,13 @@ _DETERMINISTIC_RENDER_COPY = {
         "next_step_label": "Siguiente paso",
         "care_directory_result": "Resultado del directorio de atención",
         "not_listed": "No figura",
+        "unknown_source": "Fuente desconocida",
         "listed_insurance_suffix": "solo informado; la participación en la red no está verificada aquí",
         "appointment_availability_value": "No verificada; llame al proveedor para confirmarla.",
         "verification_reminder": "Llame al proveedor y a la aseguradora para confirmar el estado de la red, el plan de seguro aceptado, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas.",
-        "matched_requested_terms": "Coincidió con los términos de atención solicitados: {terms}",
-        "listed_provider_type": "Tipo de proveedor listado: {taxonomy}",
+        "verification_reminder_short": "Llame para confirmar la red, la necesidad de remisión, si aceptan pacientes nuevos y la disponibilidad de citas.",
+        "matched_search_summary": "Relacionado con su búsqueda de {summary}.",
+        "listed_provider_type": "Figura como {taxonomy}.",
         "matched_available_result": "Coincidió con un resultado disponible del directorio de atención para los criterios de búsqueda.",
         "informational_badge": "Informativo",
         "network_unverified_badge": "Red no verificada",
@@ -206,6 +212,7 @@ _DETERMINISTIC_RENDER_COPY = {
     },
     "simplified_chinese": {
         "results_intro": "{summary}的护理导航结果如下。",
+        "result_title_fallback": "结果{index}",
         "care_route_label": "就医路线",
         "referral_note_label": "转诊提示",
         "note_label": "说明",
@@ -223,11 +230,13 @@ _DETERMINISTIC_RENDER_COPY = {
         "next_step_label": "下一步",
         "care_directory_result": "护理目录结果",
         "not_listed": "未列出",
+        "unknown_source": "来源未知",
         "listed_insurance_suffix": "仅为列出信息；此处未验证网络参与情况",
         "appointment_availability_value": "尚未验证；请致电服务提供者确认。",
         "verification_reminder": "请致电服务提供者和保险公司，确认网络状态、接受的保险计划、转诊要求、新患者接收情况、地点和预约可用性。",
-        "matched_requested_terms": "匹配到您请求的护理关键词：{terms}",
-        "listed_provider_type": "列出的提供者类型：{taxonomy}",
+        "verification_reminder_short": "请致电确认网络状态、转诊要求、新患者接收情况和预约可用性。",
+        "matched_search_summary": "与您搜索的{summary}相关。",
+        "listed_provider_type": "列为{taxonomy}。",
         "matched_available_result": "根据搜索条件匹配到可用的护理目录结果。",
         "informational_badge": "信息性匹配",
         "network_unverified_badge": "网络未验证",
@@ -1010,39 +1019,32 @@ class CareLocatorAgent:
         query: Dict[str, Any],
         language_key: str = "english",
     ) -> str:
-        name = self._clean_card_value(result.get("name")) or f"Result {index}"
-        specialty = self._result_specialty_label(result)
-        address = self._clean_card_value(result.get("address")) or self._clean_card_value(
-            result.get("location")
+        name = self._clean_card_value(result.get("name")) or self._render_copy(
+            language_key,
+            "result_title_fallback",
+            index=index,
+        )
+        specialty = self._clean_subtitle_fragment(
+            self._result_specialty_label(result),
+            kind="specialty",
+        )
+        location = self._clean_subtitle_fragment(
+            self._result_location_label(result),
+            kind="location",
         )
         phone = self._clean_card_value(result.get("phone"))
-        website = self._clean_card_value(result.get("website"))
         provenance = result.get("provenance") if isinstance(result.get("provenance"), dict) else {}
         source = (
             self._clean_card_value(provenance.get("source"))
             or self._clean_card_value(result.get("source"))
-            or "Unknown source"
+            or self._render_copy(language_key, "unknown_source")
         )
-        insurance = self._ensure_list(result.get("insurance_reported"))
         why_matched = self._result_match_reason(result, query, language_key)
-        listed_insurance = (
-            ", ".join(insurance)
-            if insurance
-            else self._render_copy(language_key, "not_listed")
-        ) + f" ({self._render_copy(language_key, 'listed_insurance_suffix')})"
-        insurance_status = self._verification_status_label(
-            result.get("insurance_network_verification"),
-            "unverified",
-            language_key,
-        )
-        new_patient_status = self._verification_status_label(
-            result.get("accepting_new_patients_status"),
-            "unknown",
-            language_key,
-        )
-        verification_reminder = self._render_copy(language_key, "verification_reminder")
+        verification_reminder = self._render_copy(language_key, "verification_reminder_short")
 
-        subtitle_parts = [part for part in [specialty, address] if part]
+        subtitle_parts = self._dedupe_preserve_order(
+            [part for part in [specialty, location] if part]
+        )
         phone_source_parts = [
             self._render_card_meta_item(
                 self._render_copy(language_key, "phone_label"),
@@ -1053,13 +1055,6 @@ class CareLocatorAgent:
                 source,
             ),
         ]
-        if website:
-            phone_source_parts.append(
-                self._render_card_meta_item(
-                    self._render_copy(language_key, "website_label"),
-                    website,
-                )
-            )
 
         explicit_trust_badges = [
             self._render_copy(language_key, "informational_badge"),
@@ -1098,27 +1093,32 @@ class CareLocatorAgent:
         trust_badges = self._dedupe_preserve_order(
             explicit_trust_badges + dynamic_trust_badges
         )
+        subtitle_html = (
+            f'    <div class="provider-card__subtitle">{escape(" • ".join(subtitle_parts))}</div>'
+            if subtitle_parts
+            else ""
+        )
 
-        return "\n".join(
+        card_lines = [
+            '<div class="provider-card">',
+            '  <div class="provider-card__header">',
+            f'    <div class="provider-card__title">{escape(f"{index}. {name}")}</div>',
+        ]
+        if subtitle_html:
+            card_lines.append(subtitle_html)
+        card_lines.extend(
             [
-                '<div class="provider-card">',
-                '  <div class="provider-card__header">',
-                f'    <div class="provider-card__title">{escape(f"{index}. {name}")}</div>',
-                f'    <div class="provider-card__subtitle">{escape(" • ".join(subtitle_parts) or self._render_copy(language_key, "care_directory_result"))}</div>',
                 "  </div>",
                 f'  <div class="provider-card__meta">{"".join(phone_source_parts)}</div>',
                 f'  <div class="provider-card__trust-row">{"".join(self._render_card_badge(label) for label in trust_badges)}</div>',
                 '  <div class="provider-card__body">',
                 f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "why_matched_label"))}</span><span class="provider-card__value">{escape(why_matched)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "listed_insurance_label"))}</span><span class="provider-card__value">{escape(listed_insurance)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "insurance_verification_label"))}</span><span class="provider-card__value">{escape(insurance_status)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "accepting_patients_label"))}</span><span class="provider-card__value">{escape(new_patient_status)}</span></div>',
-                f'    <div class="provider-card__detail"><span class="provider-card__label">{escape(self._render_copy(language_key, "appointment_availability_label"))}</span><span class="provider-card__value">{escape(self._render_copy(language_key, "appointment_availability_value"))}</span></div>',
                 "  </div>",
                 f'  <div class="provider-card__footer"><span class="provider-card__label">{escape(self._render_copy(language_key, "next_step_label"))}</span><span class="provider-card__value">{escape(verification_reminder)}</span></div>',
                 "</div>",
             ]
         )
+        return "\n".join(card_lines)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -1147,20 +1147,52 @@ class CareLocatorAgent:
         return ""
 
     # ------------------------------------------------------------------
+    def _result_location_label(self, result: Dict[str, Any]) -> str:
+        return self._clean_card_value(result.get("location")) or self._clean_card_value(
+            result.get("address")
+        )
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _clean_subtitle_fragment(value: Any, kind: str) -> str:
+        cleaned_value = CareLocatorAgent._clean_card_value(value)
+        if not cleaned_value:
+            return ""
+
+        normalized = re.sub(r"\s+", " ", cleaned_value).strip()
+        if len(normalized) <= 1:
+            return ""
+
+        if kind == "location":
+            has_structural_detail = (
+                "," in normalized
+                or " " in normalized
+                or any(character.isdigit() for character in normalized)
+            )
+            if not has_structural_detail and normalized.isupper() and len(normalized) <= 4:
+                return ""
+            return normalized
+
+        if kind == "specialty":
+            if re.fullmatch(r"[A-Za-z]\.?", normalized):
+                return ""
+            return normalized
+
+        return normalized
+
+    # ------------------------------------------------------------------
     def _result_match_reason(
         self,
         result: Dict[str, Any],
         query: Dict[str, Any],
         language_key: str = "english",
     ) -> str:
-        query_parts = self._ensure_list(query.get("specialties")) + self._ensure_list(
-            query.get("keywords")
-        )
-        if query_parts:
+        summary = self._clean_card_value(query.get("summary"))
+        if summary:
             return self._render_copy(
                 language_key,
-                "matched_requested_terms",
-                terms=", ".join(query_parts),
+                "matched_search_summary",
+                summary=summary,
             )
 
         taxonomy = self._clean_card_value(result.get("taxonomy"))
