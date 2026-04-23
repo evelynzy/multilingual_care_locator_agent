@@ -1,11 +1,18 @@
 from provider_search.cache import SQLiteProviderSearchCache, resolve_provider_cache_path
-from provider_search.models import (
+from .models import (
     CanonicalProvider,
-    ProviderSearchCacheEntry,
+    MedicareOptOutStatus,
+    NPPESRecord,
     ProviderSearchRequest,
+    ProviderSearchCacheEntry,
     ProviderSearchResult,
+    SourceSearchRequest,
+    SourceSearchResult,
+    SourceTrace,
+    VerificationStatus,
 )
 from provider_search.normalization import (
+    build_canonical_provider,
     build_request_fingerprint,
     normalize_provider,
     normalize_search_request,
@@ -14,10 +21,17 @@ from provider_search.normalization import (
 
 __all__ = [
     "CanonicalProvider",
-    "ProviderSearchCacheEntry",
+    "MedicareOptOutStatus",
+    "NPPESRecord",
     "ProviderSearchRequest",
+    "ProviderSearchCacheEntry",
     "ProviderSearchResult",
+    "SourceSearchRequest",
+    "SourceSearchResult",
+    "SourceTrace",
     "SQLiteProviderSearchCache",
+    "VerificationStatus",
+    "build_canonical_provider",
     "build_request_fingerprint",
     "normalize_provider",
     "normalize_search_request",
