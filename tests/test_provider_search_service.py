@@ -561,6 +561,69 @@ class ProviderSearchServiceTests(unittest.TestCase):
             ("1111111111", "2222222222"),
         )
 
+    def test_search_keeps_same_site_org_results_separate_when_service_lines_differ(self) -> None:
+        primary_care_provider = build_canonical_provider(
+            provider_id="1111111111",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            address="123 Main St",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+        )
+        pediatrics_provider = build_canonical_provider(
+            provider_id="2222222222",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            address="123 Main St",
+            city="Dallas",
+            state="TX",
+            taxonomy="Pediatrics",
+            specialties=("Pediatrics",),
+            phone="214-555-0100",
+        )
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[primary_care_provider],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=1),
+                ),
+                "npi_org": SourceSearchResult(
+                    providers=[pediatrics_provider],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_org", result_count=1),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                location="Dallas, TX 75001",
+            ),
+            limit=5,
+        )
+
+        self.assertEqual(len(response.provider_results), 2)
+        self.assertEqual(response.search_trace.total_candidates, 2)
+        self.assertCountEqual(
+            [result.provider.taxonomy for result in response.provider_results],
+            ["Primary Care", "Pediatrics"],
+        )
+        self.assertTrue(
+            all(
+                "display_dedupe_count" not in result.retriever_metadata
+                for result in response.provider_results
+            )
+        )
+
     def test_search_logs_opt_in_debug_counts_for_single_result_analysis(self) -> None:
         provider_from_individual_dataset = build_canonical_provider(
             provider_id="1111111111",
