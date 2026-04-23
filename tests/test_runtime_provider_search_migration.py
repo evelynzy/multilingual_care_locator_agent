@@ -82,13 +82,22 @@ class _ScriptedChatClient:
 
 
 class _PediatricRetryClinicalTablesSource:
-    def __init__(self, location_only_providers: List[Any]) -> None:
-        self.location_only_providers = list(location_only_providers)
+    def __init__(
+        self,
+        specialty_retry_providers: List[Any],
+        *,
+        location_only_providers: Optional[List[Any]] = None,
+    ) -> None:
+        self.specialty_retry_providers = list(specialty_retry_providers)
+        self.location_only_providers = list(location_only_providers or [])
         self.calls = []
 
     def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
         self.calls.append((dataset, request))
-        if request.search_terms == "Pediatrics":
+        if (
+            request.search_terms == "Pediatrics pediatric child health"
+            and request.query_filter == "addr_practice.state:NY AND addr_practice.zip:10013"
+        ):
             return SourceSearchResult(
                 providers=[],
                 trace=SourceTrace(
@@ -96,6 +105,19 @@ class _PediatricRetryClinicalTablesSource:
                     dataset=dataset,
                     status_code=200,
                     result_count=0,
+                ),
+            )
+        if (
+            request.search_terms == "Pediatrics pediatric child health"
+            and request.query_filter == "addr_practice.state:NY"
+        ):
+            return SourceSearchResult(
+                providers=list(self.specialty_retry_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.specialty_retry_providers),
                 ),
             )
         if request.search_terms == "Manhattan, NY 10013":
@@ -803,10 +825,16 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             specialties=("Diagnostic Radiology",),
             phone="212-555-0199",
         )
+        location_only_providers = [
+            radiology_provider.with_updates(provider_id=f"provider-radiology-{index}")
+            for index in range(15)
+        ]
+        source = _PediatricRetryClinicalTablesSource(
+            [pediatric_provider, radiology_provider],
+            location_only_providers=location_only_providers,
+        )
         service = ProviderSearchService(
-            clinicaltables_source=_PediatricRetryClinicalTablesSource(
-                [pediatric_provider, radiology_provider]
-            ),
+            clinicaltables_source=source,
             cache=None,
             datasets=("npi_org",),
             per_dataset_limit=5,
@@ -835,6 +863,16 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 top_p=0.9,
             )
 
+        self.assertEqual(len(source.calls), 2)
+        _, first_request = source.calls[0]
+        _, retry_request = source.calls[1]
+        self.assertEqual(first_request.search_terms, "Pediatrics pediatric child health")
+        self.assertEqual(retry_request.search_terms, first_request.search_terms)
+        self.assertEqual(
+            first_request.query_filter,
+            "addr_practice.state:NY AND addr_practice.zip:10013",
+        )
+        self.assertEqual(retry_request.query_filter, "addr_practice.state:NY")
         self.assertIn("Canal Pediatrics", result)
         self.assertNotIn("Downtown Imaging Associates", result)
         self.assertIn("Pediatrics", result)
