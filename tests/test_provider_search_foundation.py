@@ -327,13 +327,25 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
         self.assertEqual(family_ids, ("radiology-imaging",))
 
-    def test_derive_provider_specialty_family_ids_recognizes_curated_obgyn_taxonomy_code(self) -> None:
-        family_ids = derive_provider_specialty_family_ids(
-            specialties=(),
-            taxonomy="207V00000X",
+    def test_derive_provider_specialty_family_ids_recognizes_curated_obgyn_descendant_codes(self) -> None:
+        descendant_evidence = (
+            "207V00000X",
+            "207VC0200X",
+            "207VE0102X",
+            "207VG0400X",
+            "207VM0101X",
+            "207VX0000X",
+            "Maternal & Fetal Medicine",
         )
 
-        self.assertEqual(family_ids, ("obstetrics-gynecology",))
+        for evidence in descendant_evidence:
+            with self.subTest(evidence=evidence):
+                family_ids = derive_provider_specialty_family_ids(
+                    specialties=(),
+                    taxonomy=evidence,
+                )
+
+                self.assertEqual(family_ids, ("obstetrics-gynecology",))
 
     def test_derive_provider_specialty_family_ids_covers_live_descendants_and_rejects_unrelated_specialties(self) -> None:
         self.assertEqual(
