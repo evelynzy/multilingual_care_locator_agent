@@ -21,6 +21,7 @@ from provider_search.normalization import (
     normalize_provider,
     normalize_search_request,
     normalize_search_result,
+    normalize_text,
 )
 from provider_search.ranking import rank_provider_results
 
@@ -107,6 +108,7 @@ class ProviderSearchService:
             limit=limit,
             cached_provider_ids=cache_entry.provider_ids if cache_entry is not None else (),
         )
+        display_results = self._dedupe_display_results(ranked_results)
 
         sources_attempted = tuple(self._trace_label(trace) for trace in source_traces)
         sources_used = tuple(
@@ -131,7 +133,7 @@ class ProviderSearchService:
 
         return ProviderSearchResponse(
             request=normalized_request,
-            provider_results=tuple(ranked_results),
+            provider_results=tuple(display_results),
             fallback_resources=(),
             missing_location_hint=missing_location_hint,
             search_trace=SearchTrace(
@@ -144,6 +146,40 @@ class ProviderSearchService:
                 total_candidates=len(deduped_providers),
             ),
         )
+
+    def _dedupe_display_results(
+        self,
+        ranked_results: Sequence["ProviderSearchResult"],
+    ) -> list["ProviderSearchResult"]:
+        deduped_results: list["ProviderSearchResult"] = []
+        index_by_display_key: dict[tuple[str, str], int] = {}
+
+        for result in ranked_results:
+            display_key = self._display_dedupe_key(result.provider)
+            if display_key is None:
+                deduped_results.append(result)
+                continue
+
+            existing_index = index_by_display_key.get(display_key)
+            if existing_index is None:
+                index_by_display_key[display_key] = len(deduped_results)
+                deduped_results.append(result)
+                continue
+
+            existing_result = deduped_results[existing_index]
+            if not self._should_merge_display_duplicate(
+                primary=existing_result.provider,
+                duplicate=result.provider,
+            ):
+                deduped_results.append(result)
+                continue
+
+            deduped_results[existing_index] = self._merge_display_duplicate_result(
+                primary=existing_result,
+                duplicate=result,
+            )
+
+        return deduped_results
 
     def _build_source_request(
         self,
@@ -360,3 +396,119 @@ class ProviderSearchService:
         fallback_payload = asdict(fallback)
         fallback_payload["provider"] = primary
         return normalize_search_result(fallback_payload).provider
+
+    @staticmethod
+    def _display_dedupe_key(
+        provider: CanonicalProvider,
+    ) -> Optional[tuple[str, str]]:
+        normalized_name = normalize_text(provider.name, lowercase=True)
+        normalized_location = normalize_text(
+            provider.location_summary or provider.address,
+            lowercase=True,
+        )
+        if not normalized_name or not normalized_location:
+            return None
+        return normalized_name, normalized_location
+
+    @staticmethod
+    def _should_merge_display_duplicate(
+        *,
+        primary: CanonicalProvider,
+        duplicate: CanonicalProvider,
+    ) -> bool:
+        if not (
+            ProviderSearchService._is_organization_style_provider(primary)
+            or ProviderSearchService._is_organization_style_provider(duplicate)
+        ):
+            return False
+
+        primary_phone = normalize_text(primary.phone, lowercase=True)
+        duplicate_phone = normalize_text(duplicate.phone, lowercase=True)
+        if primary_phone and duplicate_phone and primary_phone != duplicate_phone:
+            return False
+
+        return True
+
+    @staticmethod
+    def _is_organization_style_provider(provider: CanonicalProvider) -> bool:
+        source_values = (
+            provider.source,
+            provider.provenance.get("source") if isinstance(provider.provenance, dict) else None,
+            provider.provenance.get("dataset") if isinstance(provider.provenance, dict) else None,
+            provider.retrieval_metadata.get("dataset")
+            if isinstance(provider.retrieval_metadata, dict)
+            else None,
+        )
+        normalized_values = [
+            normalize_text(value, lowercase=True) or ""
+            for value in source_values
+        ]
+        return any("organization" in value or "npi_org" in value for value in normalized_values)
+
+    def _merge_display_duplicate_result(
+        self,
+        *,
+        primary: "ProviderSearchResult",
+        duplicate: "ProviderSearchResult",
+    ) -> "ProviderSearchResult":
+        merged_provider = self._merge_provider_records(
+            primary=primary.provider,
+            fallback=duplicate.provider,
+        )
+        merged_metadata = dict(duplicate.retriever_metadata)
+        merged_metadata.update(primary.retriever_metadata)
+
+        provider_ids = self._collect_display_duplicate_provider_ids(primary, duplicate)
+        merged_sources = self._collect_display_duplicate_sources(primary, duplicate)
+        if len(provider_ids) > 1:
+            merged_metadata["display_dedupe_provider_ids"] = provider_ids
+            merged_metadata["display_dedupe_count"] = len(provider_ids)
+        if len(merged_sources) > 1:
+            merged_metadata["display_dedupe_sources"] = merged_sources
+
+        return normalize_search_result(
+            {
+                "provider": merged_provider,
+                "score": primary.score,
+                "source": primary.source or merged_provider.source,
+                "retriever_metadata": merged_metadata,
+            }
+        )
+
+    @staticmethod
+    def _collect_display_duplicate_provider_ids(
+        primary: "ProviderSearchResult",
+        duplicate: "ProviderSearchResult",
+    ) -> list[str]:
+        provider_ids: list[str] = []
+        for result in (primary, duplicate):
+            metadata_ids = result.retriever_metadata.get("display_dedupe_provider_ids")
+            if isinstance(metadata_ids, list):
+                candidate_ids = [str(value) for value in metadata_ids if value]
+            else:
+                candidate_ids = [result.provider.provider_id]
+            for provider_id in candidate_ids:
+                if provider_id and provider_id not in provider_ids:
+                    provider_ids.append(provider_id)
+        return provider_ids
+
+    @staticmethod
+    def _collect_display_duplicate_sources(
+        primary: "ProviderSearchResult",
+        duplicate: "ProviderSearchResult",
+    ) -> list[str]:
+        sources: list[str] = []
+        for result in (primary, duplicate):
+            metadata_sources = result.retriever_metadata.get("display_dedupe_sources")
+            if isinstance(metadata_sources, list):
+                candidate_sources = [str(value) for value in metadata_sources if value]
+            else:
+                candidate_sources = [
+                    source
+                    for source in (result.source, result.provider.source)
+                    if isinstance(source, str) and source
+                ]
+            for source in candidate_sources:
+                if source not in sources:
+                    sources.append(source)
+        return sources
