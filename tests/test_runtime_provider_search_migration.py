@@ -541,64 +541,114 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn('Source</span><span class="provider-card__meta-value">NPI Registry (individual)</span>', result)
         self.assertIn('Listed insurance</span><span class="provider-card__value">Medicare, Aetna (reported only; network participation is not verified here)</span>', result)
 
-    def test_handle_request_logs_opt_in_final_visible_result_counts(self) -> None:
-        service = Mock()
-        service.search.return_value = ProviderSearchResponse(
-            request=ProviderSearchRequest(
-                specialties=("Primary Care",),
-                location="San Francisco, CA",
+    def test_handle_request_emits_local_debug_logs_only_under_dual_opt_in(self) -> None:
+        noisy_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+            phone="408-555-0102",
+        )
+        canonical_provider = build_canonical_provider(
+            provider_id="1619271780",
+            name="Cupertino OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="408-555-0100",
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=_ObgynZipClinicalTablesSource(
+                noisy_zip_providers=[noisy_provider],
+                canonical_term_providers=[canonical_provider],
             ),
-            provider_results=(),
-            search_trace=SearchTrace(
-                cache_hit=False,
-                request_fingerprint="debug-fingerprint",
-                total_candidates=1,
-            ),
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
         )
         agent = CareLocatorAgent(provider_search_service=service)
-        query = ParsedCareQuery(
-            detected_language="English",
-            response_language="English",
-            summary="primary care in San Francisco",
-            medical_need=True,
-            location="San Francisco, CA",
-            specialties=["Primary Care"],
-            insurance=[],
-            preferred_languages=[],
-            keywords=[],
-            patient_context=None,
-        )
-        trusted_fallback = [
-            {
-                "name": "Medicare Care Compare",
-                "location": "San Francisco, CA",
-                "website": "https://www.medicare.gov/care-compare/",
-                "description": "Official U.S. tool to compare Medicare-enrolled providers.",
-                "source": "Trusted public directories",
-            }
-        ]
 
-        with patch.dict("os.environ", {"PROVIDER_SEARCH_DEBUG": "1"}):
-            with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
-                agent,
-                "_trusted_resource_fallback",
-                return_value=trusted_fallback,
-            ):
-                with self.assertLogs("care_agent", level="INFO") as captured:
+        single_gate_client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"ob gyn 98101","medical_need":true,"location":"98101",'
+                        '"specialties":["OB/GYN"],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null}'
+                    )
+                },
+                {"include_choice": False},
+            ]
+        )
+
+        with patch.object(agent, "_trusted_resource_fallback", return_value=[]):
+            with patch.dict("os.environ", {"PROVIDER_SEARCH_DEBUG": "1"}, clear=False):
+                with self.assertLogs(level="INFO") as captured_single_gate:
                     agent.handle_request(
-                        _SequencedChatClient(),
-                        "primary care 94110",
+                        single_gate_client,
+                        "ob gyn 98101",
                         [],
                         max_tokens=256,
                         temperature=0.2,
                         top_p=0.9,
                     )
 
-        joined_logs = "\n".join(captured.output)
-        self.assertIn("care_agent_result_debug request_fingerprint=debug-fingerprint", joined_logs)
-        self.assertIn("local_results=0", joined_logs)
-        self.assertIn("fallback_results=1", joined_logs)
-        self.assertIn("final_visible=1", joined_logs)
+        single_gate_logs = "\n".join(captured_single_gate.output)
+        self.assertNotIn("care_agent_local_debug_interpret", single_gate_logs)
+        self.assertNotIn("care_agent_local_debug_handoff", single_gate_logs)
+        self.assertNotIn("provider_search_debug_plan", single_gate_logs)
+        self.assertNotIn("provider_search_debug_gate_drop", single_gate_logs)
+        self.assertNotIn("care_agent_result_debug", single_gate_logs)
+
+        dual_gate_client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"ob gyn 98101","medical_need":true,"location":"98101",'
+                        '"specialties":["OB/GYN"],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null}'
+                    )
+                },
+                {"include_choice": False},
+            ]
+        )
+
+        with patch.object(agent, "_trusted_resource_fallback", return_value=[]):
+            with patch.dict(
+                "os.environ",
+                {"PROVIDER_SEARCH_DEBUG": "1", "CARE_LOCATOR_LOCAL_DEBUG": "1"},
+                clear=False,
+            ):
+                with self.assertLogs(level="INFO") as captured_dual_gate:
+                    agent.handle_request(
+                        dual_gate_client,
+                        "ob gyn 98101",
+                        [],
+                        max_tokens=256,
+                        temperature=0.2,
+                        top_p=0.9,
+                    )
+
+        dual_gate_logs = "\n".join(captured_dual_gate.output)
+        self.assertIn("care_agent_local_debug_interpret", dual_gate_logs)
+        self.assertIn("care_agent_local_debug_handoff", dual_gate_logs)
+        self.assertIn("provider_search_debug_plan", dual_gate_logs)
+        self.assertIn("provider_search_debug_variant", dual_gate_logs)
+        self.assertIn("provider_search_debug_candidate", dual_gate_logs)
+        self.assertIn("provider_search_debug_gate_drop", dual_gate_logs)
+        self.assertIn("care_agent_result_debug", dual_gate_logs)
+        self.assertNotIn("Cupertino OB/GYN Associates", dual_gate_logs)
+        self.assertNotIn("1619271780", dual_gate_logs)
+        self.assertNotIn("408-555-0100", dual_gate_logs)
 
     def test_default_init_works_without_cache_path_or_legacy_repository_dependency(self) -> None:
         with patch("provider_search.cache.resolve_provider_cache_path", return_value=None):

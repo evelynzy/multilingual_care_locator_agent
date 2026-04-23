@@ -885,6 +885,10 @@ class CareLocatorAgent:
                 preferred_languages=tuple(parsed_query.preferred_languages),
                 keywords=tuple(parsed_query.keywords),
             )
+            self._log_local_debug_provider_search_handoff(
+                parsed_query=parsed_query,
+                provider_request=provider_request,
+            )
             search_response = self.provider_search_service.search(
                 provider_request,
                 limit=self.ctss_max_results,
@@ -924,7 +928,7 @@ class CareLocatorAgent:
                 logger.info(
                     "Trusted resource fallback results=%s", len(fallback_results)
                 )
-            if os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() == "1":
+            if self._local_debug_enabled():
                 logger.info(
                     "care_agent_result_debug request_fingerprint=%s local_results=%s fallback_results=%s final_visible=%s had_source_failures=%s missing_location_hint=%s",
                     search_response.search_trace.request_fingerprint,
@@ -1506,7 +1510,7 @@ class CareLocatorAgent:
         ):
             response_language = detected_language
 
-        return ParsedCareQuery(
+        parsed_query = ParsedCareQuery(
             detected_language=detected_language,
             response_language=str(response_language or "English"),
             summary=str(parsed_payload.get("summary", "")),
@@ -1522,6 +1526,8 @@ class CareLocatorAgent:
             needs_clarification=bool(parsed_payload.get("needs_clarification", False)),
             follow_up_focus=self._ensure_list(parsed_payload.get("follow_up_focus")),
         )
+        self._log_local_debug_interpret(parsed_query)
+        return parsed_query
 
     # ------------------------------------------------------------------
     def _rescue_interpret_payload_from_message(self, message: str) -> Dict[str, Any]:
@@ -1572,6 +1578,69 @@ class CareLocatorAgent:
             len(specialties),
         )
         return reconciled_payload
+
+    def _log_local_debug_interpret(self, parsed_query: ParsedCareQuery) -> None:
+        if not self._local_debug_enabled():
+            return
+
+        logger.info(
+            "care_agent_local_debug_interpret detected_language=%s response_language=%s medical_need=%s location_present=%s location_shape=%s specialties=%s insurance_count=%s preferred_language_count=%s keyword_count=%s needs_clarification=%s care_setting=%s urgency=%s summary_length=%s",
+            parsed_query.detected_language,
+            parsed_query.response_language,
+            parsed_query.medical_need,
+            bool(parsed_query.location),
+            self._debug_location_shape(parsed_query.location),
+            tuple(parsed_query.specialties),
+            len(parsed_query.insurance),
+            len(parsed_query.preferred_languages),
+            len(parsed_query.keywords),
+            parsed_query.needs_clarification,
+            parsed_query.care_setting or "",
+            parsed_query.urgency or "",
+            len(parsed_query.summary or ""),
+        )
+
+    def _log_local_debug_provider_search_handoff(
+        self,
+        *,
+        parsed_query: ParsedCareQuery,
+        provider_request: ProviderSearchRequest,
+    ) -> None:
+        if not self._local_debug_enabled():
+            return
+
+        logger.info(
+            "care_agent_local_debug_handoff medical_need=%s location_present=%s location_shape=%s specialties=%s insurance_count=%s preferred_language_count=%s keyword_count=%s",
+            parsed_query.medical_need,
+            bool(provider_request.location),
+            self._debug_location_shape(provider_request.location),
+            tuple(provider_request.specialties),
+            len(provider_request.insurance),
+            len(provider_request.preferred_languages),
+            len(provider_request.keywords),
+        )
+
+    @staticmethod
+    def _local_debug_enabled() -> bool:
+        return (
+            os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() == "1"
+            and os.getenv("CARE_LOCATOR_LOCAL_DEBUG", "").strip() == "1"
+        )
+
+    @staticmethod
+    def _debug_location_shape(location: Optional[str]) -> str:
+        if not location:
+            return "missing"
+        parts = []
+        if re.search(r"\b\d{5}(?:-\d{4})?\b", location):
+            parts.append("zip")
+        if "," in location:
+            parts.append("comma")
+        if re.search(r"\b[A-Z]{2}\b", location):
+            parts.append("state")
+        if not parts:
+            parts.append("freeform")
+        return "+".join(parts)
 
     # ------------------------------------------------------------------
     @staticmethod
