@@ -141,6 +141,55 @@ class _PediatricRetryClinicalTablesSource:
         )
 
 
+class _NearbyDentalClinicalTablesSource:
+    def __init__(
+        self,
+        local_zip_providers: List[Any],
+        nearby_state_providers: List[Any],
+    ) -> None:
+        self.local_zip_providers = list(local_zip_providers)
+        self.nearby_state_providers = list(nearby_state_providers)
+        self.calls = []
+
+    def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if (
+            request.query_filter == "addr_practice.zip:33012"
+            and request.search_terms in {"Dentistry", "Dentistry 33012"}
+        ):
+            return SourceSearchResult(
+                providers=list(self.local_zip_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.local_zip_providers),
+                ),
+            )
+        if (
+            request.query_filter == "addr_practice.state:FL"
+            and request.search_terms in {"Dentistry", "Dentistry FL"}
+        ):
+            return SourceSearchResult(
+                providers=list(self.nearby_state_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.nearby_state_providers),
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
 class _KeywordOnlyClinicalTablesSource:
     def __init__(self) -> None:
         self.calls = []
@@ -1105,6 +1154,89 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn("Downtown Kids Clinic", result)
         self.assertNotIn("Medicare Care Compare", result)
         self.assertNotIn("Trusted public directories", result)
+
+    def test_handle_request_dentista_33012_uses_same_state_nearby_retry_before_fallback(self) -> None:
+        local_zip_providers = [
+            build_canonical_provider(
+                provider_id="provider-local-1",
+                name="Florida Children's Dentistry, P.A.",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist", "Dentist, Pediatric Dentistry", "1223P0221X"),
+            ),
+            build_canonical_provider(
+                provider_id="provider-local-2",
+                name="Hialeah Square Dentistry, PA",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist", "Dentist, General Practice", "1223G0001X"),
+            ),
+            build_canonical_provider(
+                provider_id="provider-local-3",
+                name="Caplin and Gober Dentistry, PA",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist", "Dentist, Periodontics", "1223P0300X"),
+            ),
+        ]
+        nearby_state_provider = build_canonical_provider(
+            provider_id="provider-nearby-1",
+            name="Miami Lakes Dentistry Center",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            city="Miami Lakes",
+            state="FL",
+            taxonomy="Dentistry",
+            specialties=("Dentistry",),
+            phone="305-555-0101",
+        )
+        source = _NearbyDentalClinicalTablesSource(local_zip_providers, [nearby_state_provider])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="Español",
+            response_language="Español",
+            summary="dentista 33012",
+            medical_need=True,
+            location="33012",
+            specialties=["Dentistry"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "dentista 33012",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(len(source.calls), 4)
+        self.assertIn("Miami Lakes Dentistry Center", result)
+        self.assertNotIn("Medicare Care Compare", result)
+        trusted_fallback.assert_not_called()
 
 
 if __name__ == "__main__":
