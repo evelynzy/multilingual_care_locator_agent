@@ -157,6 +157,41 @@ class ProviderSearchResult:
 
 
 @dataclass(frozen=True)
+class FallbackResource:
+    """Typed fallback resource returned when provider matches are unavailable."""
+
+    name: str
+    url: str
+    description: Optional[str] = None
+    source: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SearchTrace:
+    """Structured trace metadata for a provider-search execution."""
+
+    source_traces: Tuple[SourceTrace, ...] = ()
+    sources_attempted: Tuple[str, ...] = ()
+    sources_used: Tuple[str, ...] = ()
+    cache_hit: bool = False
+    cache_key: Optional[str] = None
+    request_fingerprint: Optional[str] = None
+    normalization_version: str = "provider_search_v1"
+    total_candidates: int = 0
+
+
+@dataclass(frozen=True)
+class ProviderSearchResponse:
+    """Typed provider-search response returned by the service facade."""
+
+    request: ProviderSearchRequest
+    provider_results: Tuple[ProviderSearchResult, ...] = ()
+    fallback_resources: Tuple[FallbackResource, ...] = ()
+    missing_location_hint: Optional[str] = None
+    search_trace: SearchTrace = field(default_factory=SearchTrace)
+
+
+@dataclass(frozen=True)
 class ProviderSearchCacheEntry:
     """PHI-free cache record keyed by a request fingerprint."""
 
