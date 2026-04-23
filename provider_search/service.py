@@ -82,6 +82,7 @@ class ProviderSearchService:
         source_traces, missing_location_hint, deduped_providers = (
             self._collect_planned_source_candidates(
                 planned_requests,
+                request=normalized_request,
                 continue_until_usable_specialty_evidence=(
                     self._should_continue_zip_only_specialty_variants(normalized_request)
                 ),
@@ -430,15 +431,16 @@ class ProviderSearchService:
         self,
         requests: Sequence[SourceSearchRequest],
         *,
+        request: Optional[ProviderSearchRequest] = None,
         continue_until_usable_specialty_evidence: bool = False,
     ) -> tuple[list[SourceTrace], Optional[str], dict[str, CanonicalProvider]]:
         source_traces: list[SourceTrace] = []
         missing_location_hint: Optional[str] = None
         deduped_providers: dict[str, CanonicalProvider] = {}
 
-        for request in requests:
+        for source_request in requests:
             request_traces, request_missing_location_hint, request_candidates = (
-                self._collect_source_candidates(request)
+                self._collect_source_candidates(source_request)
             )
             source_traces.extend(request_traces)
             if missing_location_hint is None and request_missing_location_hint:
@@ -452,8 +454,13 @@ class ProviderSearchService:
                         primary=provider,
                         fallback=existing_provider,
                     )
-            if continue_until_usable_specialty_evidence and self._has_usable_specialty_evidence(
-                deduped_providers.values()
+            if (
+                continue_until_usable_specialty_evidence
+                and request is not None
+                and self._has_request_relevant_specialty_evidence(
+                    request=request,
+                    providers=deduped_providers.values(),
+                )
             ):
                 break
 
@@ -634,32 +641,53 @@ class ProviderSearchService:
             for term in cleaned_specialties
         )
 
-    @staticmethod
-    def _has_usable_specialty_evidence(
+    def _has_request_relevant_specialty_evidence(
+        self,
+        *,
+        request: ProviderSearchRequest,
         providers: Sequence[CanonicalProvider],
     ) -> bool:
+        requested_specialties = tuple(
+            specialty.strip()
+            for specialty in request.specialties
+            if isinstance(specialty, str) and specialty.strip()
+        )
+        if not requested_specialties:
+            return False
+
+        requested_lookup = {specialty.casefold() for specialty in requested_specialties}
+        requested_family_ids = set(derive_request_specialty_family_ids(requested_specialties))
+
         for provider in providers:
-            specialty_family_ids = tuple(
-                family_id
-                for family_id in getattr(provider, "specialty_family_ids", ())
-                if isinstance(family_id, str) and family_id.strip()
-            )
-            if specialty_family_ids:
+            if self._provider_has_request_relevant_specialty_evidence(
+                provider=provider,
+                requested_lookup=requested_lookup,
+                requested_family_ids=requested_family_ids,
+            ):
                 return True
+        return False
 
-            normalized_taxonomy = normalize_text(provider.taxonomy, lowercase=True)
-            if normalized_taxonomy:
-                return True
+    @staticmethod
+    def _provider_has_request_relevant_specialty_evidence(
+        *,
+        provider: CanonicalProvider,
+        requested_lookup: set[str],
+        requested_family_ids: set[str],
+    ) -> bool:
+        provider_family_ids = {
+            family_id
+            for family_id in getattr(provider, "specialty_family_ids", ())
+            if isinstance(family_id, str) and family_id.strip()
+        }
+        if requested_family_ids and provider_family_ids.intersection(requested_family_ids):
+            return True
 
-            normalized_specialties = tuple(
-                normalized
-                for normalized in (
-                    normalize_text(value, lowercase=True)
-                    for value in provider.specialties
-                )
-                if normalized
-            )
-            if normalized_specialties:
+        provider_values = list(provider.specialties)
+        if provider.taxonomy:
+            provider_values.append(provider.taxonomy)
+        for value in provider_values:
+            normalized_value = normalize_text(value, lowercase=True)
+            if normalized_value and normalized_value in requested_lookup:
                 return True
 
         return False

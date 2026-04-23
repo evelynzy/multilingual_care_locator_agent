@@ -1375,6 +1375,112 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertNotIn("Noisy Clinician", result)
         trusted_fallback.assert_not_called()
 
+    def test_handle_request_obgyn_98101_does_not_stop_on_unrelated_specialty_bearing_first_hit(
+        self,
+    ) -> None:
+        unrelated_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Santa Clara Imaging Group",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+        specialty_bearing_provider = build_canonical_provider(
+            provider_id="provider-obgyn",
+            name="Cupertino OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Obstetrics & Gynecology",
+            specialties=("Obstetrics & Gynecology",),
+            phone="408-555-0100",
+        )
+
+        class _UnrelatedSpecialtyFirstHitObgynSource(_ObgynZipClinicalTablesSource):
+            def search_dataset(self, dataset: Any, request: Any) -> SourceSearchResult:
+                self.calls.append((dataset, request))
+                if dataset == "npi_idv" and (
+                    request.query_filter == "addr_practice.zip:98101"
+                    and request.search_terms == "OB/GYN"
+                ):
+                    return SourceSearchResult(
+                        providers=[unrelated_provider],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=1,
+                        ),
+                    )
+                if request.query_filter == "addr_practice.zip:98101" and (
+                    request.search_terms == "Obstetrics & Gynecology"
+                ):
+                    return SourceSearchResult(
+                        providers=[specialty_bearing_provider],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=1,
+                        ),
+                    )
+                return SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(
+                        source_name="clinicaltables",
+                        dataset=dataset,
+                        status_code=200,
+                        result_count=0,
+                    ),
+                )
+
+        source = _UnrelatedSpecialtyFirstHitObgynSource([], [])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn 98101",
+            medical_need=True,
+            location="98101",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "ob gyn 98101",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertEqual(
+            searched_terms,
+            ["OB/GYN", "Obstetrics & Gynecology"],
+        )
+        self.assertIn("Cupertino OB/GYN Associates", result)
+        self.assertNotIn("Santa Clara Imaging Group", result)
+        trusted_fallback.assert_not_called()
+
     def test_handle_request_rescue_does_not_misread_pcp_in_dallas_tx_as_pcp_in(self) -> None:
         service = Mock()
         service.search.return_value = ProviderSearchResponse(
