@@ -636,6 +636,69 @@ class ProviderSearchRankingTests(unittest.TestCase):
             ("OB/GYN",),
         )
 
+    def test_rank_provider_results_accepts_multi_candidate_obgyn_descendant_code_pool(self) -> None:
+        request = ProviderSearchRequest(
+            specialties=("OB/GYN",),
+            location="95051",
+        )
+        gynecology_provider = build_canonical_provider(
+            provider_id="provider-obgyn-gynecology",
+            name="Cupertino Gynecology Group",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="207VC0200X",
+            specialties=("207VC0200X",),
+        )
+        maternal_fetal_provider = build_canonical_provider(
+            provider_id="provider-obgyn-mfm",
+            name="South Bay Maternal Fetal Medicine",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="207VM0101X",
+            specialties=("207VM0101X",),
+        )
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+
+        ranked = rank_provider_results(
+            request,
+            [gynecology_provider, maternal_fetal_provider, radiology_provider],
+            limit=5,
+        )
+
+        self.assertEqual(len(ranked), 2)
+        self.assertEqual(
+            {result.provider.name for result in ranked},
+            {
+                "Cupertino Gynecology Group",
+                "South Bay Maternal Fetal Medicine",
+            },
+        )
+        self.assertTrue(
+            all(
+                result.provider.specialty_family_ids == ("obstetrics-gynecology",)
+                for result in ranked
+            )
+        )
+        self.assertTrue(
+            all(
+                result.provider.ranking_metadata.get("matched_specialties") == ("OB/GYN",)
+                for result in ranked
+            )
+        )
+
     def test_rank_provider_results_filters_location_only_candidates_for_constrained_searches(self) -> None:
         request = ProviderSearchRequest(
             specialties=("Pediatrics",),

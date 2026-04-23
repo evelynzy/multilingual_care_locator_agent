@@ -1416,6 +1416,109 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertNotIn("Medicare Care Compare", result)
         trusted_fallback.assert_not_called()
 
+    def test_handle_request_obgyn_95051_accepts_descendant_code_candidate_pool_without_fallback(
+        self,
+    ) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            3,
+            ["display row 1", "display row 2", "display row 3"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+                "addr_practice.phone",
+            ],
+            [
+                [
+                    "Cupertino Gynecology Group",
+                    "1619271780",
+                    "",
+                    "",
+                    "207VC0200X",
+                    "Santa Clara",
+                    "CA",
+                    "95051",
+                    "408-555-0101",
+                ],
+                [
+                    "South Bay Maternal Fetal Medicine",
+                    "1619271781",
+                    "",
+                    "",
+                    "207VM0101X",
+                    "Santa Clara",
+                    "CA",
+                    "95051",
+                    "408-555-0102",
+                ],
+                [
+                    "Downtown Imaging Associates",
+                    "1619271782",
+                    "",
+                    "",
+                    "2085R0202X",
+                    "Santa Clara",
+                    "CA",
+                    "95051",
+                    "408-555-0103",
+                ],
+            ],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn 95051",
+            medical_need=True,
+            location="95051",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "ob gyn 95051",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(len(session.get.call_args_list), 1)
+        _, kwargs = session.get.call_args
+        self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
+        self.assertIn("Cupertino Gynecology Group", result)
+        self.assertIn("South Bay Maternal Fetal Medicine", result)
+        self.assertNotIn("Downtown Imaging Associates", result)
+        self.assertNotIn("Medicare Care Compare", result)
+        trusted_fallback.assert_not_called()
+
     def test_default_carelocatoragent_path_uses_shared_clinicaltables_defaults_for_obgyn_95051(
         self,
     ) -> None:
