@@ -24,6 +24,11 @@ from provider_search.normalization import (
     normalize_search_request,
     normalize_search_result,
 )
+from provider_search.specialty_families import (
+    SPECIALTY_FAMILY_BY_ID,
+    derive_provider_specialty_family_ids,
+    derive_request_specialty_family_ids,
+)
 
 
 class ProviderSearchNormalizationTests(unittest.TestCase):
@@ -62,6 +67,35 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
         self.assertEqual(build_request_fingerprint(left), build_request_fingerprint(right))
 
+    def test_normalize_search_request_derives_specialty_family_ids(self) -> None:
+        request = ProviderSearchRequest(
+            specialties=(" Family Medicine ", "Pediatrics", "OB/GYN"),
+        )
+
+        normalized = normalize_search_request(request)
+
+        self.assertEqual(
+            normalized.specialty_family_ids,
+            ("primary-care", "pediatrics", "obstetrics-gynecology"),
+        )
+
+    def test_request_specialty_family_catalog_is_broad_for_common_care_searches(self) -> None:
+        derived = derive_request_specialty_family_ids(
+            ("Primary Care", "Dermatology", "ENT", "Behavioral Health", "Urgent Care")
+        )
+
+        self.assertEqual(
+            derived,
+            (
+                "primary-care",
+                "dermatology",
+                "ent",
+                "psychiatry-behavioral-health",
+                "urgent-care",
+            ),
+        )
+        self.assertEqual(SPECIALTY_FAMILY_BY_ID["primary-care"].label, "Primary Care")
+
     def test_build_canonical_provider_generates_stable_source_aware_id_when_missing(self) -> None:
         left = build_canonical_provider(
             provider_id="  ",
@@ -87,6 +121,18 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertTrue(left.provider_id.startswith("generated:clinicaltables:npi-idv:"))
         self.assertEqual(left.provider_id, right.provider_id)
 
+    def test_build_canonical_provider_derives_specialty_family_ids_from_specialty_and_taxonomy(self) -> None:
+        provider = build_canonical_provider(
+            provider_id="provider-123",
+            name="Harmony Family Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            specialties=("Family Medicine",),
+            taxonomy="Primary Care",
+        )
+
+        self.assertEqual(provider.specialty_family_ids, ("primary-care",))
+
     def test_normalize_provider_uses_reported_insurance_and_provenance_source(self) -> None:
         provider = normalize_provider(
             {
@@ -106,6 +152,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertTrue(provider.provider_id.startswith("source:npi-registry:unknown:provider-123:"))
         self.assertEqual(provider.name, "Harmony Family Clinic")
         self.assertEqual(provider.specialties, ("Primary Care",))
+        self.assertEqual(provider.specialty_family_ids, ("primary-care",))
         self.assertEqual(provider.insurance_reported, ("Medicare", "Aetna"))
         self.assertEqual(provider.source, "NPI Registry")
         self.assertEqual(provider.location_summary, "San Francisco, CA, USA")
@@ -250,11 +297,37 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             {"directory": "payer"},
         )
 
+    def test_normalize_provider_merges_explicit_and_derived_specialty_family_ids(self) -> None:
+        provider = normalize_provider(
+            {
+                "provider_id": "provider-123",
+                "name": "Harmony Family Clinic",
+                "specialties": ["Family Medicine"],
+                "taxonomy": "Pediatrics",
+                "specialty_family_ids": ["primary-care"],
+            }
+        )
+
+        self.assertEqual(
+            provider.specialty_family_ids,
+            ("primary-care", "pediatrics"),
+        )
+
+    def test_derive_provider_specialty_family_ids_uses_taxonomy_evidence(self) -> None:
+        family_ids = derive_provider_specialty_family_ids(
+            specialties=(),
+            taxonomy="Diagnostic Radiology",
+        )
+
+        self.assertEqual(family_ids, ("radiology-imaging",))
+
     def test_normalize_provider_accepts_canonical_provider_without_losing_trust_fields(self) -> None:
         provider = CanonicalProvider(
             provider_id=" provider-123 ",
             name=" Harmony Family Clinic ",
             source=" ClinicalTables ",
+            specialties=("Family Medicine",),
+            specialty_family_ids=("primary-care",),
             insurance_network_verification=VerificationStatus(
                 status="verified",
                 verified=True,
@@ -287,6 +360,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertTrue(normalized.provider_id.startswith("source:clinicaltables:clinicaltables:provider-123:"))
         self.assertEqual(normalized.name, "Harmony Family Clinic")
         self.assertEqual(normalized.source, "ClinicalTables")
+        self.assertEqual(normalized.specialty_family_ids, ("primary-care",))
         self.assertEqual(
             normalized.insurance_network_verification,
             VerificationStatus(

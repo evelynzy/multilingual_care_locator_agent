@@ -15,6 +15,10 @@ from provider_search.models import (
     StructuredMetadataValue,
     VerificationStatus,
 )
+from provider_search.specialty_families import (
+    derive_provider_specialty_family_ids,
+    derive_request_specialty_family_ids,
+)
 
 
 INSURANCE_UNVERIFIED_BASIS = (
@@ -83,8 +87,13 @@ def normalize_string_list(values: Optional[Iterable[object]]) -> tuple[str, ...]
 def normalize_search_request(request: ProviderSearchRequest) -> ProviderSearchRequest:
     """Normalize provider-search inputs without changing their meaning."""
 
+    normalized_specialties = normalize_string_list(request.specialties)
     return ProviderSearchRequest(
-        specialties=normalize_string_list(request.specialties),
+        specialties=normalized_specialties,
+        specialty_family_ids=derive_request_specialty_family_ids(
+            normalized_specialties,
+            request.specialty_family_ids,
+        ),
         location=normalize_text(request.location),
         insurance=normalize_string_list(request.insurance),
         preferred_languages=normalize_string_list(request.preferred_languages),
@@ -131,6 +140,7 @@ def build_canonical_provider(
     website: Any = None,
     taxonomy: Any = None,
     specialties: Optional[Iterable[Any]] = None,
+    specialty_family_ids: Optional[Iterable[Any]] = None,
     languages: Optional[Iterable[Any]] = None,
     insurance_reported: Optional[Iterable[Any]] = None,
     insurance_network_verification: Optional[VerificationStatus | Mapping[str, Any]] = None,
@@ -146,6 +156,11 @@ def build_canonical_provider(
     normalized_specialties = list(ensure_string_list(specialties))
     if normalized_taxonomy and normalized_taxonomy not in normalized_specialties:
         normalized_specialties.append(normalized_taxonomy)
+    normalized_specialty_family_ids = derive_provider_specialty_family_ids(
+        normalized_specialties,
+        normalized_taxonomy,
+        specialty_family_ids,
+    )
 
     normalized_source = optional_string(source_name)
     normalized_dataset = optional_string(dataset)
@@ -176,6 +191,7 @@ def build_canonical_provider(
         ),
         name=optional_string(name) or "Unknown Provider",
         specialties=tuple(normalized_specialties),
+        specialty_family_ids=normalized_specialty_family_ids,
         languages=ensure_string_list(languages),
         insurance_reported=ensure_string_list(insurance_reported),
         address=normalized_address,
@@ -226,6 +242,7 @@ def normalize_provider(
         normalized_country = optional_string(raw_provider.country)
         normalized_phone = optional_string(raw_provider.phone)
         normalized_taxonomy = optional_string(raw_provider.taxonomy)
+        normalized_specialties = ensure_string_list(raw_provider.specialties)
         normalized_provenance = _normalize_object_dict(raw_provider.provenance)
         normalized_retrieval_metadata = _normalize_object_dict(raw_provider.retrieval_metadata)
         return CanonicalProvider(
@@ -246,7 +263,12 @@ def normalize_provider(
                 raw_payload=raw_provider.raw,
             ),
             name=optional_string(raw_provider.name) or "Unknown Provider",
-            specialties=ensure_string_list(raw_provider.specialties),
+            specialties=normalized_specialties,
+            specialty_family_ids=derive_provider_specialty_family_ids(
+                normalized_specialties,
+                normalized_taxonomy,
+                raw_provider.specialty_family_ids,
+            ),
             languages=ensure_string_list(raw_provider.languages),
             insurance_reported=ensure_string_list(raw_provider.insurance_reported),
             address=normalized_address,
@@ -306,6 +328,7 @@ def normalize_provider(
     country = normalize_text(raw_provider.get("country"))
     phone = normalize_text(raw_provider.get("phone"))
     taxonomy = normalize_text(raw_provider.get("taxonomy"))
+    specialties = normalize_string_list(raw_provider.get("specialties"))
 
     return CanonicalProvider(
         provider_id=_resolve_provider_id(
@@ -322,7 +345,12 @@ def normalize_provider(
             raw_payload=raw_provider,
         ),
         name=name,
-        specialties=normalize_string_list(raw_provider.get("specialties")),
+        specialties=specialties,
+        specialty_family_ids=derive_provider_specialty_family_ids(
+            specialties,
+            taxonomy,
+            raw_provider.get("specialty_family_ids"),
+        ),
         languages=normalize_string_list(raw_provider.get("languages")),
         insurance_reported=normalize_string_list(
             raw_provider.get("insurance_reported", raw_provider.get("accepted_insurance"))
@@ -401,6 +429,10 @@ def _merge_provider_context(
     return primary.with_updates(
         provider_id=_merge_provider_id(primary.provider_id, fallback.provider_id),
         source=primary.source or fallback.source,
+        specialty_family_ids=_merge_string_values(
+            fallback.specialty_family_ids,
+            primary.specialty_family_ids,
+        ),
         insurance_network_verification=_select_verification_status(
             primary.insurance_network_verification,
             fallback.insurance_network_verification,
@@ -745,6 +777,21 @@ def _merge_object_dicts(
         else:
             merged[key] = value
     return merged
+
+
+def _merge_string_values(
+    fallback: Iterable[str],
+    primary: Iterable[str],
+) -> tuple[str, ...]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for values in (fallback, primary):
+        for value in values:
+            if value in seen:
+                continue
+            seen.add(value)
+            merged.append(value)
+    return tuple(merged)
 
 
 def _select_verification_status(

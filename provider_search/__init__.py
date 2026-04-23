@@ -24,6 +24,14 @@ from provider_search.normalization import (
 )
 from provider_search.ranking import RANKING_VERSION, rank_provider_results
 from provider_search.service import ProviderSearchService
+from provider_search.specialty_families import (
+    SPECIALTY_FAMILY_BY_ID,
+    SPECIALTY_FAMILY_CATALOG,
+    SpecialtyFamily,
+    derive_provider_specialty_family_ids,
+    derive_request_specialty_family_ids,
+    derive_specialty_family_ids,
+)
 
 __all__ = [
     "CanonicalProvider",
@@ -38,13 +46,19 @@ __all__ = [
     "ProviderSearchService",
     "RANKING_VERSION",
     "SearchTrace",
+    "SPECIALTY_FAMILY_BY_ID",
+    "SPECIALTY_FAMILY_CATALOG",
     "SourceSearchRequest",
     "SourceSearchResult",
     "SourceTrace",
+    "SpecialtyFamily",
     "SQLiteProviderSearchCache",
     "VerificationStatus",
     "build_canonical_provider",
     "build_request_fingerprint",
+    "derive_provider_specialty_family_ids",
+    "derive_request_specialty_family_ids",
+    "derive_specialty_family_ids",
     "normalize_provider",
     "normalize_search_request",
     "normalize_search_result",
