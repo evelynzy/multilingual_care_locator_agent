@@ -9,7 +9,13 @@ from provider_search.cache import (
     SQLiteProviderSearchCache,
     resolve_provider_cache_path,
 )
-from provider_search.models import ProviderSearchCacheEntry, ProviderSearchRequest
+from provider_search.models import (
+    CanonicalProvider,
+    MedicareOptOutStatus,
+    ProviderSearchCacheEntry,
+    ProviderSearchRequest,
+    VerificationStatus,
+)
 from provider_search.normalization import (
     build_request_fingerprint,
     normalize_provider,
@@ -100,6 +106,154 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             {"similarity": 0.875, "node_id": "node-1"},
         )
 
+    def test_normalize_provider_preserves_existing_trust_and_freshness_fields(self) -> None:
+        provider = normalize_provider(
+            {
+                "provider_id": " provider-123 ",
+                "name": " Harmony Family Clinic ",
+                "source": "ClinicalTables",
+                "insurance_network_verification": {
+                    "status": "verified",
+                    "verified": True,
+                    "basis": "Plan directory confirmed.",
+                    "source": "Aetna directory",
+                },
+                "accepting_new_patients_status": {
+                    "status": "accepting",
+                    "verified": True,
+                    "basis": "Office confirmed this week.",
+                    "source": "Clinic staff",
+                },
+                "medicare_opt_out": {
+                    "opted_out": False,
+                    "optout_effective_date": "2025-01-01",
+                    "optout_end_date": "2027-01-01",
+                },
+                "retrieval_metadata": {
+                    "last_updated_epoch": 200,
+                    "extensions": {"directory": "payer"},
+                },
+            }
+        )
+
+        self.assertEqual(provider.insurance_network_verification.status, "verified")
+        self.assertTrue(provider.insurance_network_verification.verified)
+        self.assertEqual(provider.insurance_network_verification.basis, "Plan directory confirmed.")
+        self.assertEqual(provider.insurance_network_verification.source, "Aetna directory")
+        self.assertEqual(provider.accepting_new_patients_status.status, "accepting")
+        self.assertTrue(provider.accepting_new_patients_status.verified)
+        self.assertEqual(provider.accepting_new_patients_status.source, "Clinic staff")
+        self.assertIsNotNone(provider.medicare_opt_out)
+        assert provider.medicare_opt_out is not None
+        self.assertFalse(provider.medicare_opt_out.opted_out)
+        self.assertEqual(provider.retrieval_metadata["last_updated_epoch"], 200)
+        self.assertEqual(
+            provider.retrieval_metadata["extensions"],
+            {"directory": "payer"},
+        )
+
+    def test_normalize_provider_accepts_canonical_provider_without_losing_trust_fields(self) -> None:
+        provider = CanonicalProvider(
+            provider_id=" provider-123 ",
+            name=" Harmony Family Clinic ",
+            source=" ClinicalTables ",
+            insurance_network_verification=VerificationStatus(
+                status="verified",
+                verified=True,
+                basis="Plan directory confirmed.",
+                source="Aetna directory",
+            ),
+            accepting_new_patients_status=VerificationStatus(
+                status="accepting",
+                verified=True,
+                basis="Office confirmed this week.",
+                source="Clinic staff",
+            ),
+            medicare_opt_out=MedicareOptOutStatus(
+                opted_out=False,
+                optout_effective_date="2025-01-01",
+                optout_end_date="2027-01-01",
+            ),
+            retrieval_metadata={"last_updated_epoch": 200},
+        )
+
+        normalized = normalize_provider(provider)
+
+        self.assertEqual(normalized.provider_id, "provider-123")
+        self.assertEqual(normalized.name, "Harmony Family Clinic")
+        self.assertEqual(normalized.source, "ClinicalTables")
+        self.assertEqual(
+            normalized.insurance_network_verification,
+            VerificationStatus(
+                status="verified",
+                verified=True,
+                basis="Plan directory confirmed.",
+                source="Aetna directory",
+            ),
+        )
+        self.assertEqual(
+            normalized.accepting_new_patients_status,
+            VerificationStatus(
+                status="accepting",
+                verified=True,
+                basis="Office confirmed this week.",
+                source="Clinic staff",
+            ),
+        )
+        self.assertEqual(
+            normalized.medicare_opt_out,
+            MedicareOptOutStatus(
+                opted_out=False,
+                optout_effective_date="2025-01-01",
+                optout_end_date="2027-01-01",
+            ),
+        )
+        self.assertEqual(normalized.retrieval_metadata["last_updated_epoch"], 200)
+
+    def test_normalize_search_result_preserves_nested_provider_trust_fields(self) -> None:
+        result = normalize_search_result(
+            {
+                "provider": {
+                    "provider_id": "provider-123",
+                    "name": "Harmony Family Clinic",
+                    "source": "ClinicalTables",
+                    "insurance_network_verification": {
+                        "status": "verified",
+                        "verified": True,
+                        "basis": "Plan directory confirmed.",
+                        "source": "Aetna directory",
+                    },
+                    "accepting_new_patients_status": {
+                        "status": "accepting",
+                        "verified": True,
+                        "basis": "Office confirmed this week.",
+                        "source": "Clinic staff",
+                    },
+                    "medicare_opt_out": {
+                        "opted_out": False,
+                    },
+                    "retrieval_metadata": {
+                        "last_updated_epoch": 200,
+                    },
+                },
+                "score": 0.875,
+                "source": "ClinicalTables",
+                "retriever_metadata": {
+                    "similarity": 0.875,
+                    "node_id": "node-1",
+                },
+            }
+        )
+
+        self.assertEqual(result.provider.provider_id, "provider-123")
+        self.assertEqual(result.provider.insurance_network_verification.status, "verified")
+        self.assertTrue(result.provider.accepting_new_patients_status.verified)
+        self.assertIsNotNone(result.provider.medicare_opt_out)
+        assert result.provider.medicare_opt_out is not None
+        self.assertFalse(result.provider.medicare_opt_out.opted_out)
+        self.assertEqual(result.provider.retrieval_metadata["last_updated_epoch"], 200)
+        self.assertEqual(result.source, "ClinicalTables")
+
 
 class ProviderSearchCacheTests(unittest.TestCase):
     def test_resolve_provider_cache_path_prefers_configured_directory(self) -> None:
@@ -131,4 +285,3 @@ class ProviderSearchCacheTests(unittest.TestCase):
 
             self.assertTrue(cache.set(entry))
             self.assertEqual(cache.get("cache-key-1"), entry)
-

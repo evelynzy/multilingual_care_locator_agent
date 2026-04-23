@@ -48,6 +48,7 @@ class VerificationStatus:
     status: str
     verified: bool
     basis: str
+    source: Optional[str] = None
 
 
 @dataclass(frozen=True)
