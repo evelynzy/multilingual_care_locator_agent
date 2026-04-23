@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping, Optional
 
 from provider_search.models import (
     CanonicalProvider,
+    MedicareOptOutStatus,
     PrimitiveMetadataValue,
     ProviderSearchRequest,
     ProviderSearchResult,
@@ -122,6 +123,10 @@ def build_canonical_provider(
     specialties: Optional[Iterable[Any]] = None,
     languages: Optional[Iterable[Any]] = None,
     insurance_reported: Optional[Iterable[Any]] = None,
+    insurance_network_verification: Optional[VerificationStatus | Mapping[str, Any]] = None,
+    accepting_new_patients_status: Optional[VerificationStatus | Mapping[str, Any]] = None,
+    medicare_opt_out: Optional[MedicareOptOutStatus | Mapping[str, Any]] = None,
+    provenance: Optional[Mapping[str, Any]] = None,
     raw: Optional[dict[str, Any]] = None,
     retrieval_metadata: Optional[dict[str, Any]] = None,
     ranking_metadata: Optional[dict[str, Any]] = None,
@@ -130,6 +135,14 @@ def build_canonical_provider(
     normalized_specialties = list(ensure_string_list(specialties))
     if normalized_taxonomy and normalized_taxonomy not in normalized_specialties:
         normalized_specialties.append(normalized_taxonomy)
+
+    normalized_source = optional_string(source_name)
+    normalized_dataset = optional_string(dataset)
+    normalized_provenance = _normalize_object_dict(provenance)
+    if normalized_source:
+        normalized_provenance.setdefault("source", normalized_source)
+    if normalized_dataset:
+        normalized_provenance.setdefault("dataset", normalized_dataset)
 
     return CanonicalProvider(
         provider_id=optional_string(provider_id) or "",
@@ -144,29 +157,67 @@ def build_canonical_provider(
         phone=optional_string(phone),
         website=optional_string(website),
         taxonomy=normalized_taxonomy,
-        source=optional_string(source_name),
-        insurance_network_verification=VerificationStatus(
-            status="unverified",
-            verified=False,
-            basis=INSURANCE_UNVERIFIED_BASIS,
+        source=normalized_source,
+        insurance_network_verification=_normalize_verification_status(
+            insurance_network_verification,
+            default_status="unverified",
+            default_basis=INSURANCE_UNVERIFIED_BASIS,
+            default_source=normalized_source,
         ),
-        accepting_new_patients_status=VerificationStatus(
-            status="unknown",
-            verified=False,
-            basis=NEW_PATIENTS_UNKNOWN_BASIS,
+        accepting_new_patients_status=_normalize_verification_status(
+            accepting_new_patients_status,
+            default_status="unknown",
+            default_basis=NEW_PATIENTS_UNKNOWN_BASIS,
+            default_source=normalized_source,
         ),
-        provenance={
-            "source": source_name,
-            "dataset": dataset,
-        },
-        retrieval_metadata=retrieval_metadata or {},
-        ranking_metadata=ranking_metadata or {},
+        medicare_opt_out=_normalize_medicare_opt_out_status(medicare_opt_out),
+        provenance=normalized_provenance,
+        retrieval_metadata=_normalize_object_dict(retrieval_metadata),
+        ranking_metadata=_normalize_object_dict(ranking_metadata),
         raw=raw or {},
     )
 
 
-def normalize_provider(raw_provider: Mapping[str, object]) -> CanonicalProvider:
+def normalize_provider(
+    raw_provider: Mapping[str, object] | CanonicalProvider,
+) -> CanonicalProvider:
     """Map raw provider payloads from different sources onto one typed model."""
+
+    if isinstance(raw_provider, CanonicalProvider):
+        return CanonicalProvider(
+            provider_id=optional_string(raw_provider.provider_id) or "",
+            name=optional_string(raw_provider.name) or "Unknown Provider",
+            specialties=ensure_string_list(raw_provider.specialties),
+            languages=ensure_string_list(raw_provider.languages),
+            insurance_reported=ensure_string_list(raw_provider.insurance_reported),
+            address=optional_string(raw_provider.address),
+            city=optional_string(raw_provider.city),
+            state=optional_string(raw_provider.state),
+            country=optional_string(raw_provider.country),
+            phone=optional_string(raw_provider.phone),
+            website=optional_string(raw_provider.website),
+            telehealth=raw_provider.telehealth if isinstance(raw_provider.telehealth, bool) else None,
+            description=optional_string(raw_provider.description),
+            source=optional_string(raw_provider.source),
+            taxonomy=optional_string(raw_provider.taxonomy),
+            insurance_network_verification=_normalize_verification_status(
+                raw_provider.insurance_network_verification,
+                default_status="unverified",
+                default_basis=INSURANCE_UNVERIFIED_BASIS,
+                default_source=optional_string(raw_provider.source),
+            ),
+            accepting_new_patients_status=_normalize_verification_status(
+                raw_provider.accepting_new_patients_status,
+                default_status="unknown",
+                default_basis=NEW_PATIENTS_UNKNOWN_BASIS,
+                default_source=optional_string(raw_provider.source),
+            ),
+            medicare_opt_out=_normalize_medicare_opt_out_status(raw_provider.medicare_opt_out),
+            provenance=_normalize_object_dict(raw_provider.provenance),
+            retrieval_metadata=_normalize_object_dict(raw_provider.retrieval_metadata),
+            ranking_metadata=_normalize_object_dict(raw_provider.ranking_metadata),
+            raw=dict(raw_provider.raw),
+        )
 
     provider_id = normalize_text(
         raw_provider.get("id", raw_provider.get("provider_id", ""))
@@ -199,9 +250,24 @@ def normalize_provider(raw_provider: Mapping[str, object]) -> CanonicalProvider:
         description=normalize_text(raw_provider.get("description")),
         source=source,
         taxonomy=normalize_text(raw_provider.get("taxonomy")),
-        provenance=dict(provenance) if isinstance(provenance, Mapping) else {},
-        retrieval_metadata=_normalize_metadata(raw_provider.get("retrieval_metadata")),
-        ranking_metadata=_normalize_metadata(raw_provider.get("ranking_metadata")),
+        insurance_network_verification=_normalize_verification_status(
+            raw_provider.get("insurance_network_verification"),
+            default_status="unverified",
+            default_basis=INSURANCE_UNVERIFIED_BASIS,
+            default_source=source,
+        ),
+        accepting_new_patients_status=_normalize_verification_status(
+            raw_provider.get("accepting_new_patients_status"),
+            default_status="unknown",
+            default_basis=NEW_PATIENTS_UNKNOWN_BASIS,
+            default_source=source,
+        ),
+        medicare_opt_out=_normalize_medicare_opt_out_status(
+            raw_provider.get("medicare_opt_out")
+        ),
+        provenance=_normalize_object_dict(provenance),
+        retrieval_metadata=_normalize_object_dict(raw_provider.get("retrieval_metadata")),
+        ranking_metadata=_normalize_object_dict(raw_provider.get("ranking_metadata")),
         raw=dict(raw_provider.get("raw")) if isinstance(raw_provider.get("raw"), Mapping) else {},
     )
 
@@ -216,13 +282,72 @@ def normalize_search_result(raw_result: Mapping[str, object]) -> ProviderSearchR
 
     metadata = _normalize_metadata(raw_result.get("retriever_metadata"))
     source = normalize_text(raw_result.get("source"))
-    provider = normalize_provider(raw_result)
+    provider_payload = raw_result.get("provider")
+    if isinstance(provider_payload, (Mapping, CanonicalProvider)):
+        provider = normalize_provider(provider_payload)
+    else:
+        provider = normalize_provider(raw_result)
 
     return ProviderSearchResult(
         provider=provider,
         score=score,
         source=source or provider.source,
         retriever_metadata=metadata,
+    )
+
+
+def _normalize_verification_status(
+    value: object,
+    *,
+    default_status: str,
+    default_basis: str,
+    default_source: Optional[str] = None,
+) -> VerificationStatus:
+    if isinstance(value, VerificationStatus):
+        return VerificationStatus(
+            status=optional_string(value.status) or default_status,
+            verified=value.verified if isinstance(value.verified, bool) else False,
+            basis=optional_string(value.basis) or default_basis,
+            source=optional_string(value.source) or default_source,
+        )
+
+    if isinstance(value, Mapping):
+        verified_value = value.get("verified")
+        verified = verified_value if isinstance(verified_value, bool) else False
+        return VerificationStatus(
+            status=optional_string(value.get("status")) or default_status,
+            verified=verified,
+            basis=optional_string(value.get("basis")) or default_basis,
+            source=optional_string(value.get("source")) or default_source,
+        )
+
+    return VerificationStatus(
+        status=default_status,
+        verified=False,
+        basis=default_basis,
+        source=default_source,
+    )
+
+
+def _normalize_medicare_opt_out_status(
+    value: object,
+) -> Optional[MedicareOptOutStatus]:
+    if isinstance(value, MedicareOptOutStatus):
+        return MedicareOptOutStatus(
+            opted_out=value.opted_out if isinstance(value.opted_out, bool) else None,
+            optout_effective_date=optional_string(value.optout_effective_date),
+            optout_end_date=optional_string(value.optout_end_date),
+        )
+
+    if not isinstance(value, Mapping):
+        return None
+
+    opted_out_value = value.get("opted_out")
+    opted_out = opted_out_value if isinstance(opted_out_value, bool) else None
+    return MedicareOptOutStatus(
+        opted_out=opted_out,
+        optout_effective_date=optional_string(value.get("optout_effective_date")),
+        optout_end_date=optional_string(value.get("optout_end_date")),
     )
 
 
@@ -239,3 +364,26 @@ def _normalize_metadata(value: object) -> dict[str, PrimitiveMetadataValue]:
             normalized[normalized_key] = item
 
     return normalized
+
+
+def _normalize_object_dict(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+
+    normalized: dict[str, Any] = {}
+    for key, item in value.items():
+        normalized_key = normalize_text(key)
+        if normalized_key is None:
+            continue
+        normalized[normalized_key] = _normalize_object_value(item)
+    return normalized
+
+
+def _normalize_object_value(value: object) -> Any:
+    if isinstance(value, Mapping):
+        return _normalize_object_dict(value)
+    if isinstance(value, (list, tuple)):
+        return [_normalize_object_value(item) for item in value]
+    if isinstance(value, str):
+        return optional_string(value)
+    return value
