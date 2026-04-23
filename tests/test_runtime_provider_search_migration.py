@@ -1139,14 +1139,12 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual(len(client.calls), 2)
-        self.assertEqual(len(source.calls), 4)
+        self.assertEqual(len(source.calls), 2)
         _, first_request = source.calls[0]
-        _, retry_request = source.calls[2]
         self.assertEqual(first_request.search_terms, "Dentistry")
         self.assertEqual(first_request.query_filter, "addr_practice.zip:33012")
-        self.assertEqual(retry_request.search_terms, "Dentistry")
-        self.assertEqual(retry_request.query_filter, "addr_practice.state:FL")
-        self.assertIn("Miami Lakes Dentistry Center", result)
+        self.assertIn("Florida Children&#x27;s Dentistry, P.A.", result)
+        self.assertNotIn("Miami Lakes Dentistry Center", result)
 
     def test_handle_request_uses_emergency_fallback_when_final_model_response_is_truncated(self) -> None:
         service = Mock()
@@ -1573,7 +1571,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertNotIn("Medicare Care Compare", result)
         self.assertNotIn("Trusted public directories", result)
 
-    def test_handle_request_dentista_33012_uses_same_state_nearby_retry_before_fallback(self) -> None:
+    def test_handle_request_dentista_33012_admits_local_dentistry_descendants_before_fallback(self) -> None:
         local_zip_providers = [
             build_canonical_provider(
                 provider_id="provider-local-1",
@@ -1651,67 +1649,56 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(len(source.calls), 4)
-        self.assertIn("Miami Lakes Dentistry Center", result)
+        self.assertEqual(len(source.calls), 2)
+        self.assertIn("Florida Children&#x27;s Dentistry, P.A.", result)
+        self.assertIn("Hialeah Square Dentistry, PA", result)
+        self.assertIn("Caplin and Gober Dentistry, PA", result)
+        self.assertNotIn("Miami Lakes Dentistry Center", result)
         self.assertNotIn("Medicare Care Compare", result)
         trusted_fallback.assert_not_called()
 
-    def test_handle_request_dentista_33012_renders_two_cards_when_nearby_retry_has_duplicate_pair(self) -> None:
+    def test_handle_request_dentista_33012_renders_two_cards_when_local_duplicate_pair_crowds_limit(self) -> None:
         local_zip_providers = [
             build_canonical_provider(
-                provider_id="provider-local-1",
+                provider_id="provider-local-individual",
                 name="Florida Children's Dentistry, P.A.",
-                source_name="NPI Registry (organization)",
-                dataset="npi_org",
+                source_name="NPI Registry (individual)",
+                dataset="npi_idv",
+                address="123 Palm Ave",
                 city="Hialeah",
                 state="FL",
                 taxonomy="Dentist",
-                specialties=("Dentist",),
+                specialties=("Dentist", "Dentist, Pediatric Dentistry"),
+                phone="305-555-0101",
+            ),
+            build_canonical_provider(
+                provider_id="provider-local-org",
+                name="Florida Children's Dentistry, P.A.",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                address="123 Palm Ave",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist", "Dentist, Pediatric Dentistry"),
+                phone="305-555-0101",
+            ),
+            build_canonical_provider(
+                provider_id="provider-local-second",
+                name="Zzz Family Dental",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                address="900 Pine St",
+                city="Miami",
+                state="FL",
+                taxonomy="Dentistry",
+                specialties=("Dentistry",),
+                phone="305-555-0102",
             ),
         ]
-        duplicate_nearby_individual = build_canonical_provider(
-            provider_id="provider-nearby-individual",
-            name="Miami Lakes Dentistry Center",
-            source_name="NPI Registry (individual)",
-            dataset="npi_idv",
-            address="789 Oak Ave",
-            city="Miami Lakes",
-            state="FL",
-            taxonomy="Dentistry",
-            specialties=("Dentistry",),
-            phone="305-555-0101",
-        )
-        duplicate_nearby_org = build_canonical_provider(
-            provider_id="provider-nearby-org",
-            name="Miami Lakes Dentistry Center",
-            source_name="NPI Registry (organization)",
-            dataset="npi_org",
-            address="789 Oak Ave",
-            city="Miami Lakes",
-            state="FL",
-            taxonomy="Dentistry",
-            specialties=("Dentistry",),
-            phone="305-555-0101",
-        )
-        second_visible_provider = build_canonical_provider(
-            provider_id="provider-nearby-second",
-            name="Zzz Family Dental",
-            source_name="NPI Registry (organization)",
-            dataset="npi_org",
-            address="900 Pine St",
-            city="Miami",
-            state="FL",
-            taxonomy="Dentistry",
-            specialties=("Dentistry",),
-            phone="305-555-0102",
-        )
         source = _NearbyDentalClinicalTablesSource(
             local_zip_providers,
-            [
-                duplicate_nearby_individual,
-                duplicate_nearby_org,
-                second_visible_provider,
-            ],
+            [],
         )
         service = ProviderSearchService(
             clinicaltables_source=source,
@@ -1743,9 +1730,9 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(len(source.calls), 8)
+        self.assertEqual(len(source.calls), 4)
         self.assertEqual(result.count("provider-card__title"), 2)
-        self.assertIn('<div class="provider-card__title">1. Miami Lakes Dentistry Center</div>', result)
+        self.assertIn('<div class="provider-card__title">1. Florida Children&#x27;s Dentistry, P.A.</div>', result)
         self.assertIn('<div class="provider-card__title">2. Zzz Family Dental</div>', result)
 
 
