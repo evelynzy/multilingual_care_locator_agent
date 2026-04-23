@@ -35,7 +35,10 @@ class RetryAwareClinicalTablesSource:
 
     def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
         self.calls.append((dataset, request))
-        if request.search_terms == "Dallas, TX 75001":
+        if (
+            request.search_terms == "Dermatology"
+            and request.query_filter == "addr_practice.state:TX"
+        ):
             provider = build_canonical_provider(
                 provider_id="provider-location-retry",
                 name="Dallas Family Clinic",
@@ -67,13 +70,22 @@ class RetryAwareClinicalTablesSource:
 
 
 class PediatricRetryClinicalTablesSource:
-    def __init__(self, location_only_providers: list) -> None:
-        self.location_only_providers = location_only_providers
+    def __init__(
+        self,
+        specialty_retry_providers: list,
+        *,
+        location_only_providers: list | None = None,
+    ) -> None:
+        self.specialty_retry_providers = list(specialty_retry_providers)
+        self.location_only_providers = list(location_only_providers or [])
         self.calls: list[tuple[str, object]] = []
 
     def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
         self.calls.append((dataset, request))
-        if request.search_terms == "Pediatrics":
+        if (
+            request.search_terms == "Pediatrics pediatric child health"
+            and request.query_filter == "addr_practice.state:NY AND addr_practice.zip:10013"
+        ):
             return SourceSearchResult(
                 providers=[],
                 trace=SourceTrace(
@@ -81,6 +93,19 @@ class PediatricRetryClinicalTablesSource:
                     dataset=dataset,
                     status_code=200,
                     result_count=0,
+                ),
+            )
+        if (
+            request.search_terms == "Pediatrics pediatric child health"
+            and request.query_filter == "addr_practice.state:NY"
+        ):
+            return SourceSearchResult(
+                providers=list(self.specialty_retry_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.specialty_retry_providers),
                 ),
             )
         if request.search_terms == "Manhattan, NY 10013":
@@ -830,7 +855,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             "addr_practice.state:TX AND addr_practice.zip:75001",
         )
 
-    def test_search_retries_with_location_only_terms_when_specialty_search_survives_no_candidates(self) -> None:
+    def test_search_retries_with_relaxed_location_filter_when_specialty_search_survives_no_candidates(self) -> None:
         source = RetryAwareClinicalTablesSource()
         service = ProviderSearchService(
             clinicaltables_source=source,
@@ -851,16 +876,26 @@ class ProviderSearchServiceTests(unittest.TestCase):
         _, first_request = source.calls[0]
         _, retry_request = source.calls[1]
         self.assertEqual(first_request.search_terms, "Dermatology")
-        self.assertEqual(retry_request.search_terms, "Dallas, TX 75001")
+        self.assertEqual(retry_request.search_terms, "Dermatology")
         self.assertEqual(
             first_request.query_filter,
             "addr_practice.state:TX AND addr_practice.zip:75001",
         )
-        self.assertEqual(retry_request.query_filter, first_request.query_filter)
+        self.assertEqual(retry_request.query_filter, "addr_practice.state:TX")
         self.assertEqual(len(response.provider_results), 1)
         self.assertEqual(response.provider_results[0].provider.name, "Dallas Family Clinic")
 
-    def test_search_returns_zero_results_when_location_only_retry_only_finds_irrelevant_org(self) -> None:
+    def test_search_retries_pediatric_request_with_specialty_terms_instead_of_location_only(self) -> None:
+        pediatric_provider = build_canonical_provider(
+            provider_id="provider-peds",
+            name="Canal Pediatrics",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Pediatrics",
+            specialties=("Pediatrics",),
+        ).with_updates(description="Pediatric and child health visits.")
         radiology_provider = build_canonical_provider(
             provider_id="provider-radiology",
             name="Downtown Imaging Associates",
@@ -871,7 +906,14 @@ class ProviderSearchServiceTests(unittest.TestCase):
             taxonomy="Diagnostic Radiology",
             specialties=("Diagnostic Radiology",),
         )
-        source = PediatricRetryClinicalTablesSource([radiology_provider])
+        location_only_providers = [
+            radiology_provider.with_updates(provider_id=f"provider-radiology-{index}")
+            for index in range(15)
+        ]
+        source = PediatricRetryClinicalTablesSource(
+            [pediatric_provider],
+            location_only_providers=location_only_providers,
+        )
         service = ProviderSearchService(
             clinicaltables_source=source,
             cache=None,
@@ -889,7 +931,20 @@ class ProviderSearchServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(len(source.calls), 2)
-        self.assertEqual(len(response.provider_results), 0)
+        _, first_request = source.calls[0]
+        _, retry_request = source.calls[1]
+        self.assertEqual(
+            first_request.search_terms,
+            "Pediatrics pediatric child health",
+        )
+        self.assertEqual(retry_request.search_terms, first_request.search_terms)
+        self.assertEqual(
+            first_request.query_filter,
+            "addr_practice.state:NY AND addr_practice.zip:10013",
+        )
+        self.assertEqual(retry_request.query_filter, "addr_practice.state:NY")
+        self.assertEqual(len(response.provider_results), 1)
+        self.assertEqual(response.provider_results[0].provider.name, "Canal Pediatrics")
         self.assertEqual(response.search_trace.total_candidates, 1)
 
     def test_search_keeps_only_relevant_pediatric_result_when_retry_returns_mixed_candidates(self) -> None:
@@ -933,6 +988,10 @@ class ProviderSearchServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(len(source.calls), 2)
+        _, first_request = source.calls[0]
+        _, retry_request = source.calls[1]
+        self.assertEqual(retry_request.search_terms, first_request.search_terms)
+        self.assertEqual(retry_request.query_filter, "addr_practice.state:NY")
         self.assertEqual(len(response.provider_results), 1)
         result = response.provider_results[0]
         self.assertEqual(result.provider.name, "Canal Pediatrics")

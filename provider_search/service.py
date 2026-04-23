@@ -75,18 +75,14 @@ class ProviderSearchService:
             source_request
         )
 
-        if self._should_retry_with_location_only_terms(
+        if self._should_retry_search(
             request=normalized_request,
             source_request=source_request,
             source_traces=source_traces,
             deduped_providers=deduped_providers,
             missing_location_hint=missing_location_hint,
         ):
-            retry_request = self._build_source_request(
-                normalized_request,
-                limit=limit,
-                location_only=True,
-            )
+            retry_request = self._build_retry_source_request(normalized_request, limit=limit)
             retry_traces, retry_missing_location_hint, retry_candidates = (
                 self._collect_source_candidates(retry_request)
             )
@@ -235,6 +231,7 @@ class ProviderSearchService:
         *,
         limit: int,
         location_only: bool = False,
+        relax_location_filter: bool = False,
     ) -> SourceSearchRequest:
         city_hint, state_hint, zip_hint = self._extract_location_hints(request.location)
         search_terms = self._compose_search_terms(request, location_only=location_only)
@@ -242,6 +239,7 @@ class ProviderSearchService:
             city_hint=city_hint,
             state_hint=state_hint,
             zip_hint=zip_hint,
+            relax_location_filter=relax_location_filter,
         )
         return SourceSearchRequest(
             search_terms=search_terms,
@@ -250,6 +248,24 @@ class ProviderSearchService:
             city_hint=city_hint,
             state_hint=state_hint,
             zip_hint=zip_hint,
+        )
+
+    def _build_retry_source_request(
+        self,
+        request: ProviderSearchRequest,
+        *,
+        limit: int,
+    ) -> SourceSearchRequest:
+        if request.specialties:
+            return self._build_source_request(
+                request,
+                limit=limit,
+                relax_location_filter=True,
+            )
+        return self._build_source_request(
+            request,
+            limit=limit,
+            location_only=True,
         )
 
     def _collect_source_candidates(
@@ -344,7 +360,7 @@ class ProviderSearchService:
         return " ".join(term for term in terms if term).strip()
 
     @staticmethod
-    def _should_retry_with_location_only_terms(
+    def _should_retry_search(
         *,
         request: ProviderSearchRequest,
         source_request: SourceSearchRequest,
@@ -413,11 +429,14 @@ class ProviderSearchService:
         city_hint: Optional[str],
         state_hint: Optional[str],
         zip_hint: Optional[str],
+        relax_location_filter: bool = False,
     ) -> Optional[str]:
         filters: list[str] = []
 
         if state_hint:
             filters.append(f"addr_practice.state:{state_hint}")
+            if relax_location_filter:
+                return " AND ".join(filters)
 
         if zip_hint:
             filters.append(f"addr_practice.zip:{zip_hint}")
