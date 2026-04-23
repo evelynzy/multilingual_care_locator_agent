@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import datetime, timezone
 import logging
+import os
 import re
 from typing import Optional, Protocol, Sequence
 
@@ -109,6 +110,14 @@ class ProviderSearchService:
             cached_provider_ids=cache_entry.provider_ids if cache_entry is not None else (),
         )
         display_results = self._dedupe_display_results(ranked_results)
+        self._log_debug_summary(
+            request_fingerprint=request_fingerprint,
+            cache_hit=cache_entry is not None,
+            source_traces=source_traces,
+            total_candidates=len(deduped_providers),
+            ranked_results=ranked_results,
+            display_results=display_results,
+        )
 
         sources_attempted = tuple(self._trace_label(trace) for trace in source_traces)
         sources_used = tuple(
@@ -146,6 +155,45 @@ class ProviderSearchService:
                 total_candidates=len(deduped_providers),
             ),
         )
+
+    def _log_debug_summary(
+        self,
+        *,
+        request_fingerprint: str,
+        cache_hit: bool,
+        source_traces: Sequence[SourceTrace],
+        total_candidates: int,
+        ranked_results: Sequence["ProviderSearchResult"],
+        display_results: Sequence["ProviderSearchResult"],
+    ) -> None:
+        if not self._debug_enabled():
+            return
+
+        logger.info(
+            "provider_search_debug request_fingerprint=%s cache_hit=%s raw_candidates=%s post_gate=%s post_display_dedupe=%s",
+            request_fingerprint,
+            cache_hit,
+            total_candidates,
+            len(ranked_results),
+            len(display_results),
+        )
+        for trace in source_traces:
+            logger.info(
+                "provider_search_debug_source dataset=%s result_count=%s error=%s",
+                trace.dataset or "unknown",
+                trace.result_count,
+                trace.error or "none",
+            )
+        for result in display_results:
+            display_dedupe_count = result.retriever_metadata.get("display_dedupe_count")
+            display_dedupe_ids = result.retriever_metadata.get("display_dedupe_provider_ids")
+            if display_dedupe_count or display_dedupe_ids:
+                logger.info(
+                    "provider_search_debug_display provider_id=%s display_dedupe_count=%s display_dedupe_provider_ids=%s",
+                    result.provider.provider_id,
+                    display_dedupe_count or 0,
+                    display_dedupe_ids or [],
+                )
 
     def _dedupe_display_results(
         self,
@@ -512,3 +560,7 @@ class ProviderSearchService:
                 if source not in sources:
                     sources.append(source)
         return sources
+
+    @staticmethod
+    def _debug_enabled() -> bool:
+        return os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() == "1"

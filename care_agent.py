@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import unicodedata
 from html import escape
@@ -916,6 +917,16 @@ class CareLocatorAgent:
                 ]
                 logger.info(
                     "Trusted resource fallback results=%s", len(fallback_results)
+                )
+            if os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() == "1":
+                logger.info(
+                    "care_agent_result_debug request_fingerprint=%s local_results=%s fallback_results=%s final_visible=%s had_source_failures=%s missing_location_hint=%s",
+                    search_response.search_trace.request_fingerprint,
+                    len(local_results),
+                    len(fallback_results),
+                    len(local_results) + len(fallback_results),
+                    had_source_failures,
+                    bool(missing_location_hint),
                 )
         else:
             logger.info("Parsed request marked as non-medical; skipping provider search")

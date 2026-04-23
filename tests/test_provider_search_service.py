@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from provider_search.models import (
     FreshnessMetadata,
@@ -559,6 +560,70 @@ class ProviderSearchServiceTests(unittest.TestCase):
             cache.set_entries[-1].provider_ids,
             ("1111111111", "2222222222"),
         )
+
+    def test_search_logs_opt_in_debug_counts_for_single_result_analysis(self) -> None:
+        provider_from_individual_dataset = build_canonical_provider(
+            provider_id="1111111111",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            address="123 Main St",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+        )
+        provider_from_org_dataset = build_canonical_provider(
+            provider_id="2222222222",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            address="123 Main St",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+        )
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[provider_from_individual_dataset],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=1),
+                ),
+                "npi_org": SourceSearchResult(
+                    providers=[provider_from_org_dataset],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_org", result_count=1),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            per_dataset_limit=5,
+        )
+
+        with patch.dict("os.environ", {"PROVIDER_SEARCH_DEBUG": "1"}):
+            with self.assertLogs("provider_search.service", level="INFO") as captured:
+                service.search(
+                    ProviderSearchRequest(
+                        specialties=("Primary Care",),
+                        location="Dallas, TX 75001",
+                    ),
+                    limit=5,
+                )
+
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("provider_search_debug request_fingerprint=", joined_logs)
+        self.assertIn("raw_candidates=2", joined_logs)
+        self.assertIn("post_gate=2", joined_logs)
+        self.assertIn("post_display_dedupe=1", joined_logs)
+        self.assertIn("provider_search_debug_source dataset=npi_idv result_count=1 error=none", joined_logs)
+        self.assertIn("provider_search_debug_source dataset=npi_org result_count=1 error=none", joined_logs)
+        self.assertIn("provider_search_debug_display", joined_logs)
+        self.assertIn("display_dedupe_count=2", joined_logs)
+        self.assertIn("display_dedupe_provider_ids=['1111111111', '2222222222']", joined_logs)
 
     def test_search_degrades_when_cache_backend_fails(self) -> None:
         provider = build_canonical_provider(
