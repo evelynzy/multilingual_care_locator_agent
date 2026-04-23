@@ -130,15 +130,7 @@ class _SequencedChatClient:
 
 class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
     def setUp(self) -> None:
-        with patch.object(
-            CareLocatorAgent,
-            "_initialize_clinicaltables_field_maps",
-            return_value=None,
-        ):
-            self.agent = CareLocatorAgent(
-                provider_repository=Mock(),
-                provider_search_service=Mock(),
-            )
+        self.agent = CareLocatorAgent(provider_search_service=Mock())
 
         provider = build_canonical_provider(
             provider_id="1619271780",

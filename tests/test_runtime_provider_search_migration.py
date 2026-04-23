@@ -81,12 +81,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             ),
         )
 
-        with patch.object(
-            CareLocatorAgent,
-            "_initialize_clinicaltables_field_maps",
-            return_value=None,
-        ):
-            agent = CareLocatorAgent(provider_search_service=service)
+        agent = CareLocatorAgent(provider_search_service=service)
 
         query = ParsedCareQuery(
             detected_language="English",
@@ -128,12 +123,12 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn('Source</span><span class="provider-card__meta-value">NPI Registry (individual)</span>', result)
         self.assertIn('Listed insurance</span><span class="provider-card__value">Medicare, Aetna (reported only; network participation is not verified here)</span>', result)
 
-    def test_default_init_works_without_cache_path_or_local_repository(self) -> None:
+    def test_default_init_works_without_cache_path_or_legacy_repository_dependency(self) -> None:
         with patch("provider_search.cache.resolve_provider_cache_path", return_value=None):
             agent = CareLocatorAgent()
 
         self.assertIsNotNone(agent.provider_search_service)
-        self.assertIsNone(agent.provider_repository)
+        self.assertFalse(hasattr(agent, "provider_repository"))
         self.assertFalse(agent.provider_search_service.cache.enabled)
 
 
