@@ -4,7 +4,7 @@ import json
 import re
 import unicodedata
 from html import escape
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import logging
@@ -13,7 +13,17 @@ import requests
 from huggingface_hub import InferenceClient
 
 from config_loader import get_prompt, get_search_settings
-from retriever import ProviderRepository, SearchCriteria
+from provider_search import (
+    ProviderSearchRequest,
+    ProviderSearchService,
+    SQLiteProviderSearchCache,
+    normalize_search_result,
+)
+from provider_search.sources import (
+    ClinicalTablesDatasetConfig,
+    ClinicalTablesSource,
+    NPPESSource,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -617,8 +627,12 @@ class ParsedCareQuery:
 class CareLocatorAgent:
     """Coordinates LLM reasoning, dataset search, and fallback lookups."""
 
-    def __init__(self, provider_repository: Optional[ProviderRepository] = None) -> None:
-        self.provider_repository = provider_repository or ProviderRepository()
+    def __init__(
+        self,
+        provider_repository: Optional[Any] = None,
+        provider_search_service: Optional[ProviderSearchService] = None,
+    ) -> None:
+        self.provider_repository = provider_repository
         self.prompts = {
             "interpret": get_prompt("interpret_user_need"),
             "response_system": get_prompt("response_system"),
@@ -761,8 +775,9 @@ class CareLocatorAgent:
             rf"{city_pattern}{separator_pattern}(?P<state>{state_name_pattern})\b",
             re.IGNORECASE,
         )
-
-        self._initialize_clinicaltables_field_maps()
+        self.provider_search_service = (
+            provider_search_service or self._build_provider_search_service()
+        )
 
     # ------------------------------------------------------------------
     def handle_request(
@@ -855,40 +870,48 @@ class CareLocatorAgent:
         missing_location_hint = None
 
         if parsed_query.medical_need:
-            search_criteria = SearchCriteria(
-                specialties=parsed_query.specialties,
+            provider_request = ProviderSearchRequest(
+                specialties=tuple(parsed_query.specialties),
                 location=parsed_query.location,
-                insurance=parsed_query.insurance,
-                preferred_languages=parsed_query.preferred_languages,
-                keywords=parsed_query.keywords,
+                insurance=tuple(parsed_query.insurance),
+                preferred_languages=tuple(parsed_query.preferred_languages),
+                keywords=tuple(parsed_query.keywords),
             )
+            search_response = self.provider_search_service.search(
+                provider_request,
+                limit=self.ctss_max_results,
+            )
+            missing_location_hint = search_response.missing_location_hint
 
             local_results = [
-                self._normalize_result_trust_metadata(result)
-                for result in self.provider_repository.search(search_criteria)
-            ]
-            logger.info("Local semantic search results=%s", len(local_results))
-
-            if not local_results:
-                fallback_results, missing_location_hint = self._search_clinicaltables(
-                    parsed_query,
-                    limit=self.ctss_max_results,
+                self._normalize_result_trust_metadata(
+                    self._provider_search_result_to_payload(result)
                 )
+                for result in search_response.provider_results
+            ]
+            logger.info(
+                "ProviderSearchService results=%s cache_hit=%s candidates=%s",
+                len(local_results),
+                search_response.search_trace.cache_hit,
+                search_response.search_trace.total_candidates,
+            )
+
+            if search_response.fallback_resources:
+                fallback_results = [
+                    self._normalize_result_trust_metadata(
+                        self._fallback_resource_to_payload(resource, parsed_query)
+                    )
+                    for resource in search_response.fallback_resources
+                ]
+
+            if not local_results and not fallback_results and not missing_location_hint:
                 fallback_results = [
                     self._normalize_result_trust_metadata(result)
-                    for result in fallback_results
+                    for result in self._trusted_resource_fallback(parsed_query)
                 ]
                 logger.info(
-                    "ClinicalTables fallback results=%s", len(fallback_results)
+                    "Trusted resource fallback results=%s", len(fallback_results)
                 )
-                if not fallback_results and not missing_location_hint:
-                    fallback_results = [
-                        self._normalize_result_trust_metadata(result)
-                        for result in self._trusted_resource_fallback(parsed_query)
-                    ]
-                    logger.info(
-                        "Trusted resource fallback results=%s", len(fallback_results)
-                    )
         else:
             logger.info("Parsed request marked as non-medical; skipping provider search")
 
@@ -913,13 +936,7 @@ class CareLocatorAgent:
         elif no_results_found:
             response_payload.setdefault(
                 "notes",
-                "No providers were found in the local dataset or via the ClinicalTables API."
-            )
-
-        if self.provider_repository.load_error and not fallback_only_mode:
-            response_payload["notes"] = (
-                "Local dataset fallback was used because loading the configured Hugging Face "
-                f"dataset failed: {self.provider_repository.load_error}"
+                "No providers were found via the configured provider search sources."
             )
 
         if parsed_query.medical_need and (local_results or fallback_results) and not missing_location_hint:
@@ -3023,6 +3040,74 @@ class CareLocatorAgent:
         return suggestions
 
     # ------------------------------------------------------------------
+    def _build_provider_search_service(self) -> ProviderSearchService:
+        nppes_source = NPPESSource(
+            lookup_url=self.npi_registry_url or "https://npiregistry.cms.hhs.gov/api/",
+            version=self.npi_registry_version,
+            timeout=self.npi_registry_timeout,
+        )
+        clinicaltables_source = ClinicalTablesSource(
+            timeout=self.ctss_timeout,
+            dataset_configs=self._provider_search_dataset_configs(),
+            nppes_source=nppes_source if self._npi_registry_enabled else None,
+        )
+        cache = SQLiteProviderSearchCache()
+        return ProviderSearchService(
+            clinicaltables_source=clinicaltables_source,
+            cache=cache,
+            datasets=tuple(self._ctss_dataset_priority),
+            per_dataset_limit=self.ctss_max_results,
+        )
+
+    # ------------------------------------------------------------------
+    def _provider_search_dataset_configs(self) -> dict[str, ClinicalTablesDatasetConfig]:
+        configs: dict[str, ClinicalTablesDatasetConfig] = {}
+        for dataset, config in self.ctss_dataset_configs.items():
+            search_url = config.get("search_url")
+            if not search_url:
+                continue
+            configs[dataset] = ClinicalTablesDatasetConfig(
+                search_url=search_url,
+                values_url=config.get("values_url"),
+                fields_url=config.get("fields_url"),
+                probe_term=config.get("probe_term"),
+                source_label=str(
+                    config.get("source_label") or "NPI Registry via clinicaltables.nlm.nih.gov"
+                ),
+                result_fields=list(config.get("result_fields") or []),
+            )
+        return configs
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _provider_search_result_to_payload(result: Any) -> dict:
+        normalized_result = normalize_search_result(asdict(result))
+        provider_payload = asdict(normalized_result.provider)
+        provider_payload["provider_id"] = normalized_result.provider.provider_id
+        provider_payload["source"] = normalized_result.source or normalized_result.provider.source
+        provider_payload["location"] = normalized_result.provider.location_summary
+        if normalized_result.score is not None:
+            provider_payload["score"] = normalized_result.score
+        if normalized_result.retriever_metadata:
+            provider_payload["retriever_metadata"] = dict(normalized_result.retriever_metadata)
+        return provider_payload
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _fallback_resource_to_payload(resource: Any, query: ParsedCareQuery) -> dict:
+        resource_dict = asdict(resource)
+        return {
+            "name": resource_dict.get("name"),
+            "location": query.location or "international",
+            "website": resource_dict.get("url"),
+            "description": resource_dict.get("description"),
+            "source": resource_dict.get("source") or "Trusted public directories",
+            "provenance": {
+                "source": resource_dict.get("source") or "Trusted public directories",
+            },
+        }
+
+    # ------------------------------------------------------------------
     def _normalize_result_trust_metadata(self, result: dict) -> dict:
         if not isinstance(result, dict):
             return result
@@ -3244,15 +3329,7 @@ class CareLocatorAgent:
 
     # ------------------------------------------------------------------
     def _should_use_fallback_only_template(self) -> bool:
-        repository = self.provider_repository
-
-        if repository is None:
-            return True
-
-        has_dataset_id = bool(getattr(repository, "dataset_id", None))
-        has_local_records = bool(getattr(repository, "providers", []))
-
-        return (not has_dataset_id) and (not has_local_records)
+        return True
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -3308,7 +3385,7 @@ class CareLocatorAgent:
     def _ensure_list(value: Any) -> List[str]:
         if value is None:
             return []
-        if isinstance(value, list):
+        if isinstance(value, (list, tuple)):
             normalized: List[str] = []
             for item in value:
                 if item is None:
