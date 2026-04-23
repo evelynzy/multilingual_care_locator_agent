@@ -1214,6 +1214,51 @@ class ProviderSearchServiceTests(unittest.TestCase):
             ("Pediatrics",),
         )
 
+    def test_search_keeps_live_style_org_candidate_when_nppes_specialties_include_pediatrics(self) -> None:
+        pediatric_org_provider = build_canonical_provider(
+            provider_id="provider-org-peds",
+            name="Downtown Kids Clinic",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Clinic/Center",
+            specialties=(
+                "Clinic/Center",
+                "Pediatrics",
+                "208000000X",
+                "Pediatric Gastroenterology",
+                "2080P0206X",
+            ),
+        )
+        source = PediatricRetryClinicalTablesSource([pediatric_org_provider])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Pediatrics",),
+                location="Manhattan, NY 10013",
+                keywords=("pediatric", "child health"),
+            ),
+            limit=3,
+        )
+
+        self.assertEqual(len(source.calls), 4)
+        self.assertEqual(len(response.provider_results), 1)
+        result = response.provider_results[0]
+        self.assertEqual(result.provider.name, "Downtown Kids Clinic")
+        self.assertEqual(result.provider.taxonomy, "Clinic/Center")
+        self.assertEqual(
+            result.provider.ranking_metadata.get("matched_specialties"),
+            ("Pediatrics",),
+        )
+        self.assertIn("208000000X", result.provider.specialties)
+
 
 if __name__ == "__main__":
     unittest.main()

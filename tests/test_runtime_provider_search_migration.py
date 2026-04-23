@@ -1052,6 +1052,60 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn("Medicare Care Compare", result)
         self.assertIn("Trusted public directories", result)
 
+    def test_handle_request_pediatric_10013_keeps_live_org_candidate_with_nppes_pediatric_specialties(self) -> None:
+        pediatric_org_provider = build_canonical_provider(
+            provider_id="provider-org-peds",
+            name="Downtown Kids Clinic",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Clinic/Center",
+            specialties=(
+                "Clinic/Center",
+                "Pediatrics",
+                "208000000X",
+                "Pediatric Gastroenterology",
+                "2080P0206X",
+            ),
+            phone="212-555-0101",
+        )
+        source = _PediatricRetryClinicalTablesSource([pediatric_org_provider])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="中文",
+            response_language="中文",
+            summary="儿科10013",
+            medical_need=True,
+            location="Manhattan, NY 10013",
+            specialties=["Pediatrics"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=["pediatric", "child health"],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query):
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "儿科 10013 曼哈顿",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(len(source.calls), 4)
+        self.assertIn("Downtown Kids Clinic", result)
+        self.assertNotIn("Medicare Care Compare", result)
+        self.assertNotIn("Trusted public directories", result)
+
 
 if __name__ == "__main__":
     unittest.main()

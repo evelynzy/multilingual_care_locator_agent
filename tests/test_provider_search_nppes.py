@@ -136,6 +136,52 @@ class NPPESSourceTests(unittest.TestCase):
             },
         )
 
+    def test_enrich_provider_merges_all_taxonomy_descriptions_and_codes_into_specialties(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "results": [
+                {
+                    "addresses": [],
+                    "taxonomies": [
+                        {"desc": "Pediatrics", "code": "208000000X"},
+                        {"desc": "Pediatric Gastroenterology", "code": "2080P0206X"},
+                        {"desc": "Pediatrics", "code": "208000000X"},
+                    ],
+                    "created_epoch": 100,
+                    "last_updated_epoch": 200,
+                }
+            ]
+        }
+
+        session = Mock()
+        session.get.return_value = response
+        source = NPPESSource(session=session)
+
+        provider = build_canonical_provider(
+            provider_id="3333333333",
+            name="Downtown Kids Clinic",
+            taxonomy="Clinic/Center",
+            specialties=("Clinic/Center",),
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            raw={},
+        )
+
+        enriched = source.enrich_provider(provider)
+
+        self.assertEqual(enriched.taxonomy, "Clinic/Center")
+        self.assertEqual(
+            enriched.specialties,
+            (
+                "Clinic/Center",
+                "Pediatrics",
+                "208000000X",
+                "Pediatric Gastroenterology",
+                "2080P0206X",
+            ),
+        )
+
     def test_lookup_returns_none_on_request_failure(self) -> None:
         session = Mock()
         session.get.side_effect = RuntimeError("boom")
