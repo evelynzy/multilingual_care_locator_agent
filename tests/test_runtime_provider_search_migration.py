@@ -195,6 +195,55 @@ class _DuplicatePrimaryCareClinicalTablesSource:
         )
 
 
+class _DifferentServiceLineClinicalTablesSource:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if dataset == "npi_idv":
+            providers = [
+                build_canonical_provider(
+                    provider_id="1111111111",
+                    name="Dallas Family Clinic",
+                    source_name="NPI Registry (organization)",
+                    dataset=dataset,
+                    address="123 Main St",
+                    city="Dallas",
+                    state="TX",
+                    taxonomy="Primary Care",
+                    specialties=("Primary Care",),
+                    phone="214-555-0100",
+                )
+            ]
+        elif dataset == "npi_org":
+            providers = [
+                build_canonical_provider(
+                    provider_id="2222222222",
+                    name="Dallas Family Clinic",
+                    source_name="NPI Registry (organization)",
+                    dataset=dataset,
+                    address="123 Main St",
+                    city="Dallas",
+                    state="TX",
+                    taxonomy="Pediatrics",
+                    specialties=("Pediatrics",),
+                    phone="214-555-0100",
+                )
+            ]
+        else:
+            providers = []
+        return SourceSearchResult(
+            providers=providers,
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=len(providers),
+            ),
+        )
+
+
 class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
     def test_handle_request_uses_provider_search_service_for_provider_cards(self) -> None:
         provider = build_canonical_provider(
@@ -376,6 +425,53 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(result.count("provider-card__title"), 1)
         self.assertIn('<div class="provider-card__title">1. Dallas Family Clinic</div>', result)
         self.assertNotIn("2. Dallas Family Clinic", result)
+
+    def test_handle_request_same_site_different_service_lines_renders_separate_cards(self) -> None:
+        service = ProviderSearchService(
+            clinicaltables_source=_DifferentServiceLineClinicalTablesSource(),
+            cache=None,
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="care 75001",
+            medical_need=True,
+            location="Dallas, TX 75001",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query):
+            with patch.object(
+                agent,
+                "_build_navigation_guidance",
+                return_value={
+                    "mode": "search",
+                    "care_setting_guidance": None,
+                    "follow_up_questions": [],
+                    "specialist_plan_guidance": None,
+                    "location_only": False,
+                },
+            ):
+                result = agent.handle_request(
+                    _SequencedChatClient(),
+                    "care 75001",
+                    [],
+                    max_tokens=256,
+                    temperature=0.2,
+                    top_p=0.9,
+                )
+
+        self.assertEqual(result.count("provider-card__title"), 2)
+        self.assertIn('<div class="provider-card__title">1. Dallas Family Clinic</div>', result)
+        self.assertIn('<div class="provider-card__title">2. Dallas Family Clinic</div>', result)
+        self.assertIn("Primary Care", result)
+        self.assertIn("Pediatrics", result)
 
     def test_handle_request_retries_malformed_interpret_json_then_falls_back_for_missing_final_content(self) -> None:
         service = Mock()
