@@ -666,6 +666,11 @@ _INTERPRET_RESCUE_SPECIALTY_ALIASES: Tuple[Tuple[str, str], ...] = (
     ("orthopedics", "Orthopedic"),
     ("orthopaedic", "Orthopedic"),
     ("urgent care", "Urgent Care"),
+    ("ob gyn", "OB/GYN"),
+    ("obgyn", "OB/GYN"),
+    ("gynecology", "OB/GYN"),
+    ("obstetrics", "OB/GYN"),
+    ("obstetrics and gynecology", "OB/GYN"),
     ("dentista", "Dentistry"),
     ("dentistry", "Dentistry"),
 )
