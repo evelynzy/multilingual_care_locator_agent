@@ -430,6 +430,86 @@ class ProviderSearchServiceTests(unittest.TestCase):
         )
         self.assertEqual(cache.set_entries[-1].provider_ids, (provider.provider_id,))
 
+    def test_search_applies_secondary_display_dedupe_for_duplicate_primary_care_org_results(self) -> None:
+        cache = FakeCache()
+        provider_from_individual_dataset = build_canonical_provider(
+            provider_id="1111111111",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            address="123 Main St",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+        )
+        provider_from_org_dataset = build_canonical_provider(
+            provider_id="2222222222",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            address="123 Main St",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+            freshness=FreshnessMetadata(
+                source="NPPES Registry",
+                dataset="nppes",
+                created_epoch=111,
+                last_updated_epoch=222,
+            ),
+        )
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[provider_from_individual_dataset],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=1),
+                ),
+                "npi_org": SourceSearchResult(
+                    providers=[provider_from_org_dataset],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_org", result_count=1),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=cache,
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Dallas, TX 75001",
+            ),
+            limit=5,
+        )
+
+        self.assertEqual(len(response.provider_results), 1)
+        self.assertEqual(response.search_trace.total_candidates, 2)
+        representative = response.provider_results[0]
+        self.assertEqual(
+            representative.provider.freshness,
+            FreshnessMetadata(
+                source="NPPES Registry",
+                dataset="nppes",
+                created_epoch=111,
+                last_updated_epoch=222,
+            ),
+        )
+        self.assertCountEqual(
+            representative.retriever_metadata["display_dedupe_provider_ids"],
+            ["1111111111", "2222222222"],
+        )
+        self.assertEqual(representative.retriever_metadata["display_dedupe_count"], 2)
+        self.assertCountEqual(
+            cache.set_entries[-1].provider_ids,
+            ("1111111111", "2222222222"),
+        )
+
     def test_search_degrades_when_cache_backend_fails(self) -> None:
         provider = build_canonical_provider(
             provider_id="provider-1",
