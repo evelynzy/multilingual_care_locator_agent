@@ -1421,7 +1421,8 @@ class CareLocatorAgent:
             top_p=0.1,
         )
 
-        content = completion.choices[0].message["content"] if completion.choices else ""
+        first_choice = completion.choices[0] if completion.choices else None
+        content = self._content_from_completion_choice(first_choice) or ""
         logger.debug("Interpret response received. length=%s", len(content))
         parsed_payload = self._safe_json_parse(content)
 
@@ -1446,11 +1447,12 @@ class CareLocatorAgent:
                 temperature=0.0,
                 top_p=0.1,
             )
-            retry_content = (
-                retry_completion.choices[0].message["content"]
+            retry_first_choice = (
+                retry_completion.choices[0]
                 if retry_completion.choices
-                else ""
+                else None
             )
+            retry_content = self._content_from_completion_choice(retry_first_choice) or ""
             logger.debug("Interpret retry response received. length=%s", len(retry_content))
             parsed_payload = self._safe_json_parse(retry_content)
 
