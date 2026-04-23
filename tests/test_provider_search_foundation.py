@@ -11,6 +11,7 @@ from provider_search.cache import (
 )
 from provider_search.models import (
     CanonicalProvider,
+    FreshnessMetadata,
     MedicareOptOutStatus,
     ProviderSearchCacheEntry,
     ProviderSearchRequest,
@@ -83,7 +84,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertEqual(provider.source, "NPI Registry")
         self.assertEqual(provider.location_summary, "San Francisco, CA, USA")
 
-    def test_normalize_search_result_captures_provider_and_scalar_metadata(self) -> None:
+    def test_normalize_search_result_preserves_nested_retriever_metadata(self) -> None:
         result = normalize_search_result(
             {
                 "id": "provider-123",
@@ -93,7 +94,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
                 "retriever_metadata": {
                     "similarity": 0.875,
                     "node_id": "node-1",
-                    "ignored": {"nested": "value"},
+                    "freshness": {"last_updated_epoch": 200},
                 },
             }
         )
@@ -103,7 +104,11 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertEqual(result.score, 0.875)
         self.assertEqual(
             result.retriever_metadata,
-            {"similarity": 0.875, "node_id": "node-1"},
+            {
+                "similarity": 0.875,
+                "node_id": "node-1",
+                "freshness": {"last_updated_epoch": 200},
+            },
         )
 
     def test_normalize_provider_preserves_existing_trust_and_freshness_fields(self) -> None:
@@ -146,6 +151,14 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertIsNotNone(provider.medicare_opt_out)
         assert provider.medicare_opt_out is not None
         self.assertFalse(provider.medicare_opt_out.opted_out)
+        self.assertEqual(
+            provider.freshness,
+            FreshnessMetadata(
+                source="ClinicalTables",
+                created_epoch=None,
+                last_updated_epoch=200,
+            ),
+        )
         self.assertEqual(provider.retrieval_metadata["last_updated_epoch"], 200)
         self.assertEqual(
             provider.retrieval_metadata["extensions"],
@@ -174,7 +187,14 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
                 optout_effective_date="2025-01-01",
                 optout_end_date="2027-01-01",
             ),
+            freshness=FreshnessMetadata(
+                source="ClinicalTables",
+                dataset="clinicaltables",
+                created_epoch=100,
+                last_updated_epoch=200,
+            ),
             retrieval_metadata={"last_updated_epoch": 200},
+            provenance={"dataset": "clinicaltables"},
         )
 
         normalized = normalize_provider(provider)
@@ -208,21 +228,44 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
                 optout_end_date="2027-01-01",
             ),
         )
+        self.assertEqual(
+            normalized.freshness,
+            FreshnessMetadata(
+                source="ClinicalTables",
+                dataset="clinicaltables",
+                created_epoch=100,
+                last_updated_epoch=200,
+            ),
+        )
         self.assertEqual(normalized.retrieval_metadata["last_updated_epoch"], 200)
 
-    def test_normalize_search_result_preserves_nested_provider_trust_fields(self) -> None:
+    def test_normalize_search_result_preserves_nested_provider_trust_and_context(self) -> None:
         result = normalize_search_result(
             {
+                "source": "ClinicalTables",
+                "provenance": {
+                    "source": "ClinicalTables",
+                    "dataset": "npi_idv",
+                    "trace": {"request_id": "outer-request"},
+                },
+                "insurance_network_verification": {
+                    "status": "verified",
+                    "verified": True,
+                    "basis": "Outer verification should fill gaps.",
+                    "source": "Aetna directory",
+                },
+                "freshness": {
+                    "source": "NPPES Registry",
+                    "dataset": "nppes",
+                    "created_epoch": 100,
+                    "last_updated_epoch": 200,
+                },
+                "retrieval_metadata": {
+                    "outer_context": {"phase": "search"},
+                },
                 "provider": {
                     "provider_id": "provider-123",
                     "name": "Harmony Family Clinic",
-                    "source": "ClinicalTables",
-                    "insurance_network_verification": {
-                        "status": "verified",
-                        "verified": True,
-                        "basis": "Plan directory confirmed.",
-                        "source": "Aetna directory",
-                    },
                     "accepting_new_patients_status": {
                         "status": "accepting",
                         "verified": True,
@@ -232,26 +275,65 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
                     "medicare_opt_out": {
                         "opted_out": False,
                     },
+                    "provenance": {
+                        "source": "ClinicalTables",
+                        "trace": {"provider_rank": 1},
+                    },
                     "retrieval_metadata": {
-                        "last_updated_epoch": 200,
+                        "inner_context": {"rank": 1},
                     },
                 },
                 "score": 0.875,
-                "source": "ClinicalTables",
                 "retriever_metadata": {
                     "similarity": 0.875,
                     "node_id": "node-1",
+                    "trace": {"request_id": "search-123"},
                 },
             }
         )
 
         self.assertEqual(result.provider.provider_id, "provider-123")
         self.assertEqual(result.provider.insurance_network_verification.status, "verified")
+        self.assertTrue(result.provider.insurance_network_verification.verified)
         self.assertTrue(result.provider.accepting_new_patients_status.verified)
         self.assertIsNotNone(result.provider.medicare_opt_out)
         assert result.provider.medicare_opt_out is not None
         self.assertFalse(result.provider.medicare_opt_out.opted_out)
-        self.assertEqual(result.provider.retrieval_metadata["last_updated_epoch"], 200)
+        self.assertEqual(
+            result.provider.provenance,
+            {
+                "source": "ClinicalTables",
+                "dataset": "npi_idv",
+                "trace": {
+                    "request_id": "outer-request",
+                    "provider_rank": 1,
+                },
+            },
+        )
+        self.assertEqual(
+            result.provider.freshness,
+            FreshnessMetadata(
+                source="NPPES Registry",
+                dataset="nppes",
+                created_epoch=100,
+                last_updated_epoch=200,
+            ),
+        )
+        self.assertEqual(
+            result.provider.retrieval_metadata,
+            {
+                "outer_context": {"phase": "search"},
+                "inner_context": {"rank": 1},
+            },
+        )
+        self.assertEqual(
+            result.retriever_metadata,
+            {
+                "similarity": 0.875,
+                "node_id": "node-1",
+                "trace": {"request_id": "search-123"},
+            },
+        )
         self.assertEqual(result.source, "ClinicalTables")
 
 

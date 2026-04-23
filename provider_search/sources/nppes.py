@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import requests
 
-from provider_search.models import CanonicalProvider, NPPESRecord
+from provider_search.models import CanonicalProvider, FreshnessMetadata, NPPESRecord
 
 
 class NPPESSource:
@@ -112,6 +112,10 @@ class NPPESSource:
 
         updated_retrieval = dict(provider.retrieval_metadata)
         updated_retrieval["nppes_enriched"] = True
+        updated_retrieval["nppes"] = {
+            "created_epoch": record.created_epoch,
+            "last_updated_epoch": record.last_updated_epoch,
+        }
 
         updated_specialties = list(provider.specialties)
         if taxonomy and taxonomy not in updated_specialties:
@@ -125,6 +129,12 @@ class NPPESSource:
             phone=self._clean_string(phone_value) or provider.phone,
             taxonomy=taxonomy,
             specialties=tuple(updated_specialties),
+            freshness=FreshnessMetadata(
+                source="NPPES Registry",
+                dataset="nppes",
+                created_epoch=record.created_epoch,
+                last_updated_epoch=record.last_updated_epoch,
+            ),
             raw=updated_raw,
             retrieval_metadata=updated_retrieval,
         )

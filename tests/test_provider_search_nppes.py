@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
+from provider_search.models import FreshnessMetadata
 from provider_search.normalization import build_canonical_provider
 from provider_search.sources.nppes import NPPESSource
 
@@ -90,6 +91,8 @@ class NPPESSourceTests(unittest.TestCase):
                         },
                     ],
                     "taxonomies": [{"desc": "Urology"}],
+                    "created_epoch": 100,
+                    "last_updated_epoch": 200,
                 }
             ]
         }
@@ -116,6 +119,22 @@ class NPPESSourceTests(unittest.TestCase):
         self.assertEqual(enriched.taxonomy, "Urology")
         self.assertIn("nppes", enriched.raw)
         self.assertTrue(enriched.retrieval_metadata["nppes_enriched"])
+        self.assertEqual(
+            enriched.freshness,
+            FreshnessMetadata(
+                source="NPPES Registry",
+                dataset="nppes",
+                created_epoch=100,
+                last_updated_epoch=200,
+            ),
+        )
+        self.assertEqual(
+            enriched.retrieval_metadata["nppes"],
+            {
+                "created_epoch": 100,
+                "last_updated_epoch": 200,
+            },
+        )
 
     def test_lookup_returns_none_on_request_failure(self) -> None:
         session = Mock()

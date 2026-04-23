@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 
 PrimitiveMetadataValue = Union[str, int, float, bool, None]
+StructuredMetadataValue = Union[
+    PrimitiveMetadataValue,
+    Dict[str, "StructuredMetadataValue"],
+    List["StructuredMetadataValue"],
+]
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,14 @@ class MedicareOptOutStatus:
 
 
 @dataclass(frozen=True)
+class FreshnessMetadata:
+    source: Optional[str] = None
+    dataset: Optional[str] = None
+    created_epoch: Optional[int] = None
+    last_updated_epoch: Optional[int] = None
+
+
+@dataclass(frozen=True)
 class CanonicalProvider:
     """Canonical provider data shared across retrieval sources."""
 
@@ -92,6 +105,7 @@ class CanonicalProvider:
         )
     )
     medicare_opt_out: Optional[MedicareOptOutStatus] = None
+    freshness: Optional[FreshnessMetadata] = None
     provenance: dict[str, Any] = field(default_factory=dict)
     retrieval_metadata: dict[str, Any] = field(default_factory=dict)
     ranking_metadata: dict[str, Any] = field(default_factory=dict)
@@ -139,7 +153,7 @@ class ProviderSearchResult:
     provider: CanonicalProvider
     score: Optional[float] = None
     source: Optional[str] = None
-    retriever_metadata: Dict[str, PrimitiveMetadataValue] = field(default_factory=dict)
+    retriever_metadata: Dict[str, StructuredMetadataValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
