@@ -740,35 +740,29 @@ class CareLocatorAgent:
             self.npi_registry_config.get("version", "2.1")
         )
 
-        self.ctss_dataset_configs: Dict[str, Dict[str, Any]] = {
+        # Keep only runtime overrides here; shared ClinicalTables defaults live in provider_search.
+        self.ctss_dataset_overrides: Dict[str, Dict[str, Any]] = {
             "npi_idv": {
-                "search_url": clinical.get(
-                    "individual_search_url",
-                    "https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/search",
-                ),
+                "search_url": clinical.get("individual_search_url"),
                 # The v3 ClinicalTables API no longer exposes dedicated values/fields endpoints
-                # for NPI datasets. Keep the configuration keys optional and default them to None
-                # so the agent skips those HTTP calls.
+                # for NPI datasets. Keep the override keys optional and default them to None
+                # so the agent skips those HTTP calls unless configured explicitly.
                 "values_url": clinical.get("individual_values_url") or None,
                 "fields_url": clinical.get("individual_fields_url") or None,
-                "probe_term": field_probe_terms.get("npi_idv", "urology"),
-                "source_label": "NPI Registry (individual)",
+                "probe_term": field_probe_terms.get("npi_idv"),
             },
             "npi_org": {
-                "search_url": clinical.get(
-                    "organization_search_url",
-                    "https://clinicaltables.nlm.nih.gov/api/npi_org/v3/search",
-                ),
+                "search_url": clinical.get("organization_search_url"),
                 "values_url": clinical.get("organization_values_url") or None,
                 "fields_url": clinical.get("organization_fields_url") or None,
-                "probe_term": field_probe_terms.get("npi_org", "clinic"),
-                "source_label": "NPI Registry (organization)",
+                "probe_term": field_probe_terms.get("npi_org"),
             },
         }
+        merged_ctss_configs = self._provider_search_dataset_configs()
         self._ctss_dataset_priority: List[str] = [
             dataset
-            for dataset, cfg in self.ctss_dataset_configs.items()
-            if cfg.get("search_url")
+            for dataset, cfg in merged_ctss_configs.items()
+            if cfg.search_url
         ]
 
         self.fallback_resources = self.search_settings.get("fallback_resources", [])
@@ -2148,24 +2142,34 @@ class CareLocatorAgent:
     # ------------------------------------------------------------------
     def _provider_search_dataset_configs(self) -> dict[str, ClinicalTablesDatasetConfig]:
         configs: dict[str, ClinicalTablesDatasetConfig] = {}
-        for dataset, config in self.ctss_dataset_configs.items():
-            search_url = config.get("search_url")
+        for dataset, default_config in DEFAULT_DATASET_CONFIGS.items():
+            overrides = self.ctss_dataset_overrides.get(dataset, {})
+            search_url = (
+                overrides["search_url"]
+                if "search_url" in overrides
+                else default_config.search_url
+            )
             if not search_url:
                 continue
-            default_config = DEFAULT_DATASET_CONFIGS.get(dataset)
             configs[dataset] = ClinicalTablesDatasetConfig(
                 search_url=search_url,
-                values_url=config.get("values_url", default_config.values_url if default_config else None),
-                fields_url=config.get("fields_url", default_config.fields_url if default_config else None),
-                probe_term=config.get("probe_term", default_config.probe_term if default_config else None),
-                source_label=str(
-                    config.get("source_label")
-                    or (default_config.source_label if default_config else None)
-                    or "NPI Registry via clinicaltables.nlm.nih.gov"
+                values_url=(
+                    overrides["values_url"]
+                    if "values_url" in overrides
+                    else default_config.values_url
                 ),
-                result_fields=list(
-                    default_config.result_fields if default_config else (config.get("result_fields") or [])
+                fields_url=(
+                    overrides["fields_url"]
+                    if "fields_url" in overrides
+                    else default_config.fields_url
                 ),
+                probe_term=(
+                    overrides["probe_term"]
+                    if "probe_term" in overrides
+                    else default_config.probe_term
+                ),
+                source_label=default_config.source_label,
+                result_fields=list(default_config.result_fields),
             )
         return configs
 
