@@ -1,6 +1,7 @@
 from provider_search.cache import SQLiteProviderSearchCache, resolve_provider_cache_path
 from .models import (
     CanonicalProvider,
+    FreshnessMetadata,
     MedicareOptOutStatus,
     NPPESRecord,
     ProviderSearchRequest,
@@ -21,6 +22,7 @@ from provider_search.normalization import (
 
 __all__ = [
     "CanonicalProvider",
+    "FreshnessMetadata",
     "MedicareOptOutStatus",
     "NPPESRecord",
     "ProviderSearchRequest",
