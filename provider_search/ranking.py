@@ -28,9 +28,23 @@ def rank_provider_results(
     ranked_results: list[ProviderSearchResult] = []
     for raw_provider in providers:
         provider = normalize_provider(raw_provider)
+        matched_specialties = _match_values(
+            normalized_request.specialties,
+            provider.specialties,
+            extra_values=(provider.taxonomy,) if provider.taxonomy else (),
+        )
+        matched_keywords = _match_keywords(normalized_request.keywords, provider)
+        if (
+            _requires_relevance_gate(normalized_request)
+            and not matched_specialties
+            and not matched_keywords
+        ):
+            continue
         breakdown = _build_score_breakdown(
             normalized_request,
             provider,
+            matched_specialties=matched_specialties,
+            matched_keywords=matched_keywords,
         )
         score = round(sum(breakdown.values()), 6)
         ranking_metadata = dict(provider.ranking_metadata)
@@ -39,11 +53,8 @@ def rank_provider_results(
                 "ranking_version": RANKING_VERSION,
                 "score_breakdown": breakdown,
                 "cached_identity_match": provider.provider_id in cached_ids,
-                "matched_specialties": _match_values(
-                    normalized_request.specialties,
-                    provider.specialties,
-                    extra_values=(provider.taxonomy,) if provider.taxonomy else (),
-                ),
+                "matched_specialties": matched_specialties,
+                "matched_keywords": matched_keywords,
                 "matched_languages": _match_values(
                     normalized_request.preferred_languages,
                     provider.languages,
@@ -79,21 +90,18 @@ def rank_provider_results(
 def _build_score_breakdown(
     request: ProviderSearchRequest,
     provider: CanonicalProvider,
+    *,
+    matched_specialties: Sequence[str] = (),
+    matched_keywords: Sequence[str] = (),
 ) -> dict[str, float]:
     location_matches = _count_token_overlap(
         _tokenize(request.location),
         _tokenize(provider.location_summary),
     )
-    specialty_matches = len(
-        _match_values(
-            request.specialties,
-            provider.specialties,
-            extra_values=(provider.taxonomy,) if provider.taxonomy else (),
-        )
-    )
+    specialty_matches = len(matched_specialties)
     language_matches = len(_match_values(request.preferred_languages, provider.languages))
     insurance_matches = len(_match_values(request.insurance, provider.insurance_reported))
-    keyword_matches = len(_match_keywords(request.keywords, provider))
+    keyword_matches = len(matched_keywords)
     telehealth_requested = bool(_match_values(request.keywords, _TELEHEALTH_TERMS))
     accepting_verified = (
         provider.accepting_new_patients_status.verified
@@ -116,6 +124,10 @@ def _build_score_breakdown(
         "telehealth_alignment": 0.5 if telehealth_requested and provider.telehealth else 0.0,
         "freshness_metadata": 0.25 if freshness_present else 0.0,
     }
+
+
+def _requires_relevance_gate(request: ProviderSearchRequest) -> bool:
+    return bool(request.specialties or request.keywords)
 
 
 def _provider_result_sort_key(result: ProviderSearchResult) -> tuple[float, int, int, str, str]:
