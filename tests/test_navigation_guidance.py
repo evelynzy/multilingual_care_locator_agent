@@ -101,15 +101,7 @@ class _StubChatClient:
 
 class CareNavigationGuidanceTests(unittest.TestCase):
     def setUp(self) -> None:
-        with patch.object(
-            CareLocatorAgent,
-            "_initialize_clinicaltables_field_maps",
-            return_value=None,
-        ):
-            self.agent = CareLocatorAgent(
-                provider_repository=Mock(),
-                provider_search_service=Mock(),
-            )
+        self.agent = CareLocatorAgent(provider_search_service=Mock())
 
         self.agent.provider_search_service.search.return_value = ProviderSearchResponse(
             request=ProviderSearchRequest(),
