@@ -568,10 +568,12 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 4)
         _, first_request = source.calls[0]
-        _, retry_request = source.calls[1]
+        _, second_request = source.calls[1]
+        _, retry_request = source.calls[2]
         self.assertEqual(first_request.search_terms, "Primary Care")
+        self.assertEqual(second_request.search_terms, "Primary Care Dallas TX 75001")
         self.assertEqual(retry_request.search_terms, "Primary Care")
         self.assertEqual(
             first_request.query_filter,
@@ -999,10 +1001,12 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 4)
         _, first_request = source.calls[0]
-        _, retry_request = source.calls[1]
+        _, second_request = source.calls[1]
+        _, retry_request = source.calls[2]
         self.assertEqual(first_request.search_terms, "Pediatrics")
+        self.assertEqual(second_request.search_terms, "Pediatrics Manhattan NY 10013")
         self.assertEqual(retry_request.search_terms, first_request.search_terms)
         self.assertEqual(
             first_request.query_filter,
