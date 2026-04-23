@@ -392,18 +392,34 @@ class ClinicalTablesSource:
                 payload[3] if len(payload) > 3 and isinstance(payload[3], list) else []
             )
 
-        if all(isinstance(item, str) for item in potential_fields):
-            fields = [str(item) for item in potential_fields]
-        elif all(isinstance(item, int) for item in potential_fields):
-            reverse_map = {
-                index: name
-                for name, index in self.field_map.get(dataset, {}).items()
-            }
-            fields = [reverse_map.get(int(item), str(item)) for item in potential_fields]
-        else:
-            fields = list(self.result_field_order.get(dataset, []))
+        reverse_map = {
+            index: name
+            for name, index in self.field_map.get(dataset, {}).items()
+        }
+        resolved_positions: list[int] = []
+        fields = []
+        for index, descriptor in enumerate(potential_fields):
+            resolved_field: Optional[str] = None
+            if isinstance(descriptor, str):
+                candidate = descriptor.strip()
+                if candidate:
+                    resolved_field = candidate
+            elif isinstance(descriptor, int):
+                resolved_field = reverse_map.get(int(descriptor))
 
-        entries = [list(row) for row in potential_entries if isinstance(row, (list, tuple))]
+            if not resolved_field:
+                continue
+
+            resolved_positions.append(index)
+            fields.append(resolved_field)
+
+        max_resolved_position = max(resolved_positions, default=-1)
+        for row in potential_entries:
+            if not isinstance(row, (list, tuple)):
+                continue
+            if max_resolved_position >= 0 and len(row) <= max_resolved_position:
+                continue
+            entries.append([row[index] for index in resolved_positions])
         return fields, entries
 
     @staticmethod

@@ -68,24 +68,37 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(fields, ["name.full", "NPI", "provider_type"])
         self.assertEqual(len(entries), 1)
 
-    def test_parse_search_payload_falls_back_to_configured_field_order(self) -> None:
+    def test_parse_search_payload_resolves_mixed_descriptors_positionally(self) -> None:
         payload = [
             1,
             ["display row"],
-            ["name.full", 6, {"unexpected": "value"}],
-            [["Harmony Family Clinic", "1619271780", "Family Medicine"], "skip-me"],
+            ["name.full", 6, {"unexpected": "value"}, 7],
+            [["Harmony Family Clinic", "1619271780", "skip-me", "Family Medicine"], "skip-me"],
         ]
 
         fields, entries = self.source.parse_search_payload("npi_idv", payload)
 
         self.assertEqual(
             fields,
-            self.source.result_field_order["npi_idv"],
+            ["name.full", "NPI", "provider_type"],
         )
         self.assertEqual(
             entries,
             [["Harmony Family Clinic", "1619271780", "Family Medicine"]],
         )
+
+    def test_parse_search_payload_skips_rows_with_unresolvable_shape(self) -> None:
+        payload = [
+            1,
+            ["display row"],
+            ["name.full", 6, 7],
+            [["Harmony Family Clinic", "1619271780"]],
+        ]
+
+        fields, entries = self.source.parse_search_payload("npi_idv", payload)
+
+        self.assertEqual(fields, ["name.full", "NPI", "provider_type"])
+        self.assertEqual(entries, [])
 
     def test_search_dataset_builds_request_and_normalizes_provider(self) -> None:
         response = Mock()
@@ -182,6 +195,49 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(provider.name, "Cupertino OB/GYN Associates")
         self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
         self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
+
+    def test_search_dataset_does_not_treat_name_fragment_as_taxonomy_in_mixed_descriptor_payload(
+        self,
+    ) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                1,
+                {"unexpected": "value"},
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+            ],
+            [[
+                "Harmony Group Practice",
+                "1619271780",
+                "Ann",
+                "Santa Clara",
+                "CA",
+                "95051",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+
+        result = source.search_dataset(
+            "npi_org",
+            SourceSearchRequest(search_terms="ob gyn 95051", limit=1),
+        )
+
+        self.assertEqual(result.trace.result_count, 1)
+        provider = result.providers[0]
+        self.assertEqual(provider.name, "Harmony Group Practice")
+        self.assertIsNone(provider.taxonomy)
+        self.assertIn("Santa Clara", provider.location_summary or "")
+        self.assertNotIn("Ann", provider.specialties)
 
     def test_search_dataset_applies_location_hints(self) -> None:
         response = Mock()
