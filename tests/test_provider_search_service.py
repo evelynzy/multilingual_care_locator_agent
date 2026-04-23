@@ -271,6 +271,55 @@ class PrimaryCareRetryClinicalTablesSource:
         )
 
 
+class ObgynZipClinicalTablesSource:
+    def __init__(
+        self,
+        noisy_zip_providers: list,
+        canonical_term_providers: list,
+    ) -> None:
+        self.noisy_zip_providers = list(noisy_zip_providers)
+        self.canonical_term_providers = list(canonical_term_providers)
+        self.calls: list[tuple[str, object]] = []
+
+    def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if dataset == "npi_idv" and (
+            request.query_filter == "addr_practice.zip:95051"
+            and request.search_terms == "OB/GYN"
+        ):
+            return SourceSearchResult(
+                providers=list(self.noisy_zip_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.noisy_zip_providers),
+                ),
+            )
+        if request.query_filter == "addr_practice.zip:95051" and request.search_terms in {
+            "Obstetrics & Gynecology",
+            "Obstetrics & Gynecology 95051",
+        }:
+            return SourceSearchResult(
+                providers=list(self.canonical_term_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.canonical_term_providers),
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
 class FakeCache:
     def __init__(
         self,
@@ -1172,6 +1221,61 @@ class ProviderSearchServiceTests(unittest.TestCase):
             request.query_filter,
             "addr_practice.state:TX AND addr_practice.zip:75001",
         )
+
+    def test_search_zip_only_obgyn_95051_uses_canonical_family_term_to_surface_specialty_bearing_candidates(self) -> None:
+        noisy_zip_providers = [
+            build_canonical_provider(
+                provider_id=f"provider-noise-{index}",
+                name=f"Noisy Clinician {index}",
+                source_name="ClinicalTables",
+                dataset="npi_idv",
+                city="Santa Clara",
+                state="CA",
+                specialties=(),
+                taxonomy=None,
+            )
+            for index in range(16)
+        ]
+        specialty_bearing_provider = build_canonical_provider(
+            provider_id="provider-obgyn",
+            name="Cupertino OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Obstetrics & Gynecology",
+            specialties=("Obstetrics & Gynecology",),
+        )
+        source = ObgynZipClinicalTablesSource(
+            noisy_zip_providers,
+            [specialty_bearing_provider],
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="95051",
+            ),
+            limit=5,
+        )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertIn("OB/GYN", searched_terms)
+        self.assertIn("Obstetrics & Gynecology", searched_terms)
+        self.assertIn("Obstetrics & Gynecology 95051", searched_terms)
+        self.assertEqual(len(response.provider_results), 1)
+        self.assertEqual(response.provider_results[0].provider.name, "Cupertino OB/GYN Associates")
+        self.assertEqual(
+            response.provider_results[0].provider.ranking_metadata.get("matched_specialties"),
+            ("OB/GYN",),
+        )
+        self.assertEqual(response.search_trace.total_candidates, 17)
 
     def test_search_retries_with_relaxed_location_filter_when_specialty_search_survives_no_candidates(self) -> None:
         source = RetryAwareClinicalTablesSource()

@@ -25,6 +25,10 @@ from provider_search.normalization import (
     normalize_text,
 )
 from provider_search.ranking import rank_provider_results
+from provider_search.specialty_families import (
+    SPECIALTY_FAMILY_BY_ID,
+    derive_request_specialty_family_ids,
+)
 
 
 DEFAULT_CLINICALTABLES_DATASETS = ("npi_idv", "npi_org")
@@ -575,12 +579,36 @@ class ProviderSearchService:
         return planned_terms
 
     def _suggest_specialty_terms(self, specialties: Sequence[str]) -> tuple[str, ...]:
+        cleaned_specialties = tuple(
+            term for term in specialties if isinstance(term, str) and term.strip()
+        )
+        if not cleaned_specialties:
+            return ()
+
         suggest_specialty_terms = getattr(self.clinicaltables_source, "suggest_specialty_terms", None)
         if callable(suggest_specialty_terms):
-            suggested = suggest_specialty_terms(specialties)
-            if suggested:
-                return tuple(term for term in suggested if isinstance(term, str) and term.strip())
-        return tuple(term for term in specialties if isinstance(term, str) and term.strip())
+            suggested = tuple(
+                term
+                for term in suggest_specialty_terms(cleaned_specialties)
+                if isinstance(term, str) and term.strip()
+            )
+            if len(suggested) == len(cleaned_specialties):
+                return suggested
+        return tuple(
+            self._canonical_specialty_search_term(term)
+            for term in cleaned_specialties
+        )
+
+    @staticmethod
+    def _canonical_specialty_search_term(specialty: str) -> str:
+        family_ids = derive_request_specialty_family_ids((specialty,))
+        if len(family_ids) != 1:
+            return specialty
+
+        family = SPECIALTY_FAMILY_BY_ID.get(family_ids[0])
+        if family is None or not family.label.strip():
+            return specialty
+        return family.label
 
     def _build_location_assisted_terms(
         self,
