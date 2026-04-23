@@ -631,6 +631,13 @@ _REFERRAL_PATTERNS = (
 
 _PLAN_TYPE_PATTERNS = ("hmo", "ppo", "pos")
 
+_INTERPRET_RESCUE_SPECIALTY_ALIASES: Tuple[Tuple[str, str], ...] = (
+    ("primary care", "Primary Care"),
+    ("pcp", "Primary Care"),
+    ("dentista", "Dentistry"),
+    ("dentistry", "Dentistry"),
+)
+
 
 @dataclass
 class ParsedCareQuery:
@@ -1482,22 +1489,7 @@ class CareLocatorAgent:
             parsed_payload = self._safe_json_parse(retry_content)
 
         if not parsed_payload:
-            parsed_payload = {
-                "detected_language": "unknown",
-                "response_language": "English",
-                "summary": message,
-                "medical_need": True,
-                "location": None,
-                "specialties": [],
-                "insurance": [],
-                "preferred_languages": [],
-                "keywords": [],
-                "patient_context": None,
-                "care_setting": None,
-                "urgency": None,
-                "needs_clarification": False,
-                "follow_up_focus": [],
-            }
+            parsed_payload = self._rescue_interpret_payload_from_message(message)
 
         detected_language = str(parsed_payload.get("detected_language", "unknown"))
         response_language = parsed_payload.get("response_language") or detected_language or "English"
@@ -1526,6 +1518,66 @@ class CareLocatorAgent:
             needs_clarification=bool(parsed_payload.get("needs_clarification", False)),
             follow_up_focus=self._ensure_list(parsed_payload.get("follow_up_focus")),
         )
+
+    # ------------------------------------------------------------------
+    def _rescue_interpret_payload_from_message(self, message: str) -> Dict[str, Any]:
+        rescued_payload = self._default_interpret_payload(message)
+        rescued_location = self._rescue_location_from_message(message)
+        rescued_specialties = self._rescue_specialties_from_message(message)
+
+        if rescued_location:
+            rescued_payload["location"] = rescued_location
+        if rescued_specialties:
+            rescued_payload["specialties"] = rescued_specialties
+
+        logger.warning(
+            "Interpret response remained invalid after retry; applied deterministic rescue. location_present=%s specialties=%s",
+            bool(rescued_location),
+            len(rescued_specialties),
+        )
+        return rescued_payload
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _default_interpret_payload(message: str) -> Dict[str, Any]:
+        return {
+            "detected_language": "unknown",
+            "response_language": "English",
+            "summary": message,
+            "medical_need": True,
+            "location": None,
+            "specialties": [],
+            "insurance": [],
+            "preferred_languages": [],
+            "keywords": [],
+            "patient_context": None,
+            "care_setting": None,
+            "urgency": None,
+            "needs_clarification": False,
+            "follow_up_focus": [],
+        }
+
+    # ------------------------------------------------------------------
+    def _rescue_location_from_message(self, message: str) -> Optional[str]:
+        zip_code = self._extract_zip_code(message)
+        city_state = self._match_city_state(message)
+
+        if city_state and zip_code:
+            city, state_code = city_state
+            return f"{city}, {state_code} {zip_code}"
+        if city_state:
+            city, state_code = city_state
+            return f"{city}, {state_code}"
+        return zip_code
+
+    # ------------------------------------------------------------------
+    def _rescue_specialties_from_message(self, message: str) -> List[str]:
+        rescued_specialties: List[str] = []
+        normalized_message = message.lower()
+        for alias, specialty in _INTERPRET_RESCUE_SPECIALTY_ALIASES:
+            if self._contains_phrase(normalized_message, alias):
+                rescued_specialties.append(specialty)
+        return self._dedupe_preserve_order(rescued_specialties)
 
     # ------------------------------------------------------------------
     def _merge_parsed_queries(
