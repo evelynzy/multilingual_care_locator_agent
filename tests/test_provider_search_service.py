@@ -42,8 +42,8 @@ class RetryAwareClinicalTablesSource:
                 dataset=dataset,
                 city="Dallas",
                 state="TX",
-                taxonomy="Primary Care",
-                specialties=("Primary Care",),
+                taxonomy="Dermatology",
+                specialties=("Dermatology",),
             )
             return SourceSearchResult(
                 providers=[provider],
@@ -52,6 +52,44 @@ class RetryAwareClinicalTablesSource:
                     dataset=dataset,
                     status_code=200,
                     result_count=1,
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
+class PediatricRetryClinicalTablesSource:
+    def __init__(self, location_only_providers: list) -> None:
+        self.location_only_providers = location_only_providers
+        self.calls: list[tuple[str, object]] = []
+
+    def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if request.search_terms == "Pediatrics":
+            return SourceSearchResult(
+                providers=[],
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=0,
+                ),
+            )
+        if request.search_terms == "Manhattan, NY 10013":
+            return SourceSearchResult(
+                providers=list(self.location_only_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.location_only_providers),
                 ),
             )
         return SourceSearchResult(
@@ -157,12 +195,10 @@ class ProviderSearchRankingTests(unittest.TestCase):
             [
                 strong_match.provider_id,
                 partial_match.provider_id,
-                weak_match.provider_id,
             ],
         )
         self.assertEqual(ranked[0].provider.ranking_metadata["ranking_version"], RANKING_VERSION)
         self.assertGreater(ranked[0].score, ranked[1].score)
-        self.assertGreater(ranked[1].score, ranked[2].score)
 
     def test_rank_provider_results_does_not_change_order_when_cache_state_changes(self) -> None:
         request = ProviderSearchRequest(specialties=("Primary Care",))
@@ -199,6 +235,27 @@ class ProviderSearchRankingTests(unittest.TestCase):
         self.assertFalse(ranked[0].provider.ranking_metadata["cached_identity_match"])
         self.assertTrue(ranked[1].provider.ranking_metadata["cached_identity_match"])
         self.assertEqual(ranked[1].retriever_metadata["cache_hint"], "matched_prior_result")
+
+    def test_rank_provider_results_filters_location_only_candidates_for_constrained_searches(self) -> None:
+        request = ProviderSearchRequest(
+            specialties=("Pediatrics",),
+            location="Manhattan, NY 10013",
+            keywords=("pediatric", "child health"),
+        )
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+
+        ranked = rank_provider_results(request, [radiology_provider], limit=3)
+
+        self.assertEqual(ranked, [])
 
 
 class ProviderSearchServiceTests(unittest.TestCase):
@@ -276,7 +333,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
         )
         self.assertEqual(first_request.limit, 4)
 
-        self.assertEqual(len(response.provider_results), 2)
+        self.assertEqual(len(response.provider_results), 1)
         self.assertEqual(response.provider_results[0].provider.name, "Harmony Family Clinic")
         self.assertFalse(response.search_trace.cache_hit)
         self.assertEqual(
@@ -544,6 +601,87 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(retry_request.query_filter, first_request.query_filter)
         self.assertEqual(len(response.provider_results), 1)
         self.assertEqual(response.provider_results[0].provider.name, "Dallas Family Clinic")
+
+    def test_search_returns_zero_results_when_location_only_retry_only_finds_irrelevant_org(self) -> None:
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+        source = PediatricRetryClinicalTablesSource([radiology_provider])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Pediatrics",),
+                location="Manhattan, NY 10013",
+                keywords=("pediatric", "child health"),
+            ),
+            limit=3,
+        )
+
+        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(response.provider_results), 0)
+        self.assertEqual(response.search_trace.total_candidates, 1)
+
+    def test_search_keeps_only_relevant_pediatric_result_when_retry_returns_mixed_candidates(self) -> None:
+        pediatric_provider = build_canonical_provider(
+            provider_id="provider-peds",
+            name="Canal Pediatrics",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Pediatrics",
+            specialties=("Pediatrics",),
+        ).with_updates(description="Pediatric and child health visits.")
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+        source = PediatricRetryClinicalTablesSource(
+            [pediatric_provider, radiology_provider]
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Pediatrics",),
+                location="Manhattan, NY 10013",
+                keywords=("pediatric", "child health"),
+            ),
+            limit=3,
+        )
+
+        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(response.provider_results), 1)
+        result = response.provider_results[0]
+        self.assertEqual(result.provider.name, "Canal Pediatrics")
+        self.assertEqual(
+            result.provider.ranking_metadata.get("matched_specialties"),
+            ("Pediatrics",),
+        )
 
 
 if __name__ == "__main__":
