@@ -95,7 +95,7 @@ class _PediatricRetryClinicalTablesSource:
     def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
         self.calls.append((dataset, request))
         if (
-            request.search_terms == "Pediatrics pediatric child health"
+            request.search_terms == "Pediatrics"
             and request.query_filter == "addr_practice.state:NY AND addr_practice.zip:10013"
         ):
             return SourceSearchResult(
@@ -108,7 +108,7 @@ class _PediatricRetryClinicalTablesSource:
                 ),
             )
         if (
-            request.search_terms == "Pediatrics pediatric child health"
+            request.search_terms == "Pediatrics"
             and request.query_filter == "addr_practice.state:NY"
         ):
             return SourceSearchResult(
@@ -866,7 +866,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(source.calls), 2)
         _, first_request = source.calls[0]
         _, retry_request = source.calls[1]
-        self.assertEqual(first_request.search_terms, "Pediatrics pediatric child health")
+        self.assertEqual(first_request.search_terms, "Pediatrics")
         self.assertEqual(retry_request.search_terms, first_request.search_terms)
         self.assertEqual(
             first_request.query_filter,
