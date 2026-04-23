@@ -257,6 +257,88 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(client.calls), 1)
         service.search.assert_not_called()
 
+    def test_handle_request_retries_when_initial_interpret_content_is_none(self) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": None,
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"find a doctor",'
+                        '"medical_need":true,"location":null,"specialties":[],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":null,"urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": "Clarification answer.",
+                    "finish_reason": "stop",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "find a doctor near me",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn("Clarification answer.", result)
+        self.assertIn("Important safety and trust notes:", result)
+        self.assertEqual(len(client.calls), 3)
+        service.search.assert_not_called()
+
+    def test_handle_request_uses_default_query_when_retry_interpret_content_is_none(self) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": "not valid json",
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": "Clarification answer.",
+                    "finish_reason": "stop",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "find a doctor near me",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn("Clarification answer.", result)
+        self.assertIn("Important safety and trust notes:", result)
+        self.assertEqual(len(client.calls), 3)
+        service.search.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
