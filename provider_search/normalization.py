@@ -4,13 +4,22 @@ import hashlib
 import json
 import re
 import unicodedata
-from typing import Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 from provider_search.models import (
     CanonicalProvider,
     PrimitiveMetadataValue,
     ProviderSearchRequest,
     ProviderSearchResult,
+    VerificationStatus,
+)
+
+
+INSURANCE_UNVERIFIED_BASIS = (
+    "Insurance/network participation is not confirmed by source data."
+)
+NEW_PATIENTS_UNKNOWN_BASIS = (
+    "Source data does not confirm new-patient availability."
 )
 
 
@@ -44,6 +53,8 @@ def normalize_string_list(values: Optional[Iterable[object]]) -> tuple[str, ...]
     normalized_values = []
     seen = set()
     for item in iterable:
+        if item is None:
+            continue
         normalized_item = normalize_text(item)
         if normalized_item is None:
             continue
@@ -86,6 +97,74 @@ def build_request_fingerprint(request: ProviderSearchRequest) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def ensure_string_list(value: Optional[Iterable[Any]]) -> tuple[str, ...]:
+    return normalize_string_list(value)
+
+
+def optional_string(value: Any) -> Optional[str]:
+    return normalize_text(value)
+
+
+def build_canonical_provider(
+    *,
+    provider_id: Any,
+    name: Any,
+    source_name: str,
+    dataset: Optional[str],
+    location: Any = "",
+    address: Any = None,
+    city: Any = None,
+    state: Any = None,
+    country: Any = None,
+    phone: Any = None,
+    website: Any = None,
+    taxonomy: Any = None,
+    specialties: Optional[Iterable[Any]] = None,
+    languages: Optional[Iterable[Any]] = None,
+    insurance_reported: Optional[Iterable[Any]] = None,
+    raw: Optional[dict[str, Any]] = None,
+    retrieval_metadata: Optional[dict[str, Any]] = None,
+    ranking_metadata: Optional[dict[str, Any]] = None,
+) -> CanonicalProvider:
+    normalized_taxonomy = optional_string(taxonomy)
+    normalized_specialties = list(ensure_string_list(specialties))
+    if normalized_taxonomy and normalized_taxonomy not in normalized_specialties:
+        normalized_specialties.append(normalized_taxonomy)
+
+    return CanonicalProvider(
+        provider_id=optional_string(provider_id) or "",
+        name=optional_string(name) or "Unknown Provider",
+        specialties=tuple(normalized_specialties),
+        languages=ensure_string_list(languages),
+        insurance_reported=ensure_string_list(insurance_reported),
+        address=optional_string(address) or optional_string(location),
+        city=optional_string(city),
+        state=optional_string(state),
+        country=optional_string(country),
+        phone=optional_string(phone),
+        website=optional_string(website),
+        taxonomy=normalized_taxonomy,
+        source=optional_string(source_name),
+        insurance_network_verification=VerificationStatus(
+            status="unverified",
+            verified=False,
+            basis=INSURANCE_UNVERIFIED_BASIS,
+        ),
+        accepting_new_patients_status=VerificationStatus(
+            status="unknown",
+            verified=False,
+            basis=NEW_PATIENTS_UNKNOWN_BASIS,
+        ),
+        provenance={
+            "source": source_name,
+            "dataset": dataset,
+        },
+        retrieval_metadata=retrieval_metadata or {},
+        ranking_metadata=ranking_metadata or {},
+        raw=raw or {},
+    )
+
+
 def normalize_provider(raw_provider: Mapping[str, object]) -> CanonicalProvider:
     """Map raw provider payloads from different sources onto one typed model."""
 
@@ -119,6 +198,11 @@ def normalize_provider(raw_provider: Mapping[str, object]) -> CanonicalProvider:
         telehealth=telehealth,
         description=normalize_text(raw_provider.get("description")),
         source=source,
+        taxonomy=normalize_text(raw_provider.get("taxonomy")),
+        provenance=dict(provenance) if isinstance(provenance, Mapping) else {},
+        retrieval_metadata=_normalize_metadata(raw_provider.get("retrieval_metadata")),
+        ranking_metadata=_normalize_metadata(raw_provider.get("ranking_metadata")),
+        raw=dict(raw_provider.get("raw")) if isinstance(raw_provider.get("raw"), Mapping) else {},
     )
 
 
