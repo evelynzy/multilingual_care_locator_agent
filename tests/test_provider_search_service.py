@@ -178,6 +178,39 @@ class NearbyDentalClinicalTablesSource:
         )
 
 
+class PrimaryCareSynonymClinicalTablesSource:
+    def __init__(self, retry_providers: list) -> None:
+        self.retry_providers = list(retry_providers)
+        self.calls: list[tuple[str, object]] = []
+
+    def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if request.query_filter == "addr_practice.state:TX" and request.search_terms in {
+            "Primary Care",
+            "Primary Care Dallas",
+            "Primary Care TX 75001",
+            "Primary Care 75001 Dallas TX",
+        }:
+            return SourceSearchResult(
+                providers=list(self.retry_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.retry_providers),
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
 class PrimaryCareRetryClinicalTablesSource:
     def __init__(
         self,
@@ -370,6 +403,47 @@ class ProviderSearchRankingTests(unittest.TestCase):
         self.assertFalse(ranked[0].provider.ranking_metadata["cached_identity_match"])
         self.assertTrue(ranked[1].provider.ranking_metadata["cached_identity_match"])
         self.assertEqual(ranked[1].retriever_metadata["cache_hint"], "matched_prior_result")
+
+    def test_rank_provider_results_matches_curated_primary_care_specialty_equivalents(self) -> None:
+        request = ProviderSearchRequest(specialties=("Primary Care",))
+        family_medicine_provider = build_canonical_provider(
+            provider_id="provider-family-med",
+            name="Harmony Family Medicine",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            taxonomy="Physician/Family Practice",
+            specialties=("Physician/Family Practice", "Family Medicine", "207Q00000X"),
+        )
+        internal_medicine_provider = build_canonical_provider(
+            provider_id="provider-internal-med",
+            name="Northside Internal Medicine",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            taxonomy="Physician/Internal Medicine",
+            specialties=("Physician/Internal Medicine", "Internal Medicine", "207R00000X"),
+        )
+        primary_care_clinic_provider = build_canonical_provider(
+            provider_id="provider-primary-care-clinic",
+            name="Concentra Primary Care",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            taxonomy="Clinic/Center",
+            specialties=("Clinic/Center", "Clinic/Center, Primary Care", "261QP2300X"),
+        )
+
+        ranked = rank_provider_results(
+            request,
+            [family_medicine_provider, internal_medicine_provider, primary_care_clinic_provider],
+            limit=5,
+        )
+
+        self.assertEqual(len(ranked), 3)
+        self.assertTrue(
+            all(
+                result.provider.ranking_metadata.get("matched_specialties") == ("Primary Care",)
+                for result in ranked
+            )
+        )
 
     def test_rank_provider_results_filters_location_only_candidates_for_constrained_searches(self) -> None:
         request = ProviderSearchRequest(
@@ -1538,6 +1612,57 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(
             response.provider_results[0].retriever_metadata["display_dedupe_count"],
             2,
+        )
+
+    def test_search_keeps_live_primary_care_org_candidates_when_canonical_specialties_use_curated_synonyms(self) -> None:
+        retry_providers = [
+            build_canonical_provider(
+                provider_id="provider-clinic-primary-care",
+                name="Concentra Primary Care PA",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Dallas",
+                state="TX",
+                taxonomy="Clinic/Center",
+                specialties=("Clinic/Center", "Clinic/Center, Primary Care", "261QP2300X"),
+            ),
+            build_canonical_provider(
+                provider_id="provider-family-med",
+                name="North Dallas Primary Care Doctors PLLC",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Dallas",
+                state="TX",
+                taxonomy="Physician/Internal Medicine",
+                specialties=("Physician/Internal Medicine", "Family Medicine", "Internal Medicine"),
+            ),
+        ]
+        source = PrimaryCareSynonymClinicalTablesSource(retry_providers)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=10,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Dallas, TX 75001",
+            ),
+            limit=5,
+        )
+
+        self.assertEqual(len(response.provider_results), 2)
+        self.assertCountEqual(
+            [result.provider.name for result in response.provider_results],
+            ["Concentra Primary Care PA", "North Dallas Primary Care Doctors PLLC"],
+        )
+        self.assertTrue(
+            all(
+                result.provider.ranking_metadata.get("matched_specialties") == ("Primary Care",)
+                for result in response.provider_results
+            )
         )
 
 
