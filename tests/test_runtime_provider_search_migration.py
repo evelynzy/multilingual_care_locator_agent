@@ -119,6 +119,33 @@ class _PediatricRetryClinicalTablesSource:
         )
 
 
+class _KeywordOnlyClinicalTablesSource:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="NPI Registry (organization)",
+            dataset=dataset,
+            city="Manhattan",
+            state="NY",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        ).with_updates(description="Child health imaging and pediatric scans.")
+        return SourceSearchResult(
+            providers=[provider],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=1,
+            ),
+        )
+
+
 class _DuplicatePrimaryCareClinicalTablesSource:
     def __init__(self) -> None:
         self.calls = []
@@ -656,6 +683,41 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn("Canal Pediatrics", result)
         self.assertNotIn("Downtown Imaging Associates", result)
         self.assertIn("Pediatrics", result)
+
+    def test_handle_request_specialty_mismatch_keyword_match_does_not_bypass_specialty_gate(self) -> None:
+        service = ProviderSearchService(
+            clinicaltables_source=_KeywordOnlyClinicalTablesSource(),
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="中文",
+            response_language="中文",
+            summary="儿科10013",
+            medical_need=True,
+            location="Manhattan, NY 10013",
+            specialties=["Pediatrics"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=["child health"],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query):
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "儿科 10013 曼哈顿",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertNotIn("Downtown Imaging Associates", result)
+        self.assertIn("Medicare Care Compare", result)
+        self.assertIn("Trusted public directories", result)
 
 
 if __name__ == "__main__":

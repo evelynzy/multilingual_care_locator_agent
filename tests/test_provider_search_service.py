@@ -257,6 +257,27 @@ class ProviderSearchRankingTests(unittest.TestCase):
 
         self.assertEqual(ranked, [])
 
+    def test_rank_provider_results_requires_specialty_evidence_when_specialty_requested(self) -> None:
+        request = ProviderSearchRequest(
+            specialties=("Pediatrics",),
+            location="Manhattan, NY 10013",
+            keywords=("child health",),
+        )
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        ).with_updates(description="Child health imaging and pediatric scans.")
+
+        ranked = rank_provider_results(request, [radiology_provider], limit=3)
+
+        self.assertEqual(ranked, [])
+
 
 class ProviderSearchServiceTests(unittest.TestCase):
     def test_search_orchestrates_live_sources_and_updates_cache(self) -> None:

@@ -34,11 +34,9 @@ def rank_provider_results(
             extra_values=(provider.taxonomy,) if provider.taxonomy else (),
         )
         matched_keywords = _match_keywords(normalized_request.keywords, provider)
-        if (
-            _requires_relevance_gate(normalized_request)
-            and not matched_specialties
-            and not matched_keywords
-        ):
+        if normalized_request.specialties and not matched_specialties:
+            continue
+        if normalized_request.keywords and not normalized_request.specialties and not matched_keywords:
             continue
         breakdown = _build_score_breakdown(
             normalized_request,
@@ -124,12 +122,6 @@ def _build_score_breakdown(
         "telehealth_alignment": 0.5 if telehealth_requested and provider.telehealth else 0.0,
         "freshness_metadata": 0.25 if freshness_present else 0.0,
     }
-
-
-def _requires_relevance_gate(request: ProviderSearchRequest) -> bool:
-    return bool(request.specialties or request.keywords)
-
-
 def _provider_result_sort_key(result: ProviderSearchResult) -> tuple[float, int, int, str, str]:
     provider = result.provider
     score = result.score if result.score is not None else 0.0
