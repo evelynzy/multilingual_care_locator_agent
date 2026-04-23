@@ -281,6 +281,9 @@ class ObgynZipClinicalTablesSource:
         self.canonical_term_providers = list(canonical_term_providers)
         self.calls: list[tuple[str, object]] = []
 
+    def suggest_specialty_terms(self, specialties: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(specialty.strip() for specialty in specialties if specialty.strip())
+
     def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
         self.calls.append((dataset, request))
         if dataset == "npi_idv" and (
@@ -1222,11 +1225,11 @@ class ProviderSearchServiceTests(unittest.TestCase):
             "addr_practice.state:TX AND addr_practice.zip:75001",
         )
 
-    def test_search_zip_only_obgyn_95051_uses_canonical_family_term_to_surface_specialty_bearing_candidates(self) -> None:
+    def test_search_zip_only_obgyn_95051_continues_to_canonical_variant_after_single_noisy_idv_hit(self) -> None:
         noisy_zip_providers = [
             build_canonical_provider(
-                provider_id=f"provider-noise-{index}",
-                name=f"Noisy Clinician {index}",
+                provider_id="provider-noise-0",
+                name="Noisy Clinician 0",
                 source_name="ClinicalTables",
                 dataset="npi_idv",
                 city="Santa Clara",
@@ -1234,7 +1237,6 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 specialties=(),
                 taxonomy=None,
             )
-            for index in range(16)
         ]
         specialty_bearing_provider = build_canonical_provider(
             provider_id="provider-obgyn",
@@ -1266,16 +1268,109 @@ class ProviderSearchServiceTests(unittest.TestCase):
         )
 
         searched_terms = [request.search_terms for _, request in source.calls]
-        self.assertIn("OB/GYN", searched_terms)
-        self.assertIn("Obstetrics & Gynecology", searched_terms)
-        self.assertIn("Obstetrics & Gynecology 95051", searched_terms)
+        self.assertEqual(
+            searched_terms,
+            ["OB/GYN", "Obstetrics & Gynecology"],
+        )
         self.assertEqual(len(response.provider_results), 1)
         self.assertEqual(response.provider_results[0].provider.name, "Cupertino OB/GYN Associates")
         self.assertEqual(
             response.provider_results[0].provider.ranking_metadata.get("matched_specialties"),
             ("OB/GYN",),
         )
-        self.assertEqual(response.search_trace.total_candidates, 17)
+        self.assertEqual(response.search_trace.total_candidates, 2)
+
+    def test_search_zip_only_obgyn_95051_uses_canonical_zip_variant_when_non_location_variant_stays_low_signal(
+        self,
+    ) -> None:
+        noisy_zip_providers = [
+            build_canonical_provider(
+                provider_id="provider-noise-0",
+                name="Noisy Clinician 0",
+                source_name="ClinicalTables",
+                dataset="npi_idv",
+                city="Santa Clara",
+                state="CA",
+                specialties=(),
+                taxonomy=None,
+            )
+        ]
+        specialty_bearing_provider = build_canonical_provider(
+            provider_id="provider-obgyn",
+            name="Cupertino OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Obstetrics & Gynecology",
+            specialties=("Obstetrics & Gynecology",),
+        )
+
+        class CanonicalZipOnlyObgynSource(ObgynZipClinicalTablesSource):
+            def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
+                self.calls.append((dataset, request))
+                if dataset == "npi_idv" and (
+                    request.query_filter == "addr_practice.zip:95051"
+                    and request.search_terms in {"OB/GYN", "Obstetrics & Gynecology"}
+                ):
+                    return SourceSearchResult(
+                        providers=list(self.noisy_zip_providers),
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=len(self.noisy_zip_providers),
+                        ),
+                    )
+                if request.query_filter == "addr_practice.zip:95051" and (
+                    request.search_terms == "Obstetrics & Gynecology 95051"
+                ):
+                    return SourceSearchResult(
+                        providers=list(self.canonical_term_providers),
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=len(self.canonical_term_providers),
+                        ),
+                    )
+                return SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(
+                        source_name="clinicaltables",
+                        dataset=dataset,
+                        status_code=200,
+                        result_count=0,
+                    ),
+                )
+
+        source = CanonicalZipOnlyObgynSource(
+            noisy_zip_providers,
+            [specialty_bearing_provider],
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="95051",
+            ),
+            limit=5,
+        )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertEqual(
+            searched_terms,
+            ["OB/GYN", "Obstetrics & Gynecology", "Obstetrics & Gynecology 95051"],
+        )
+        self.assertEqual(len(response.provider_results), 1)
+        self.assertEqual(response.provider_results[0].provider.name, "Cupertino OB/GYN Associates")
+        self.assertEqual(response.search_trace.total_candidates, 2)
 
     def test_search_keeps_source_friendly_ent_specialty_terms_without_family_label_rewrite(self) -> None:
         source = FakeClinicalTablesSource(
@@ -1775,11 +1870,9 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=3,
         )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 1)
         _, first_request = source.calls[0]
-        _, second_request = source.calls[1]
         self.assertEqual(first_request.search_terms, "Dentistry")
-        self.assertEqual(second_request.search_terms, "Dentistry 33012")
         self.assertEqual(first_request.query_filter, "addr_practice.zip:33012")
         self.assertEqual(len(response.provider_results), 3)
         self.assertEqual(response.search_trace.total_candidates, 3)
@@ -1859,7 +1952,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=2,
         )
 
-        self.assertEqual(len(source.calls), 4)
+        self.assertEqual(len(source.calls), 2)
         self.assertEqual(len(response.provider_results), 2)
         self.assertEqual(
             [result.provider.name for result in response.provider_results],

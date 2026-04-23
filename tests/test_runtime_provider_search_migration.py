@@ -1,7 +1,7 @@
 import sys
 import types
 import unittest
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import Mock, patch
 
 
@@ -150,6 +150,9 @@ class _ObgynZipClinicalTablesSource:
         self.noisy_zip_providers = list(noisy_zip_providers)
         self.canonical_term_providers = list(canonical_term_providers)
         self.calls = []
+
+    def suggest_specialty_terms(self, specialties: Tuple[str, ...]) -> Tuple[str, ...]:
+        return tuple(specialty.strip() for specialty in specialties if specialty.strip())
 
     def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
         self.calls.append((dataset, request))
@@ -1191,11 +1194,11 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(provider_request.location, "95051")
         self.assertIn("Cupertino OB/GYN Associates", result)
 
-    def test_handle_request_obgyn_95051_uses_canonical_family_term_when_raw_idv_results_are_noisy(self) -> None:
+    def test_handle_request_obgyn_95051_continues_to_canonical_variant_after_single_noisy_idv_hit(self) -> None:
         noisy_zip_providers = [
             build_canonical_provider(
-                provider_id=f"provider-noise-{index}",
-                name=f"Noisy Clinician {index}",
+                provider_id="provider-noise-0",
+                name="Noisy Clinician 0",
                 source_name="ClinicalTables",
                 dataset="npi_idv",
                 city="Santa Clara",
@@ -1203,7 +1206,6 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 specialties=(),
                 taxonomy=None,
             )
-            for index in range(16)
         ]
         specialty_bearing_provider = build_canonical_provider(
             provider_id="provider-obgyn",
@@ -1254,9 +1256,121 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             )
 
         searched_terms = [request.search_terms for _, request in source.calls]
-        self.assertIn("OB/GYN", searched_terms)
-        self.assertIn("Obstetrics & Gynecology", searched_terms)
-        self.assertIn("Obstetrics & Gynecology 95051", searched_terms)
+        self.assertEqual(
+            searched_terms,
+            ["OB/GYN", "Obstetrics & Gynecology"],
+        )
+        self.assertIn("Cupertino OB/GYN Associates", result)
+        self.assertNotIn("Noisy Clinician", result)
+        trusted_fallback.assert_not_called()
+
+    def test_handle_request_obgyn_95051_uses_canonical_zip_variant_when_non_location_variants_stay_low_signal(
+        self,
+    ) -> None:
+        noisy_zip_providers = [
+            build_canonical_provider(
+                provider_id="provider-noise-0",
+                name="Noisy Clinician 0",
+                source_name="ClinicalTables",
+                dataset="npi_idv",
+                city="Santa Clara",
+                state="CA",
+                specialties=(),
+                taxonomy=None,
+            )
+        ]
+        specialty_bearing_provider = build_canonical_provider(
+            provider_id="provider-obgyn",
+            name="Cupertino OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Obstetrics & Gynecology",
+            specialties=("Obstetrics & Gynecology",),
+            phone="408-555-0100",
+        )
+
+        class _CanonicalZipOnlyObgynSource(_ObgynZipClinicalTablesSource):
+            def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+                self.calls.append((dataset, request))
+                if dataset == "npi_idv" and (
+                    request.query_filter == "addr_practice.zip:95051"
+                    and request.search_terms in {"OB/GYN", "Obstetrics & Gynecology"}
+                ):
+                    return SourceSearchResult(
+                        providers=list(self.noisy_zip_providers),
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=len(self.noisy_zip_providers),
+                        ),
+                    )
+                if request.query_filter == "addr_practice.zip:95051" and (
+                    request.search_terms == "Obstetrics & Gynecology 95051"
+                ):
+                    return SourceSearchResult(
+                        providers=list(self.canonical_term_providers),
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=len(self.canonical_term_providers),
+                        ),
+                    )
+                return SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(
+                        source_name="clinicaltables",
+                        dataset=dataset,
+                        status_code=200,
+                        result_count=0,
+                    ),
+                )
+
+        source = _CanonicalZipOnlyObgynSource(
+            noisy_zip_providers,
+            [specialty_bearing_provider],
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn 95051",
+            medical_need=True,
+            location="95051",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "ob gyn 95051",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertEqual(
+            searched_terms,
+            ["OB/GYN", "Obstetrics & Gynecology", "Obstetrics & Gynecology 95051"],
+        )
         self.assertIn("Cupertino OB/GYN Associates", result)
         self.assertNotIn("Noisy Clinician", result)
         trusted_fallback.assert_not_called()
@@ -1430,7 +1544,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual(len(client.calls), 2)
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 1)
         _, first_request = source.calls[0]
         self.assertEqual(first_request.search_terms, "Dentistry")
         self.assertEqual(first_request.query_filter, "addr_practice.zip:33012")
@@ -1940,7 +2054,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 1)
         self.assertIn("Florida Children&#x27;s Dentistry, P.A.", result)
         self.assertIn("Hialeah Square Dentistry, PA", result)
         self.assertIn("Caplin and Gober Dentistry, PA", result)
@@ -2021,7 +2135,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(len(source.calls), 4)
+        self.assertEqual(len(source.calls), 2)
         self.assertEqual(result.count("provider-card__title"), 2)
         self.assertIn('<div class="provider-card__title">1. Florida Children&#x27;s Dentistry, P.A.</div>', result)
         self.assertIn('<div class="provider-card__title">2. Zzz Family Dental</div>', result)
