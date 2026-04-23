@@ -906,6 +906,115 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(client.calls), 3)
         service.search.assert_not_called()
 
+    def test_handle_request_restores_zip_from_raw_message_when_valid_interpret_json_omits_location(self) -> None:
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn",
+            name="Cupertino OB/GYN Associates",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Cupertino",
+            state="CA",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="408-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="98101",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=obgyn_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(
+                source_traces=(
+                    SourceTrace(
+                        source_name="clinicaltables",
+                        dataset="npi_idv",
+                        status_code=200,
+                        result_count=1,
+                    ),
+                ),
+                sources_attempted=("clinicaltables",),
+                sources_used=("clinicaltables",),
+                total_candidates=1,
+            ),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"ob gyn 98101",'
+                        '"medical_need":true,"location":null,"specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "ob gyn 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 1)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("OB/GYN",))
+        self.assertEqual(provider_request.location, "98101")
+        self.assertIn("Cupertino OB/GYN Associates", result)
+
+    def test_handle_request_keeps_explicit_cpt_intent_when_valid_interpret_json_omits_location(self) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"CPT 98101 ob gyn",'
+                        '"medical_need":true,"location":null,"specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":["cpt"],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":["procedure code"]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "CPT 98101 ob gyn",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 2)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.location, None)
+        self.assertEqual(provider_request.specialties, ("OB/GYN",))
+        self.assertIn("Important safety and trust notes:", result)
+
     def test_handle_request_rescues_primary_care_zip_from_malformed_interpret_json(self) -> None:
         primary_care_provider = build_canonical_provider(
             provider_id="provider-primary-care",
