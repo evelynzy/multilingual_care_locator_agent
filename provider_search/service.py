@@ -80,7 +80,12 @@ class ProviderSearchService:
             limit=limit,
         )
         source_traces, missing_location_hint, deduped_providers = (
-            self._collect_planned_source_candidates(planned_requests)
+            self._collect_planned_source_candidates(
+                planned_requests,
+                continue_until_usable_specialty_evidence=(
+                    self._should_continue_zip_only_specialty_variants(normalized_request)
+                ),
+            )
         )
 
         if self._should_retry_search(
@@ -424,6 +429,8 @@ class ProviderSearchService:
     def _collect_planned_source_candidates(
         self,
         requests: Sequence[SourceSearchRequest],
+        *,
+        continue_until_usable_specialty_evidence: bool = False,
     ) -> tuple[list[SourceTrace], Optional[str], dict[str, CanonicalProvider]]:
         source_traces: list[SourceTrace] = []
         missing_location_hint: Optional[str] = None
@@ -445,6 +452,10 @@ class ProviderSearchService:
                         primary=provider,
                         fallback=existing_provider,
                     )
+            if continue_until_usable_specialty_evidence and self._has_usable_specialty_evidence(
+                deduped_providers.values()
+            ):
+                break
 
         return source_traces, missing_location_hint, deduped_providers
 
@@ -556,27 +567,51 @@ class ProviderSearchService:
         if location_only or not request.specialties:
             return [base_terms]
 
-        planned_terms = [base_terms]
+        planned_terms: list[str] = []
+        specialty_term_variants = self._plan_specialty_term_variants(request.specialties)
+        for candidate in specialty_term_variants:
+            if candidate not in planned_terms:
+                planned_terms.append(candidate)
 
-        suggested_specialties = self._suggest_specialty_terms(request.specialties)
-        suggested_base_terms = " ".join(suggested_specialties).strip()
-        if suggested_base_terms and suggested_base_terms not in planned_terms:
-            planned_terms.append(suggested_base_terms)
-        else:
-            suggested_base_terms = base_terms
-
-        location_assisted_terms = self._build_location_assisted_terms(
-            suggested_base_terms,
+        location_assisted_seed = specialty_term_variants[-1] if specialty_term_variants else base_terms
+        for candidate in self._build_location_assisted_terms(
+            location_assisted_seed,
             location=request.location,
             city_hint=city_hint,
             state_hint=state_hint,
             zip_hint=zip_hint,
-        )
-        for candidate in location_assisted_terms:
+        ):
             if candidate not in planned_terms:
                 planned_terms.append(candidate)
 
         return planned_terms
+
+    def _plan_specialty_term_variants(self, specialties: Sequence[str]) -> list[str]:
+        cleaned_specialties = tuple(
+            term.strip() for term in specialties if isinstance(term, str) and term.strip()
+        )
+        if not cleaned_specialties:
+            return []
+
+        variants: list[str] = []
+        base_terms = " ".join(cleaned_specialties).strip()
+        if base_terms:
+            variants.append(base_terms)
+
+        suggested_specialties = self._suggest_specialty_terms(cleaned_specialties)
+        suggested_terms = " ".join(suggested_specialties).strip()
+        if suggested_terms and suggested_terms not in variants:
+            variants.append(suggested_terms)
+
+        canonical_specialties = tuple(
+            self._canonical_specialty_search_term(term)
+            for term in cleaned_specialties
+        )
+        canonical_terms = " ".join(canonical_specialties).strip()
+        if canonical_terms and canonical_terms != suggested_terms and canonical_terms not in variants:
+            variants.append(canonical_terms)
+
+        return variants
 
     def _suggest_specialty_terms(self, specialties: Sequence[str]) -> tuple[str, ...]:
         cleaned_specialties = tuple(
@@ -598,6 +633,45 @@ class ProviderSearchService:
             self._canonical_specialty_search_term(term)
             for term in cleaned_specialties
         )
+
+    @staticmethod
+    def _has_usable_specialty_evidence(
+        providers: Sequence[CanonicalProvider],
+    ) -> bool:
+        for provider in providers:
+            specialty_family_ids = tuple(
+                family_id
+                for family_id in getattr(provider, "specialty_family_ids", ())
+                if isinstance(family_id, str) and family_id.strip()
+            )
+            if specialty_family_ids:
+                return True
+
+            normalized_taxonomy = normalize_text(provider.taxonomy, lowercase=True)
+            if normalized_taxonomy:
+                return True
+
+            normalized_specialties = tuple(
+                normalized
+                for normalized in (
+                    normalize_text(value, lowercase=True)
+                    for value in provider.specialties
+                )
+                if normalized
+            )
+            if normalized_specialties:
+                return True
+
+        return False
+
+    def _should_continue_zip_only_specialty_variants(
+        self,
+        request: ProviderSearchRequest,
+    ) -> bool:
+        if not request.specialties:
+            return False
+        city_hint, _, zip_hint = self._extract_location_hints(request.location)
+        return bool(zip_hint and not city_hint)
 
     @staticmethod
     def _canonical_specialty_search_term(specialty: str) -> str:
