@@ -475,6 +475,12 @@ class ProviderSearchService:
         if primary_phone and duplicate_phone and primary_phone != duplicate_phone:
             return False
 
+        if (
+            ProviderSearchService._visible_service_line_key(primary)
+            != ProviderSearchService._visible_service_line_key(duplicate)
+        ):
+            return False
+
         return True
 
     @staticmethod
@@ -492,6 +498,23 @@ class ProviderSearchService:
             for value in source_values
         ]
         return any("organization" in value or "npi_org" in value for value in normalized_values)
+
+    @staticmethod
+    def _visible_service_line_key(provider: CanonicalProvider) -> tuple[Optional[str], tuple[str, ...]]:
+        normalized_taxonomy = normalize_text(provider.taxonomy, lowercase=True)
+        normalized_specialties = tuple(
+            sorted(
+                {
+                    normalized_value
+                    for normalized_value in (
+                        normalize_text(value, lowercase=True)
+                        for value in provider.specialties
+                    )
+                    if normalized_value
+                }
+            )
+        )
+        return normalized_taxonomy, normalized_specialties
 
     def _merge_display_duplicate_result(
         self,
