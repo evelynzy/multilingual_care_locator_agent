@@ -24,6 +24,7 @@ from provider_search.sources import (
     ClinicalTablesSource,
     NPPESSource,
 )
+from provider_search.sources.clinicaltables import DEFAULT_DATASET_CONFIGS
 
 logger = logging.getLogger(__name__)
 
@@ -752,25 +753,6 @@ class CareLocatorAgent:
                 "fields_url": clinical.get("individual_fields_url") or None,
                 "probe_term": field_probe_terms.get("npi_idv", "urology"),
                 "source_label": "NPI Registry (individual)",
-                "result_fields": [
-                    "name.full",
-                    "name.first",
-                    "name.middle",
-                    "name.last",
-                    "name.prefix",
-                    "name.suffix",
-                    "NPI",
-                    "provider_type",
-                    "addr_practice.full",
-                    "addr_practice.address_1",
-                    "addr_practice.address_2",
-                    "addr_practice.city",
-                    "addr_practice.state",
-                    "addr_practice.zip",
-                    "addr_practice.country_name",
-                    "addr_practice.phone",
-                    "languages",
-                ],
             },
             "npi_org": {
                 "search_url": clinical.get(
@@ -781,20 +763,6 @@ class CareLocatorAgent:
                 "fields_url": clinical.get("organization_fields_url") or None,
                 "probe_term": field_probe_terms.get("npi_org", "clinic"),
                 "source_label": "NPI Registry (organization)",
-                "result_fields": [
-                    "name.full",
-                    "NPI",
-                    "provider_type",
-                    "addr_practice.full",
-                    "addr_practice.address_1",
-                    "addr_practice.address_2",
-                    "addr_practice.city",
-                    "addr_practice.state",
-                    "addr_practice.zip",
-                    "addr_practice.country_name",
-                    "addr_practice.phone",
-                    "languages",
-                ],
             },
         }
         self._ctss_dataset_priority: List[str] = [
@@ -2184,15 +2152,20 @@ class CareLocatorAgent:
             search_url = config.get("search_url")
             if not search_url:
                 continue
+            default_config = DEFAULT_DATASET_CONFIGS.get(dataset)
             configs[dataset] = ClinicalTablesDatasetConfig(
                 search_url=search_url,
-                values_url=config.get("values_url"),
-                fields_url=config.get("fields_url"),
-                probe_term=config.get("probe_term"),
+                values_url=config.get("values_url", default_config.values_url if default_config else None),
+                fields_url=config.get("fields_url", default_config.fields_url if default_config else None),
+                probe_term=config.get("probe_term", default_config.probe_term if default_config else None),
                 source_label=str(
-                    config.get("source_label") or "NPI Registry via clinicaltables.nlm.nih.gov"
+                    config.get("source_label")
+                    or (default_config.source_label if default_config else None)
+                    or "NPI Registry via clinicaltables.nlm.nih.gov"
                 ),
-                result_fields=list(config.get("result_fields") or []),
+                result_fields=list(
+                    default_config.result_fields if default_config else (config.get("result_fields") or [])
+                ),
             )
         return configs
 
