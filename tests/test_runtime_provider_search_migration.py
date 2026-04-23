@@ -141,6 +141,55 @@ class _PediatricRetryClinicalTablesSource:
         )
 
 
+class _ObgynZipClinicalTablesSource:
+    def __init__(
+        self,
+        noisy_zip_providers: List[Any],
+        canonical_term_providers: List[Any],
+    ) -> None:
+        self.noisy_zip_providers = list(noisy_zip_providers)
+        self.canonical_term_providers = list(canonical_term_providers)
+        self.calls = []
+
+    def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if dataset == "npi_idv" and (
+            request.query_filter == "addr_practice.zip:98101"
+            and request.search_terms == "OB/GYN"
+        ):
+            return SourceSearchResult(
+                providers=list(self.noisy_zip_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.noisy_zip_providers),
+                ),
+            )
+        if request.query_filter == "addr_practice.zip:98101" and request.search_terms in {
+            "Obstetrics & Gynecology",
+            "Obstetrics & Gynecology 98101",
+        }:
+            return SourceSearchResult(
+                providers=list(self.canonical_term_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.canonical_term_providers),
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
 class _NearbyDentalClinicalTablesSource:
     def __init__(
         self,
@@ -1141,6 +1190,76 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(provider_request.specialties, ("OB/GYN",))
         self.assertEqual(provider_request.location, "98101")
         self.assertIn("Cupertino OB/GYN Associates", result)
+
+    def test_handle_request_obgyn_98101_uses_canonical_family_term_when_raw_idv_results_are_noisy(self) -> None:
+        noisy_zip_providers = [
+            build_canonical_provider(
+                provider_id=f"provider-noise-{index}",
+                name=f"Noisy Clinician {index}",
+                source_name="ClinicalTables",
+                dataset="npi_idv",
+                city="Santa Clara",
+                state="CA",
+                specialties=(),
+                taxonomy=None,
+            )
+            for index in range(16)
+        ]
+        specialty_bearing_provider = build_canonical_provider(
+            provider_id="provider-obgyn",
+            name="Cupertino OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Obstetrics & Gynecology",
+            specialties=("Obstetrics & Gynecology",),
+            phone="408-555-0100",
+        )
+        source = _ObgynZipClinicalTablesSource(
+            noisy_zip_providers,
+            [specialty_bearing_provider],
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn 98101",
+            medical_need=True,
+            location="98101",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "ob gyn 98101",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertIn("OB/GYN", searched_terms)
+        self.assertIn("Obstetrics & Gynecology", searched_terms)
+        self.assertIn("Obstetrics & Gynecology 98101", searched_terms)
+        self.assertIn("Cupertino OB/GYN Associates", result)
+        self.assertNotIn("Noisy Clinician", result)
+        trusted_fallback.assert_not_called()
 
     def test_handle_request_rescue_does_not_misread_pcp_in_dallas_tx_as_pcp_in(self) -> None:
         service = Mock()
