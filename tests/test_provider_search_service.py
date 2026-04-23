@@ -445,6 +445,51 @@ class ProviderSearchRankingTests(unittest.TestCase):
             )
         )
 
+    def test_rank_provider_results_matches_curated_dentistry_specialty_equivalents(self) -> None:
+        request = ProviderSearchRequest(specialties=("Dentistry",), location="33012")
+        dentist_provider = build_canonical_provider(
+            provider_id="provider-dentist",
+            name="Florida Children's Dentistry, P.A.",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            taxonomy="Dentist",
+            specialties=("Dentist", "Dentist, Pediatric Dentistry", "1223P0221X"),
+        )
+        periodontics_provider = build_canonical_provider(
+            provider_id="provider-periodontics",
+            name="Caplin and Gober Dentistry, PA",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            taxonomy="Dentist",
+            specialties=("Dentist", "Dentist, Periodontics", "1223P0300X"),
+        )
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+
+        ranked = rank_provider_results(
+            request,
+            [dentist_provider, periodontics_provider, radiology_provider],
+            limit=5,
+        )
+
+        self.assertEqual(len(ranked), 2)
+        self.assertEqual(
+            {result.provider.name for result in ranked},
+            {"Florida Children's Dentistry, P.A.", "Caplin and Gober Dentistry, PA"},
+        )
+        self.assertTrue(
+            all(
+                result.provider.ranking_metadata.get("matched_specialties") == ("Dentistry",)
+                for result in ranked
+            )
+        )
+
     def test_rank_provider_results_filters_location_only_candidates_for_constrained_searches(self) -> None:
         request = ProviderSearchRequest(
             specialties=("Pediatrics",),
@@ -1452,7 +1497,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
         )
         self.assertIn("208000000X", result.provider.specialties)
 
-    def test_search_retries_zip_driven_dentistry_request_with_same_state_nearby_retry_after_gate_drops_local_results(self) -> None:
+    def test_search_admits_zip_driven_dentistry_descendants_without_nearby_retry(self) -> None:
         local_zip_providers = [
             build_canonical_provider(
                 provider_id="provider-local-1",
@@ -1511,82 +1556,71 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=3,
         )
 
-        self.assertEqual(len(source.calls), 4)
+        self.assertEqual(len(source.calls), 2)
         _, first_request = source.calls[0]
         _, second_request = source.calls[1]
-        _, nearby_retry_request = source.calls[2]
-        _, nearby_assisted_request = source.calls[3]
         self.assertEqual(first_request.search_terms, "Dentistry")
         self.assertEqual(second_request.search_terms, "Dentistry 33012")
         self.assertEqual(first_request.query_filter, "addr_practice.zip:33012")
-        self.assertEqual(nearby_retry_request.search_terms, "Dentistry")
-        self.assertEqual(nearby_assisted_request.search_terms, "Dentistry FL")
-        self.assertEqual(nearby_retry_request.query_filter, "addr_practice.state:FL")
-        self.assertEqual(nearby_assisted_request.query_filter, "addr_practice.state:FL")
-        self.assertEqual(len(response.provider_results), 1)
-        self.assertEqual(response.provider_results[0].provider.name, "Miami Lakes Dentistry Center")
-        self.assertEqual(response.search_trace.total_candidates, 4)
-        self.assertEqual(
-            response.provider_results[0].provider.ranking_metadata.get("matched_specialties"),
-            ("Dentistry",),
+        self.assertEqual(len(response.provider_results), 3)
+        self.assertEqual(response.search_trace.total_candidates, 3)
+        self.assertCountEqual(
+            [result.provider.name for result in response.provider_results],
+            [
+                "Florida Children's Dentistry, P.A.",
+                "Hialeah Square Dentistry, PA",
+                "Caplin and Gober Dentistry, PA",
+            ],
+        )
+        self.assertTrue(
+            all(
+                result.provider.ranking_metadata.get("matched_specialties") == ("Dentistry",)
+                for result in response.provider_results
+            )
         )
 
-    def test_search_dentista_33012_keeps_second_visible_result_after_nearby_display_dedupe(self) -> None:
+    def test_search_dentista_33012_keeps_second_visible_result_after_local_display_dedupe(self) -> None:
         local_zip_providers = [
             build_canonical_provider(
-                provider_id="provider-local-1",
+                provider_id="provider-local-individual",
                 name="Florida Children's Dentistry, P.A.",
-                source_name="NPI Registry (organization)",
-                dataset="npi_org",
+                source_name="NPI Registry (individual)",
+                dataset="npi_idv",
+                address="123 Palm Ave",
                 city="Hialeah",
                 state="FL",
                 taxonomy="Dentist",
-                specialties=("Dentist",),
+                specialties=("Dentist", "Dentist, Pediatric Dentistry"),
+                phone="305-555-0101",
+            ),
+            build_canonical_provider(
+                provider_id="provider-local-org",
+                name="Florida Children's Dentistry, P.A.",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                address="123 Palm Ave",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist", "Dentist, Pediatric Dentistry"),
+                phone="305-555-0101",
+            ),
+            build_canonical_provider(
+                provider_id="provider-local-second",
+                name="Zzz Family Dental",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                address="900 Pine St",
+                city="Miami",
+                state="FL",
+                taxonomy="Dentistry",
+                specialties=("Dentistry",),
+                phone="305-555-0102",
             ),
         ]
-        duplicate_nearby_individual = build_canonical_provider(
-            provider_id="provider-nearby-individual",
-            name="Miami Lakes Dentistry Center",
-            source_name="NPI Registry (individual)",
-            dataset="npi_idv",
-            address="789 Oak Ave",
-            city="Miami Lakes",
-            state="FL",
-            taxonomy="Dentistry",
-            specialties=("Dentistry",),
-            phone="305-555-0101",
-        )
-        duplicate_nearby_org = build_canonical_provider(
-            provider_id="provider-nearby-org",
-            name="Miami Lakes Dentistry Center",
-            source_name="NPI Registry (organization)",
-            dataset="npi_org",
-            address="789 Oak Ave",
-            city="Miami Lakes",
-            state="FL",
-            taxonomy="Dentistry",
-            specialties=("Dentistry",),
-            phone="305-555-0101",
-        )
-        second_visible_provider = build_canonical_provider(
-            provider_id="provider-nearby-second",
-            name="Zzz Family Dental",
-            source_name="NPI Registry (organization)",
-            dataset="npi_org",
-            address="900 Pine St",
-            city="Miami",
-            state="FL",
-            taxonomy="Dentistry",
-            specialties=("Dentistry",),
-            phone="305-555-0102",
-        )
         source = NearbyDentalClinicalTablesSource(
             local_zip_providers,
-            [
-                duplicate_nearby_individual,
-                duplicate_nearby_org,
-                second_visible_provider,
-            ],
+            [],
         )
         service = ProviderSearchService(
             clinicaltables_source=source,
@@ -1603,11 +1637,11 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=2,
         )
 
-        self.assertEqual(len(source.calls), 8)
+        self.assertEqual(len(source.calls), 4)
         self.assertEqual(len(response.provider_results), 2)
         self.assertEqual(
             [result.provider.name for result in response.provider_results],
-            ["Miami Lakes Dentistry Center", "Zzz Family Dental"],
+            ["Florida Children's Dentistry, P.A.", "Zzz Family Dental"],
         )
         self.assertEqual(
             response.provider_results[0].retriever_metadata["display_dedupe_count"],
