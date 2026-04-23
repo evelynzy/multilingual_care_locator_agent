@@ -31,7 +31,6 @@ def rank_provider_results(
         breakdown = _build_score_breakdown(
             normalized_request,
             provider,
-            cached_identity=provider.provider_id in cached_ids,
         )
         score = round(sum(breakdown.values()), 6)
         ranking_metadata = dict(provider.ranking_metadata)
@@ -80,8 +79,6 @@ def rank_provider_results(
 def _build_score_breakdown(
     request: ProviderSearchRequest,
     provider: CanonicalProvider,
-    *,
-    cached_identity: bool,
 ) -> dict[str, float]:
     location_matches = _count_token_overlap(
         _tokenize(request.location),
@@ -118,7 +115,6 @@ def _build_score_breakdown(
         "insurance_verified": 0.5 if insurance_verified else 0.0,
         "telehealth_alignment": 0.5 if telehealth_requested and provider.telehealth else 0.0,
         "freshness_metadata": 0.25 if freshness_present else 0.0,
-        "cache_alignment": 0.25 if cached_identity else 0.0,
     }
 
 

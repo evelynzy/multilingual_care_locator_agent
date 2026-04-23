@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
+import logging
 import re
 from typing import Optional, Protocol, Sequence
 
@@ -25,6 +26,7 @@ from provider_search.ranking import rank_provider_results
 
 
 DEFAULT_CLINICALTABLES_DATASETS = ("npi_idv", "npi_org")
+logger = logging.getLogger(__name__)
 
 
 class SearchDatasetBackend(Protocol):
@@ -64,7 +66,7 @@ class ProviderSearchService:
         normalized_request = normalize_search_request(request)
         request_fingerprint = build_request_fingerprint(normalized_request)
         cache_key = self._build_cache_key(request_fingerprint)
-        cache_entry = self.cache.get(cache_key) if self.cache is not None else None
+        cache_entry = self._read_cache_entry(cache_key)
 
         source_request = self._build_source_request(normalized_request, limit=limit)
         source_traces: list[SourceTrace] = []
@@ -72,7 +74,7 @@ class ProviderSearchService:
         deduped_providers: dict[str, CanonicalProvider] = {}
 
         for dataset in self.datasets:
-            source_result = self.clinicaltables_source.search_dataset(dataset, source_request)
+            source_result = self._search_dataset(dataset, source_request)
             trace = source_result.trace or SourceTrace(
                 source_name="clinicaltables",
                 dataset=dataset,
@@ -109,8 +111,8 @@ class ProviderSearchService:
             )
         )
 
-        if ranked_results and self.cache is not None:
-            self.cache.set(
+        if ranked_results:
+            self._write_cache_entry(
                 ProviderSearchCacheEntry(
                     cache_key=cache_key,
                     request_fingerprint=request_fingerprint,
@@ -156,6 +158,43 @@ class ProviderSearchService:
     @staticmethod
     def _build_cache_key(request_fingerprint: str) -> str:
         return f"provider-search:{request_fingerprint}"
+
+    def _read_cache_entry(self, cache_key: str) -> Optional[ProviderSearchCacheEntry]:
+        if self.cache is None:
+            return None
+
+        try:
+            return self.cache.get(cache_key)
+        except Exception as exc:
+            logger.warning("Provider search cache read failed for %s: %s", cache_key, exc)
+            return None
+
+    def _write_cache_entry(self, entry: ProviderSearchCacheEntry) -> None:
+        if self.cache is None:
+            return
+
+        try:
+            self.cache.set(entry)
+        except Exception as exc:
+            logger.warning("Provider search cache write failed for %s: %s", entry.cache_key, exc)
+
+    def _search_dataset(
+        self,
+        dataset: str,
+        request: SourceSearchRequest,
+    ) -> SourceSearchResult:
+        try:
+            return self.clinicaltables_source.search_dataset(dataset, request)
+        except Exception as exc:
+            logger.warning("Provider source failed for dataset %s: %s", dataset, exc)
+            return SourceSearchResult(
+                providers=[],
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    error=str(exc),
+                ),
+            )
 
     @staticmethod
     def _compose_search_terms(request: ProviderSearchRequest) -> str:
