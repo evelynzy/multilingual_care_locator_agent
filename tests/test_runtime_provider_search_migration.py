@@ -36,6 +36,7 @@ from provider_search.models import (
 )
 from provider_search.normalization import build_canonical_provider
 from provider_search.service import ProviderSearchService
+from provider_search.sources.clinicaltables import ClinicalTablesSource
 
 
 class _SequencedChatClient:
@@ -1262,6 +1263,82 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         )
         self.assertIn("Cupertino OB/GYN Associates", result)
         self.assertNotIn("Noisy Clinician", result)
+        trusted_fallback.assert_not_called()
+
+    def test_handle_request_obgyn_95051_accepts_live_taxonomy_desc_payload_without_fallback(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+                "addr_practice.phone",
+            ],
+            [[
+                "Cupertino OB/GYN Associates",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "Santa Clara",
+                "CA",
+                "95051",
+                "408-555-0100",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn 95051",
+            medical_need=True,
+            location="95051",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "ob gyn 95051",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(len(session.get.call_args_list), 1)
+        _, kwargs = session.get.call_args
+        self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
+        self.assertIn("Cupertino OB/GYN Associates", result)
+        self.assertIn("Obstetrics &amp; Gynecology", result)
+        self.assertNotIn("Medicare Care Compare", result)
         trusted_fallback.assert_not_called()
 
     def test_handle_request_obgyn_95051_uses_canonical_zip_variant_when_non_location_variants_stay_low_signal(

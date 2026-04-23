@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from provider_search.models import SourceSearchRequest
-from provider_search.sources.clinicaltables import ClinicalTablesSource
+from provider_search.sources.clinicaltables import ClinicalTablesSource, DEFAULT_DATASET_CONFIGS
 
 
 class ClinicalTablesSourceTests(unittest.TestCase):
@@ -128,6 +128,60 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(provider.phone, "412-555-0100")
         self.assertEqual(provider.taxonomy, "Family Medicine")
         self.assertEqual(provider.source, "NPI Registry (individual)")
+
+    def test_default_dataset_configs_request_richer_taxonomy_fields(self) -> None:
+        self.assertIn("taxonomies[0].desc", DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields)
+        self.assertIn("taxonomies[0].code", DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields)
+        self.assertIn("taxonomies[0].desc", DEFAULT_DATASET_CONFIGS["npi_org"].result_fields)
+        self.assertIn("taxonomies[0].code", DEFAULT_DATASET_CONFIGS["npi_org"].result_fields)
+
+    def test_search_dataset_uses_taxonomy_desc_when_provider_type_is_missing(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+            ],
+            [[
+                "Cupertino OB/GYN Associates",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "Santa Clara",
+                "CA",
+                "95051",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+
+        result = source.search_dataset(
+            "npi_idv",
+            SourceSearchRequest(search_terms="OB/GYN", limit=1, zip_hint="95051"),
+        )
+
+        session.get.assert_called_once()
+        _, kwargs = session.get.call_args
+        self.assertIn("taxonomies[0].desc", kwargs["params"]["df"])
+        self.assertIn("taxonomies[0].code", kwargs["params"]["df"])
+        self.assertEqual(result.trace.result_count, 1)
+        provider = result.providers[0]
+        self.assertEqual(provider.name, "Cupertino OB/GYN Associates")
+        self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
+        self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
 
     def test_search_dataset_applies_location_hints(self) -> None:
         response = Mock()
