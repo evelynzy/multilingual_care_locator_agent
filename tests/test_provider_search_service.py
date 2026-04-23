@@ -83,7 +83,7 @@ class PediatricRetryClinicalTablesSource:
     def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
         self.calls.append((dataset, request))
         if (
-            request.search_terms == "Pediatrics pediatric child health"
+            request.search_terms == "Pediatrics"
             and request.query_filter == "addr_practice.state:NY AND addr_practice.zip:10013"
         ):
             return SourceSearchResult(
@@ -96,7 +96,7 @@ class PediatricRetryClinicalTablesSource:
                 ),
             )
         if (
-            request.search_terms == "Pediatrics pediatric child health"
+            request.search_terms == "Pediatrics"
             and request.query_filter == "addr_practice.state:NY"
         ):
             return SourceSearchResult(
@@ -335,6 +335,37 @@ class ProviderSearchRankingTests(unittest.TestCase):
 
 
 class ProviderSearchServiceTests(unittest.TestCase):
+    def test_search_uses_keyword_terms_when_no_specialty_requested(self) -> None:
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=0),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        service.search(
+            ProviderSearchRequest(
+                location="Manhattan, NY 10013",
+                keywords=("pediatric", "child health"),
+            ),
+            limit=3,
+        )
+
+        _, request = source.calls[0]
+        self.assertEqual(request.search_terms, "pediatric child health")
+        self.assertEqual(
+            request.query_filter,
+            "addr_practice.state:NY AND addr_practice.zip:10013",
+        )
+
     def test_search_orchestrates_live_sources_and_updates_cache(self) -> None:
         primary_care_provider = build_canonical_provider(
             provider_id="provider-1",
@@ -399,7 +430,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(len(source.calls), 2)
         first_dataset, first_request = source.calls[0]
         self.assertEqual(first_dataset, "npi_idv")
-        self.assertEqual(first_request.search_terms, "Primary Care same day")
+        self.assertEqual(first_request.search_terms, "Primary Care")
         self.assertEqual(first_request.city_hint, "Pittsburgh")
         self.assertEqual(first_request.state_hint, "PA")
         self.assertEqual(first_request.zip_hint, "15213")
@@ -935,7 +966,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
         _, retry_request = source.calls[1]
         self.assertEqual(
             first_request.search_terms,
-            "Pediatrics pediatric child health",
+            "Pediatrics",
         )
         self.assertEqual(retry_request.search_terms, first_request.search_terms)
         self.assertEqual(
@@ -990,6 +1021,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(len(source.calls), 2)
         _, first_request = source.calls[0]
         _, retry_request = source.calls[1]
+        self.assertEqual(first_request.search_terms, "Pediatrics")
         self.assertEqual(retry_request.search_terms, first_request.search_terms)
         self.assertEqual(retry_request.query_filter, "addr_practice.state:NY")
         self.assertEqual(len(response.provider_results), 1)

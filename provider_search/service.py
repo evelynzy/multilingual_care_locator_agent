@@ -350,7 +350,9 @@ class ProviderSearchService:
         if location_only:
             return (request.location or "").strip()
 
-        terms = [*request.specialties, *request.keywords]
+        terms = list(request.specialties)
+        if not terms:
+            terms.extend(request.keywords)
         if not terms and request.location:
             terms.append(request.location)
         if not terms:
