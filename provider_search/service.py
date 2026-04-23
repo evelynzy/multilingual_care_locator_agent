@@ -601,6 +601,9 @@ class ProviderSearchService:
 
     @staticmethod
     def _canonical_specialty_search_term(specialty: str) -> str:
+        if not ProviderSearchService._needs_canonical_specialty_fallback(specialty):
+            return specialty
+
         family_ids = derive_request_specialty_family_ids((specialty,))
         if len(family_ids) != 1:
             return specialty
@@ -609,6 +612,13 @@ class ProviderSearchService:
         if family is None or not family.label.strip():
             return specialty
         return family.label
+
+    @staticmethod
+    def _needs_canonical_specialty_fallback(specialty: str) -> bool:
+        normalized_specialty = specialty.strip()
+        if not normalized_specialty:
+            return False
+        return re.search(r"[^A-Za-z0-9 ]", normalized_specialty) is not None
 
     def _build_location_assisted_terms(
         self,
