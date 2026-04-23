@@ -292,6 +292,10 @@ _DETERMINISTIC_RENDER_TRANSLATIONS = {
         "spanish": "Llame al proveedor y a la aseguradora para confirmar el estado de la red, el plan de seguro aceptado, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas.",
         "simplified_chinese": "请致电服务提供者和保险公司，确认网络状态、接受的保险计划、转诊要求、新患者接收情况、地点和预约可用性。",
     },
+    "Provider search sources were temporarily unavailable. Showing trusted fallback resources when available.": {
+        "spanish": "Las fuentes de búsqueda de proveedores no estuvieron disponibles temporalmente. Se mostrarán recursos de respaldo confiables cuando estén disponibles.",
+        "simplified_chinese": "提供者搜索来源暂时不可用。如有可信的备用资源，将优先显示。",
+    },
     "What city and state or ZIP code should I search?": {
         "spanish": "¿Qué ciudad y estado o código postal debo buscar?",
         "simplified_chinese": "我应该搜索哪个城市和州，或哪个邮政编码？",
@@ -864,6 +868,7 @@ class CareLocatorAgent:
         fallback_results: List[dict] = []
 
         missing_location_hint = None
+        had_source_failures = False
 
         if parsed_query.medical_need:
             provider_request = ProviderSearchRequest(
@@ -878,6 +883,10 @@ class CareLocatorAgent:
                 limit=self.ctss_max_results,
             )
             missing_location_hint = search_response.missing_location_hint
+            had_source_failures = any(
+                bool(trace.error)
+                for trace in search_response.search_trace.source_traces
+            )
 
             local_results = [
                 self._normalize_result_trust_metadata(
@@ -927,6 +936,11 @@ class CareLocatorAgent:
 
         if missing_location_hint:
             response_payload.setdefault("notes", missing_location_hint)
+        elif had_source_failures and not local_results:
+            response_payload.setdefault(
+                "notes",
+                "Provider search sources were temporarily unavailable. Showing trusted fallback resources when available.",
+            )
         elif no_results_found:
             response_payload.setdefault(
                 "notes",
@@ -1871,7 +1885,7 @@ class CareLocatorAgent:
             for term in (query.specialties + query.keywords)
             if isinstance(term, str)
         }
-        location_text = (query.location or "").lower()
+        region_contexts = self._fallback_region_contexts(query)
 
         suggestions: List[dict] = []
         for resource in self.fallback_resources:
@@ -1895,8 +1909,12 @@ class CareLocatorAgent:
                     continue
 
             if region_filters:
-                if location_text:
-                    if not any(filter_term in location_text for filter_term in region_filters):
+                if region_contexts:
+                    if not any(
+                        filter_term in context
+                        for filter_term in region_filters
+                        for context in region_contexts
+                    ):
                         continue
                 else:
                     if not any(filter_term in {"international", "global"} for filter_term in region_filters):
@@ -1913,6 +1931,17 @@ class CareLocatorAgent:
             )
 
         return suggestions
+
+    # ------------------------------------------------------------------
+    def _fallback_region_contexts(self, query: ParsedCareQuery) -> set[str]:
+        location_text = (query.location or "").strip().lower()
+        if not location_text:
+            return set()
+
+        contexts = {location_text}
+        if self._extract_state_code(query.location) or self._extract_zip_code(query.location):
+            contexts.update({"united states", "usa", "us"})
+        return contexts
 
     # ------------------------------------------------------------------
     def _build_provider_search_service(self) -> ProviderSearchService:
