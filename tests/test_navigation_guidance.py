@@ -81,6 +81,7 @@ if "llama_index" not in sys.modules:
 
 
 from care_agent import CareLocatorAgent, ParsedCareQuery
+from provider_search.models import ProviderSearchRequest, ProviderSearchResponse, SearchTrace
 
 
 class _StubCompletionChoice:
@@ -100,15 +101,12 @@ class _StubChatClient:
 
 class CareNavigationGuidanceTests(unittest.TestCase):
     def setUp(self) -> None:
-        with patch.object(
-            CareLocatorAgent,
-            "_initialize_clinicaltables_field_maps",
-            return_value=None,
-        ):
-            self.agent = CareLocatorAgent(provider_repository=Mock())
+        self.agent = CareLocatorAgent(provider_search_service=Mock())
 
-        self.agent.provider_repository.load_error = None
-        self.agent.provider_repository.search.return_value = []
+        self.agent.provider_search_service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
 
     def test_handle_request_asks_for_location_and_care_need_when_request_is_vague(self) -> None:
         query = ParsedCareQuery(
@@ -153,7 +151,7 @@ class CareNavigationGuidanceTests(unittest.TestCase):
             captured["payload"]["follow_up_questions"][1],
         )
         self.assertNotIn("care_setting_guidance", captured["payload"])
-        self.agent.provider_repository.search.assert_not_called()
+        self.agent.provider_search_service.search.assert_not_called()
 
     def test_handle_request_adds_referral_guidance_for_specialist_search(self) -> None:
         query = ParsedCareQuery(
@@ -239,7 +237,7 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         self.assertEqual(result, "ok")
         self.assertEqual(captured["template_key"], "response_template_emergency")
         self.assertIn("emergency services", captured["payload"]["emergency_guidance"])
-        self.agent.provider_repository.search.assert_not_called()
+        self.agent.provider_search_service.search.assert_not_called()
 
     def test_handle_request_uses_emergency_template_for_standalone_911(self) -> None:
         query = ParsedCareQuery(
@@ -318,7 +316,7 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         self.assertEqual(captured["template_key"], "response_template_emergency")
         self.assertTrue(captured["payload"]["query"]["medical_need"])
         self.assertIn("emergency services", captured["payload"]["emergency_guidance"])
-        self.agent.provider_repository.search.assert_not_called()
+        self.agent.provider_search_service.search.assert_not_called()
 
     def test_handle_request_does_not_treat_zip_91101_as_emergency(self) -> None:
         query = ParsedCareQuery(
@@ -341,10 +339,18 @@ class CareNavigationGuidanceTests(unittest.TestCase):
             captured["template_key"] = template_key
             return "ok"
 
+        def _capture_result_cards(payload):
+            captured["card_payload"] = payload
+            return "cards"
+
         with patch.object(self.agent, "_interpret_user_need", return_value=query), patch.object(
             self.agent,
             "_compose_response",
             side_effect=_capture_response,
+        ), patch.object(
+            self.agent,
+            "_compose_result_card_response",
+            side_effect=_capture_result_cards,
         ):
             result = self.agent.handle_request(
                 Mock(),
@@ -355,8 +361,16 @@ class CareNavigationGuidanceTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(result, "ok")
-        self.assertNotEqual(captured["template_key"], "response_template_emergency")
+        self.assertIn(result, {"ok", "cards"})
+        if result == "ok":
+            self.assertNotEqual(captured["template_key"], "response_template_emergency")
+        else:
+            self.assertNotIn("emergency_guidance", captured["card_payload"])
+            self.assertEqual(len(captured["card_payload"]["fallback_results"]), 1)
+            self.assertEqual(
+                captured["card_payload"]["fallback_results"][0]["name"],
+                "Medicare Care Compare",
+            )
 
     def test_care_setting_classifier_does_not_match_short_patterns_inside_words(self) -> None:
         query = ParsedCareQuery(

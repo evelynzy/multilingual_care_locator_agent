@@ -7,7 +7,6 @@ from huggingface_hub import InferenceClient
 from dotenv import load_dotenv
 
 from care_agent import CareLocatorAgent, normalize_chat_messages
-from retriever import ProviderRepository
 from config_loader import (
     get_chat_model_settings,
     get_message,
@@ -60,9 +59,8 @@ EXAMPLE_PROMPTS = (
 )
 
 
-# Initialize repository and agent once so we do not reload data per request.
-provider_repository = ProviderRepository()
-care_locator_agent = CareLocatorAgent(provider_repository)
+# Initialize the agent once so runtime retrieval is handled by ProviderSearchService.
+care_locator_agent = CareLocatorAgent()
 
 
 def _augment_history(
