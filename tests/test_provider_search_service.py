@@ -593,6 +593,49 @@ class ProviderSearchRankingTests(unittest.TestCase):
             ("Pediatrics",),
         )
 
+    def test_rank_provider_results_accepts_code_only_obgyn_structured_evidence(self) -> None:
+        request = ProviderSearchRequest(
+            specialties=("OB/GYN",),
+            location="98101",
+        )
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn-code-only",
+            name="Cupertino Women's Health",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="207V00000X",
+            specialties=("207V00000X",),
+        )
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+
+        ranked = rank_provider_results(
+            request,
+            [obgyn_provider, radiology_provider],
+            limit=5,
+        )
+
+        self.assertEqual(len(ranked), 1)
+        self.assertEqual(ranked[0].provider.name, "Cupertino Women's Health")
+        self.assertEqual(
+            ranked[0].provider.specialty_family_ids,
+            ("obstetrics-gynecology",),
+        )
+        self.assertEqual(
+            ranked[0].provider.ranking_metadata.get("matched_specialties"),
+            ("OB/GYN",),
+        )
+
     def test_rank_provider_results_filters_location_only_candidates_for_constrained_searches(self) -> None:
         request = ProviderSearchRequest(
             specialties=("Pediatrics",),
