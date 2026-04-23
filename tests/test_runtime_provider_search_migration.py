@@ -30,10 +30,12 @@ from provider_search.models import (
     ProviderSearchRequest,
     ProviderSearchResponse,
     ProviderSearchResult,
+    SourceSearchResult,
     SearchTrace,
     SourceTrace,
 )
 from provider_search.normalization import build_canonical_provider
+from provider_search.service import ProviderSearchService
 
 
 class _SequencedChatClient:
@@ -77,6 +79,44 @@ class _ScriptedChatClient:
             },
         )()
         return type("Completion", (), {"choices": [choice]})()
+
+
+class _PediatricRetryClinicalTablesSource:
+    def __init__(self, location_only_providers: List[Any]) -> None:
+        self.location_only_providers = list(location_only_providers)
+        self.calls = []
+
+    def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if request.search_terms == "Pediatrics":
+            return SourceSearchResult(
+                providers=[],
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=0,
+                ),
+            )
+        if request.search_terms == "Manhattan, NY 10013":
+            return SourceSearchResult(
+                providers=list(self.location_only_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.location_only_providers),
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
 
 
 class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
@@ -473,6 +513,65 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             captured["payload"]["notes"],
             "No providers were found via the configured provider search sources.",
         )
+
+    def test_handle_request_pediatric_10013_keeps_only_provider_with_pediatric_evidence(self) -> None:
+        pediatric_provider = build_canonical_provider(
+            provider_id="provider-peds",
+            name="Canal Pediatrics",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Pediatrics",
+            specialties=("Pediatrics",),
+            phone="212-555-0101",
+        ).with_updates(description="Pediatric and child health visits.")
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+            phone="212-555-0199",
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=_PediatricRetryClinicalTablesSource(
+                [pediatric_provider, radiology_provider]
+            ),
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="中文",
+            response_language="中文",
+            summary="儿科10013",
+            medical_need=True,
+            location="Manhattan, NY 10013",
+            specialties=["Pediatrics"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=["pediatric", "child health"],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query):
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "儿科 10013 曼哈顿",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertIn("Canal Pediatrics", result)
+        self.assertNotIn("Downtown Imaging Associates", result)
+        self.assertIn("Pediatrics", result)
 
 
 if __name__ == "__main__":
