@@ -477,11 +477,21 @@ def _resolve_provider_id(
 ) -> str:
     explicit_provider_id = _normalize_provider_id_candidate(provider_id)
     if explicit_provider_id is not None:
-        return explicit_provider_id
+        return _canonicalize_provider_id(
+            candidate=explicit_provider_id,
+            source=source,
+            dataset=dataset,
+            raw_payload=raw_payload,
+        )
 
     raw_candidate = _extract_source_identifier(raw_payload)
     if raw_candidate is not None:
-        return raw_candidate
+        return _canonicalize_provider_id(
+            candidate=raw_candidate,
+            source=source,
+            dataset=dataset,
+            raw_payload=raw_payload,
+        )
 
     identity_payload = {
         "source": normalize_text(source, lowercase=True) or "unknown-source",
@@ -507,6 +517,25 @@ def _merge_provider_id(primary: str, fallback: str) -> str:
     if fallback and not _is_generated_provider_id(fallback):
         return fallback
     return primary or fallback
+
+
+def _canonicalize_provider_id(
+    *,
+    candidate: str,
+    source: Optional[str],
+    dataset: Optional[str],
+    raw_payload: object,
+) -> str:
+    if _is_canonical_provider_id(candidate):
+        return candidate
+    if _is_globally_canonical_provider_id(
+        candidate,
+        source=source,
+        dataset=dataset,
+        raw_payload=raw_payload,
+    ):
+        return candidate
+    return _build_source_aware_provider_id(candidate, source=source, dataset=dataset)
 
 
 def _extract_source_identifier(value: object) -> Optional[str]:
@@ -552,8 +581,69 @@ def _slugify_identity_segment(value: Optional[str]) -> str:
     return slug or "unknown"
 
 
+def _build_source_aware_provider_id(
+    candidate: str,
+    *,
+    source: Optional[str],
+    dataset: Optional[str],
+) -> str:
+    normalized_candidate = normalize_text(candidate) or "unknown-id"
+    source_key = _slugify_identity_segment(source)
+    dataset_key = _slugify_identity_segment(dataset)
+    candidate_key = _slugify_identity_segment(normalized_candidate)
+    identity_payload = {
+        "source": normalize_text(source, lowercase=True) or "unknown-source",
+        "dataset": normalize_text(dataset, lowercase=True) or "unknown-dataset",
+        "candidate": normalized_candidate,
+    }
+    serialized = json.dumps(identity_payload, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:10]
+    return f"source:{source_key}:{dataset_key}:{candidate_key}:{digest}"
+
+
+def _is_canonical_provider_id(value: Optional[str]) -> bool:
+    return bool(value) and (value.startswith("generated:") or value.startswith("source:"))
+
+
 def _is_generated_provider_id(value: Optional[str]) -> bool:
     return bool(value) and value.startswith("generated:")
+
+
+def _is_globally_canonical_provider_id(
+    candidate: str,
+    *,
+    source: Optional[str],
+    dataset: Optional[str],
+    raw_payload: object,
+) -> bool:
+    if _matches_npi_candidate(candidate, raw_payload):
+        return True
+
+    normalized_source = normalize_text(source, lowercase=True) or ""
+    normalized_dataset = normalize_text(dataset, lowercase=True) or ""
+    npi_markers = ("npi", "nppes", "registry")
+    if any(marker in normalized_dataset for marker in npi_markers) or any(
+        marker in normalized_source for marker in npi_markers
+    ):
+        return bool(re.fullmatch(r"\d{10}", candidate))
+
+    return False
+
+
+def _matches_npi_candidate(candidate: str, value: object) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+
+    for key in ("npi", "NPI"):
+        nested_candidate = _normalize_provider_id_candidate(value.get(key))
+        if nested_candidate == candidate:
+            return True
+
+    for key in ("provenance", "retrieval_metadata", "raw"):
+        if _matches_npi_candidate(candidate, value.get(key)):
+            return True
+
+    return False
 
 
 def _normalize_medicare_opt_out_status(
