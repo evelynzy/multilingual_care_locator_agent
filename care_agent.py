@@ -630,6 +630,12 @@ _REFERRAL_PATTERNS = (
 )
 
 _PLAN_TYPE_PATTERNS = ("hmo", "ppo", "pos")
+_PROCEDURE_CODE_INTENT_PATTERNS = (
+    "cpt",
+    "procedure code",
+    "procedure",
+    "billing code",
+)
 
 _INTERPRET_RESCUE_SPECIALTY_ALIASES: Tuple[Tuple[str, str], ...] = (
     ("primary care", "Primary Care"),
@@ -1516,6 +1522,11 @@ class CareLocatorAgent:
 
         if not parsed_payload:
             parsed_payload = self._rescue_interpret_payload_from_message(message)
+        else:
+            parsed_payload = self._reconcile_interpret_payload_location(
+                parsed_payload,
+                message,
+            )
 
         detected_language = str(parsed_payload.get("detected_language", "unknown"))
         response_language = parsed_payload.get("response_language") or detected_language or "English"
@@ -1564,6 +1575,38 @@ class CareLocatorAgent:
         return rescued_payload
 
     # ------------------------------------------------------------------
+    def _reconcile_interpret_payload_location(
+        self,
+        parsed_payload: Dict[str, Any],
+        message: str,
+    ) -> Dict[str, Any]:
+        if not isinstance(parsed_payload, dict):
+            return parsed_payload
+
+        if self._clean_card_value(parsed_payload.get("location")):
+            return parsed_payload
+
+        specialties = self._ensure_list(parsed_payload.get("specialties"))
+        if not specialties:
+            return parsed_payload
+
+        if self._has_explicit_procedure_code_intent(parsed_payload, message):
+            return parsed_payload
+
+        rescued_location = self._rescue_location_from_message(message)
+        if not rescued_location:
+            return parsed_payload
+
+        reconciled_payload = dict(parsed_payload)
+        reconciled_payload["location"] = rescued_location
+        logger.info(
+            "Interpret payload accepted JSON but restored raw-message location evidence. location=%s specialties=%s",
+            rescued_location,
+            len(specialties),
+        )
+        return reconciled_payload
+
+    # ------------------------------------------------------------------
     @staticmethod
     def _default_interpret_payload(message: str) -> Dict[str, Any]:
         return {
@@ -1604,6 +1647,32 @@ class CareLocatorAgent:
             if self._contains_phrase(normalized_message, alias):
                 rescued_specialties.append(specialty)
         return self._dedupe_preserve_order(rescued_specialties)
+
+    # ------------------------------------------------------------------
+    def _has_explicit_procedure_code_intent(
+        self,
+        parsed_payload: Dict[str, Any],
+        message: str,
+    ) -> bool:
+        normalized_message = str(message or "").lower()
+        if self._contains_any(normalized_message, _PROCEDURE_CODE_INTENT_PATTERNS):
+            return True
+
+        payload_text = " ".join(
+            str(value)
+            for value in (
+                parsed_payload.get("summary"),
+                " ".join(self._ensure_list(parsed_payload.get("keywords"))),
+                " ".join(self._ensure_list(parsed_payload.get("follow_up_focus"))),
+            )
+            if value
+        ).lower()
+        if payload_text and self._contains_any(
+            payload_text,
+            _PROCEDURE_CODE_INTENT_PATTERNS,
+        ):
+            return True
+        return False
 
     # ------------------------------------------------------------------
     def _rescue_city_state_from_message(self, message: str) -> Optional[Tuple[str, str]]:
