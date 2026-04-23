@@ -1143,6 +1143,76 @@ class ProviderSearchServiceTests(unittest.TestCase):
             ("Primary Care",),
         )
 
+    def test_search_primary_care_75001_keeps_second_visible_result_after_display_dedupe(self) -> None:
+        duplicate_primary_care_individual = build_canonical_provider(
+            provider_id="provider-primary-care-individual",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            address="123 Main St",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+        )
+        duplicate_primary_care_org = build_canonical_provider(
+            provider_id="provider-primary-care-org",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            address="123 Main St",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+        )
+        second_visible_provider = build_canonical_provider(
+            provider_id="provider-second-visible",
+            name="Zzz Addison Primary Care",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            address="456 Belt Line Rd",
+            city="Addison",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="972-555-0199",
+        )
+        source = PrimaryCareRetryClinicalTablesSource(
+            [
+                duplicate_primary_care_individual,
+                duplicate_primary_care_org,
+                second_visible_provider,
+            ]
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv", "npi_org"),
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Dallas, TX 75001",
+            ),
+            limit=2,
+        )
+
+        self.assertEqual(len(source.calls), 8)
+        self.assertEqual(len(response.provider_results), 2)
+        self.assertEqual(
+            [result.provider.name for result in response.provider_results],
+            ["Dallas Family Clinic", "Zzz Addison Primary Care"],
+        )
+        self.assertEqual(
+            response.provider_results[0].retriever_metadata["display_dedupe_count"],
+            2,
+        )
+
     def test_search_retries_pediatric_request_with_specialty_terms_instead_of_location_only(self) -> None:
         pediatric_provider = build_canonical_provider(
             provider_id="provider-peds",
@@ -1385,6 +1455,89 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(
             response.provider_results[0].provider.ranking_metadata.get("matched_specialties"),
             ("Dentistry",),
+        )
+
+    def test_search_dentista_33012_keeps_second_visible_result_after_nearby_display_dedupe(self) -> None:
+        local_zip_providers = [
+            build_canonical_provider(
+                provider_id="provider-local-1",
+                name="Florida Children's Dentistry, P.A.",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist",),
+            ),
+        ]
+        duplicate_nearby_individual = build_canonical_provider(
+            provider_id="provider-nearby-individual",
+            name="Miami Lakes Dentistry Center",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            address="789 Oak Ave",
+            city="Miami Lakes",
+            state="FL",
+            taxonomy="Dentistry",
+            specialties=("Dentistry",),
+            phone="305-555-0101",
+        )
+        duplicate_nearby_org = build_canonical_provider(
+            provider_id="provider-nearby-org",
+            name="Miami Lakes Dentistry Center",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            address="789 Oak Ave",
+            city="Miami Lakes",
+            state="FL",
+            taxonomy="Dentistry",
+            specialties=("Dentistry",),
+            phone="305-555-0101",
+        )
+        second_visible_provider = build_canonical_provider(
+            provider_id="provider-nearby-second",
+            name="Zzz Family Dental",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            address="900 Pine St",
+            city="Miami",
+            state="FL",
+            taxonomy="Dentistry",
+            specialties=("Dentistry",),
+            phone="305-555-0102",
+        )
+        source = NearbyDentalClinicalTablesSource(
+            local_zip_providers,
+            [
+                duplicate_nearby_individual,
+                duplicate_nearby_org,
+                second_visible_provider,
+            ],
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv", "npi_org"),
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Dentistry",),
+                location="33012",
+            ),
+            limit=2,
+        )
+
+        self.assertEqual(len(source.calls), 8)
+        self.assertEqual(len(response.provider_results), 2)
+        self.assertEqual(
+            [result.provider.name for result in response.provider_results],
+            ["Miami Lakes Dentistry Center", "Zzz Family Dental"],
+        )
+        self.assertEqual(
+            response.provider_results[0].retriever_metadata["display_dedupe_count"],
+            2,
         )
 
 
