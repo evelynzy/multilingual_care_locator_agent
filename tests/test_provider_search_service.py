@@ -1277,6 +1277,66 @@ class ProviderSearchServiceTests(unittest.TestCase):
         )
         self.assertEqual(response.search_trace.total_candidates, 17)
 
+    def test_search_keeps_source_friendly_ent_specialty_terms_without_family_label_rewrite(self) -> None:
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=0),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        service.search(
+            ProviderSearchRequest(
+                specialties=("ENT",),
+                location="Austin, TX 78701",
+            ),
+            limit=3,
+        )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertIn("ENT", searched_terms)
+        self.assertIn("ENT Austin TX 78701", searched_terms)
+        self.assertNotIn("ENT / Otolaryngology", searched_terms)
+        self.assertNotIn("ENT / Otolaryngology Austin TX 78701", searched_terms)
+
+    def test_search_keeps_source_friendly_psychiatry_specialty_terms_without_family_label_rewrite(self) -> None:
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=0),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        service.search(
+            ProviderSearchRequest(
+                specialties=("Psychiatry",),
+                location="San Jose, CA 95112",
+            ),
+            limit=3,
+        )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertIn("Psychiatry", searched_terms)
+        self.assertIn("Psychiatry San Jose CA 95112", searched_terms)
+        self.assertNotIn("Psychiatry / Behavioral Health", searched_terms)
+        self.assertNotIn("Psychiatry / Behavioral Health San Jose CA 95112", searched_terms)
+
     def test_search_retries_with_relaxed_location_filter_when_specialty_search_survives_no_candidates(self) -> None:
         source = RetryAwareClinicalTablesSource()
         service = ProviderSearchService(
