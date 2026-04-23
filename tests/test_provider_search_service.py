@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from provider_search.models import (
     FreshnessMetadata,
@@ -14,6 +14,7 @@ from provider_search.models import (
 from provider_search.normalization import build_canonical_provider
 from provider_search.ranking import RANKING_VERSION, rank_provider_results
 from provider_search.service import ProviderSearchService
+from provider_search.sources.clinicaltables import ClinicalTablesSource
 
 
 class FakeClinicalTablesSource:
@@ -694,6 +695,69 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(
             request.query_filter,
             "addr_practice.state:NY AND addr_practice.zip:10013",
+        )
+
+    def test_search_zip_only_obgyn_98101_accepts_live_taxonomy_desc_payload_without_gate_changes(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+                "addr_practice.phone",
+            ],
+            [[
+                "Cupertino OB/GYN Associates",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "Santa Clara",
+                "CA",
+                "98101",
+                "408-555-0100",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+
+        response_payload = service.search(
+            ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="98101",
+            ),
+            limit=5,
+        )
+
+        self.assertEqual(len(session.get.call_args_list), 1)
+        _, kwargs = session.get.call_args
+        self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101")
+        self.assertEqual(len(response_payload.provider_results), 1)
+        provider = response_payload.provider_results[0].provider
+        self.assertEqual(provider.name, "Cupertino OB/GYN Associates")
+        self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
+        self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
+        self.assertEqual(
+            provider.ranking_metadata.get("matched_specialties"),
+            ("OB/GYN",),
         )
 
     def test_search_orchestrates_live_sources_and_updates_cache(self) -> None:
