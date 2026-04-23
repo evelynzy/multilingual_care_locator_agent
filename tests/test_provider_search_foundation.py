@@ -96,6 +96,12 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         )
         self.assertEqual(SPECIALTY_FAMILY_BY_ID["primary-care"].label, "Primary Care")
 
+    def test_request_specialty_family_catalog_covers_live_primary_pediatric_and_dentistry_cases(self) -> None:
+        self.assertEqual(
+            derive_request_specialty_family_ids(("Primary Care", "Pediatrics", "Dentistry")),
+            ("primary-care", "pediatrics", "dentistry"),
+        )
+
     def test_build_canonical_provider_generates_stable_source_aware_id_when_missing(self) -> None:
         left = build_canonical_provider(
             provider_id="  ",
@@ -320,6 +326,36 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         )
 
         self.assertEqual(family_ids, ("radiology-imaging",))
+
+    def test_derive_provider_specialty_family_ids_covers_live_descendants_and_rejects_unrelated_specialties(self) -> None:
+        self.assertEqual(
+            derive_provider_specialty_family_ids(
+                specialties=("Clinic/Center", "Clinic/Center, Primary Care", "261QP2300X"),
+                taxonomy="Clinic/Center",
+            ),
+            ("primary-care",),
+        )
+        self.assertEqual(
+            derive_provider_specialty_family_ids(
+                specialties=("Pediatrics", "Pediatric Gastroenterology", "2080P0206X"),
+                taxonomy="Clinic/Center",
+            ),
+            ("pediatrics",),
+        )
+        self.assertEqual(
+            derive_provider_specialty_family_ids(
+                specialties=("Dentist", "Dentist, Pediatric Dentistry", "1223P0221X"),
+                taxonomy="Dentist",
+            ),
+            ("dentistry",),
+        )
+        self.assertEqual(
+            derive_provider_specialty_family_ids(
+                specialties=("Diagnostic Radiology",),
+                taxonomy="Diagnostic Radiology",
+            ),
+            ("radiology-imaging",),
+        )
 
     def test_normalize_provider_accepts_canonical_provider_without_losing_trust_fields(self) -> None:
         provider = CanonicalProvider(

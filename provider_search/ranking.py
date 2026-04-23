@@ -5,51 +5,13 @@ from typing import Iterable, Optional, Sequence
 
 from provider_search.models import CanonicalProvider, ProviderSearchRequest, ProviderSearchResult
 from provider_search.normalization import normalize_provider, normalize_search_request
+from provider_search.specialty_families import derive_request_specialty_family_ids
 
 
 RANKING_VERSION = "deterministic-v1"
 
 _ACCEPTING_STATUSES = {"accepting", "accepting new patients", "open"}
 _TELEHEALTH_TERMS = {"telehealth", "virtual", "video", "remote", "online"}
-_REQUEST_SPECIALTY_EQUIVALENTS = {
-    "primary care": (
-        "primary care",
-        "clinic/center, primary care",
-        "family medicine",
-        "family practice",
-        "physician/family practice",
-        "internal medicine",
-        "physician/internal medicine",
-        "general practice",
-    ),
-    "dentistry": (
-        "dentistry",
-        "dentist",
-        "dentist, dental anesthesiology",
-        "dentist, endodontics",
-        "dentist, general practice",
-        "dentist, oral and maxillofacial pathology",
-        "dentist, oral and maxillofacial radiology",
-        "dentist, oral and maxillofacial surgery",
-        "dentist, oral medicine",
-        "dentist, orthodontics and dentofacial orthopedics",
-        "dentist, pediatric dentistry",
-        "dentist, periodontics",
-        "dentist, prosthodontics",
-        "dentist, public health",
-        "dental anesthesiology",
-        "endodontics",
-        "oral and maxillofacial pathology",
-        "oral and maxillofacial radiology",
-        "oral and maxillofacial surgery",
-        "oral medicine",
-        "orthodontics and dentofacial orthopedics",
-        "pediatric dentistry",
-        "periodontics",
-        "prosthodontics",
-        "public health",
-    ),
-}
 
 
 def rank_provider_results(
@@ -67,11 +29,7 @@ def rank_provider_results(
     ranked_results: list[ProviderSearchResult] = []
     for raw_provider in providers:
         provider = normalize_provider(raw_provider)
-        matched_specialties = _match_values(
-            normalized_request.specialties,
-            provider.specialties,
-            extra_values=(provider.taxonomy,) if provider.taxonomy else (),
-        )
+        matched_specialties = _match_specialties(normalized_request, provider)
         matched_keywords = _match_keywords(normalized_request.keywords, provider)
         if normalized_request.specialties and not matched_specialties:
             continue
@@ -161,6 +119,8 @@ def _build_score_breakdown(
         "telehealth_alignment": 0.5 if telehealth_requested and provider.telehealth else 0.0,
         "freshness_metadata": 0.25 if freshness_present else 0.0,
     }
+
+
 def _provider_result_sort_key(result: ProviderSearchResult) -> tuple[float, int, int, str, str]:
     provider = result.provider
     score = result.score if result.score is not None else 0.0
@@ -213,14 +173,35 @@ def _build_requested_lookup(requested: Iterable[str]) -> dict[str, str]:
         normalized_value = value.strip()
         if not normalized_value:
             continue
-        requested_label = normalized_value
-        requested_lookup[requested_label.casefold()] = requested_label
-        for equivalent_value in _REQUEST_SPECIALTY_EQUIVALENTS.get(
-            requested_label.casefold(),
-            (),
-        ):
-            requested_lookup[equivalent_value.casefold()] = requested_label
+        requested_lookup[normalized_value.casefold()] = normalized_value
     return requested_lookup
+
+
+def _match_specialties(
+    request: ProviderSearchRequest,
+    provider: CanonicalProvider,
+) -> tuple[str, ...]:
+    matched_labels = list(
+        _match_values(
+            request.specialties,
+            provider.specialties,
+            extra_values=(provider.taxonomy,) if provider.taxonomy else (),
+        )
+    )
+    seen_labels = {label.casefold() for label in matched_labels}
+    provider_family_ids = set(provider.specialty_family_ids)
+    if not provider_family_ids:
+        return tuple(matched_labels)
+
+    for requested_specialty in request.specialties:
+        requested_lookup_key = requested_specialty.casefold()
+        if requested_lookup_key in seen_labels:
+            continue
+        requested_family_ids = derive_request_specialty_family_ids((requested_specialty,))
+        if provider_family_ids.intersection(requested_family_ids):
+            seen_labels.add(requested_lookup_key)
+            matched_labels.append(requested_specialty)
+    return tuple(matched_labels)
 
 
 def _match_keywords(

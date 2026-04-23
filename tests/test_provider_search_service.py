@@ -489,6 +489,56 @@ class ProviderSearchRankingTests(unittest.TestCase):
                 for result in ranked
             )
         )
+        self.assertTrue(
+            all(result.provider.specialty_family_ids == ("dentistry",) for result in ranked)
+        )
+
+    def test_rank_provider_results_matches_curated_pediatrics_specialty_family_and_rejects_radiology(self) -> None:
+        request = ProviderSearchRequest(
+            specialties=("Pediatrics",),
+            location="Manhattan, NY 10013",
+            keywords=("pediatric", "child health"),
+        )
+        pediatric_org_provider = build_canonical_provider(
+            provider_id="provider-org-peds",
+            name="Downtown Kids Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Clinic/Center",
+            specialties=(
+                "Clinic/Center",
+                "Pediatrics",
+                "208000000X",
+                "Pediatric Gastroenterology",
+                "2080P0206X",
+            ),
+        )
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Manhattan",
+            state="NY",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+
+        ranked = rank_provider_results(
+            request,
+            [pediatric_org_provider, radiology_provider],
+            limit=5,
+        )
+
+        self.assertEqual(len(ranked), 1)
+        self.assertEqual(ranked[0].provider.name, "Downtown Kids Clinic")
+        self.assertEqual(ranked[0].provider.specialty_family_ids, ("pediatrics",))
+        self.assertEqual(
+            ranked[0].provider.ranking_metadata.get("matched_specialties"),
+            ("Pediatrics",),
+        )
 
     def test_rank_provider_results_filters_location_only_candidates_for_constrained_searches(self) -> None:
         request = ProviderSearchRequest(
@@ -1261,6 +1311,10 @@ class ProviderSearchServiceTests(unittest.TestCase):
             response.provider_results[0].provider.ranking_metadata.get("matched_specialties"),
             ("Primary Care",),
         )
+        self.assertEqual(
+            response.provider_results[0].provider.specialty_family_ids,
+            ("primary-care",),
+        )
 
     def test_search_primary_care_75001_keeps_second_visible_result_after_display_dedupe(self) -> None:
         duplicate_primary_care_individual = build_canonical_provider(
@@ -1496,6 +1550,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             ("Pediatrics",),
         )
         self.assertIn("208000000X", result.provider.specialties)
+        self.assertEqual(result.provider.specialty_family_ids, ("pediatrics",))
 
     def test_search_admits_zip_driven_dentistry_descendants_without_nearby_retry(self) -> None:
         local_zip_providers = [
@@ -1577,6 +1632,9 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 result.provider.ranking_metadata.get("matched_specialties") == ("Dentistry",)
                 for result in response.provider_results
             )
+        )
+        self.assertTrue(
+            all(result.provider.specialty_family_ids == ("dentistry",) for result in response.provider_results)
         )
 
     def test_search_dentista_33012_keeps_second_visible_result_after_local_display_dedupe(self) -> None:
