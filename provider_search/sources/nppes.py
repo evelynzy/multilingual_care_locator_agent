@@ -118,8 +118,9 @@ class NPPESSource:
         }
 
         updated_specialties = list(provider.specialties)
-        if taxonomy and taxonomy not in updated_specialties:
-            updated_specialties.append(taxonomy)
+        for specialty_value in self.taxonomy_specialty_values(record.taxonomies):
+            if specialty_value not in updated_specialties:
+                updated_specialties.append(specialty_value)
 
         return provider.with_updates(
             address=location_override or provider.address,
@@ -202,6 +203,19 @@ class NPPESSource:
                 if isinstance(value, str) and value.strip():
                     return value.strip()
         return None
+
+    @staticmethod
+    def taxonomy_specialty_values(taxonomies: list[dict[str, Any]]) -> tuple[str, ...]:
+        values: list[str] = []
+        for entry in taxonomies:
+            for key in ("desc", "code"):
+                value = entry.get(key)
+                if not isinstance(value, str):
+                    continue
+                cleaned = value.strip()
+                if cleaned and cleaned not in values:
+                    values.append(cleaned)
+        return tuple(values)
 
     @staticmethod
     def _clean_string(value: Any) -> Optional[str]:
