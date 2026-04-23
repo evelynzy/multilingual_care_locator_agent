@@ -1372,6 +1372,93 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(response.provider_results[0].provider.name, "Cupertino OB/GYN Associates")
         self.assertEqual(response.search_trace.total_candidates, 2)
 
+    def test_search_zip_only_obgyn_95051_does_not_stop_on_unrelated_specialty_bearing_first_hit(
+        self,
+    ) -> None:
+        unrelated_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Santa Clara Imaging Group",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+        specialty_bearing_provider = build_canonical_provider(
+            provider_id="provider-obgyn",
+            name="Cupertino OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Obstetrics & Gynecology",
+            specialties=("Obstetrics & Gynecology",),
+        )
+
+        class UnrelatedSpecialtyFirstHitObgynSource(ObgynZipClinicalTablesSource):
+            def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
+                self.calls.append((dataset, request))
+                if dataset == "npi_idv" and (
+                    request.query_filter == "addr_practice.zip:95051"
+                    and request.search_terms == "OB/GYN"
+                ):
+                    return SourceSearchResult(
+                        providers=[unrelated_provider],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=1,
+                        ),
+                    )
+                if request.query_filter == "addr_practice.zip:95051" and (
+                    request.search_terms == "Obstetrics & Gynecology"
+                ):
+                    return SourceSearchResult(
+                        providers=[specialty_bearing_provider],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=1,
+                        ),
+                    )
+                return SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(
+                        source_name="clinicaltables",
+                        dataset=dataset,
+                        status_code=200,
+                        result_count=0,
+                    ),
+                )
+
+        source = UnrelatedSpecialtyFirstHitObgynSource([], [])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="95051",
+            ),
+            limit=5,
+        )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertEqual(
+            searched_terms,
+            ["OB/GYN", "Obstetrics & Gynecology"],
+        )
+        self.assertEqual(len(response.provider_results), 1)
+        self.assertEqual(response.provider_results[0].provider.name, "Cupertino OB/GYN Associates")
+        self.assertEqual(response.search_trace.total_candidates, 2)
+
     def test_search_keeps_source_friendly_ent_specialty_terms_without_family_label_rewrite(self) -> None:
         source = FakeClinicalTablesSource(
             {
