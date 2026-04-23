@@ -23,6 +23,15 @@ INSURANCE_UNVERIFIED_BASIS = (
 NEW_PATIENTS_UNKNOWN_BASIS = (
     "Source data does not confirm new-patient availability."
 )
+_INVALID_PROVIDER_ID_MARKERS = {
+    "",
+    "unknown",
+    "unknown provider",
+    "n/a",
+    "na",
+    "none",
+    "null",
+}
 
 
 def normalize_text(value: object, *, lowercase: bool = False) -> Optional[str]:
@@ -145,18 +154,35 @@ def build_canonical_provider(
         normalized_provenance.setdefault("source", normalized_source)
     if normalized_dataset:
         normalized_provenance.setdefault("dataset", normalized_dataset)
+    normalized_address = optional_string(address) or optional_string(location)
+    normalized_city = optional_string(city)
+    normalized_state = optional_string(state)
+    normalized_country = optional_string(country)
+    normalized_phone = optional_string(phone)
 
     return CanonicalProvider(
-        provider_id=optional_string(provider_id) or "",
+        provider_id=_resolve_provider_id(
+            provider_id=provider_id,
+            source=normalized_source,
+            dataset=normalized_dataset,
+            name=name,
+            address=normalized_address,
+            city=normalized_city,
+            state=normalized_state,
+            country=normalized_country,
+            phone=normalized_phone,
+            taxonomy=normalized_taxonomy,
+            raw_payload=raw,
+        ),
         name=optional_string(name) or "Unknown Provider",
         specialties=tuple(normalized_specialties),
         languages=ensure_string_list(languages),
         insurance_reported=ensure_string_list(insurance_reported),
-        address=optional_string(address) or optional_string(location),
-        city=optional_string(city),
-        state=optional_string(state),
-        country=optional_string(country),
-        phone=optional_string(phone),
+        address=normalized_address,
+        city=normalized_city,
+        state=normalized_state,
+        country=normalized_country,
+        phone=normalized_phone,
         website=optional_string(website),
         taxonomy=normalized_taxonomy,
         source=normalized_source,
@@ -193,54 +219,75 @@ def normalize_provider(
     """Map raw provider payloads from different sources onto one typed model."""
 
     if isinstance(raw_provider, CanonicalProvider):
+        normalized_source = optional_string(raw_provider.source)
+        normalized_address = optional_string(raw_provider.address)
+        normalized_city = optional_string(raw_provider.city)
+        normalized_state = optional_string(raw_provider.state)
+        normalized_country = optional_string(raw_provider.country)
+        normalized_phone = optional_string(raw_provider.phone)
+        normalized_taxonomy = optional_string(raw_provider.taxonomy)
+        normalized_provenance = _normalize_object_dict(raw_provider.provenance)
+        normalized_retrieval_metadata = _normalize_object_dict(raw_provider.retrieval_metadata)
         return CanonicalProvider(
-            provider_id=optional_string(raw_provider.provider_id) or "",
+            provider_id=_resolve_provider_id(
+                provider_id=raw_provider.provider_id,
+                source=normalized_source,
+                dataset=_extract_dataset(
+                    normalized_provenance,
+                    normalized_retrieval_metadata,
+                ),
+                name=raw_provider.name,
+                address=normalized_address,
+                city=normalized_city,
+                state=normalized_state,
+                country=normalized_country,
+                phone=normalized_phone,
+                taxonomy=normalized_taxonomy,
+                raw_payload=raw_provider.raw,
+            ),
             name=optional_string(raw_provider.name) or "Unknown Provider",
             specialties=ensure_string_list(raw_provider.specialties),
             languages=ensure_string_list(raw_provider.languages),
             insurance_reported=ensure_string_list(raw_provider.insurance_reported),
-            address=optional_string(raw_provider.address),
-            city=optional_string(raw_provider.city),
-            state=optional_string(raw_provider.state),
-            country=optional_string(raw_provider.country),
-            phone=optional_string(raw_provider.phone),
+            address=normalized_address,
+            city=normalized_city,
+            state=normalized_state,
+            country=normalized_country,
+            phone=normalized_phone,
             website=optional_string(raw_provider.website),
             telehealth=raw_provider.telehealth if isinstance(raw_provider.telehealth, bool) else None,
             description=optional_string(raw_provider.description),
-            source=optional_string(raw_provider.source),
-            taxonomy=optional_string(raw_provider.taxonomy),
+            source=normalized_source,
+            taxonomy=normalized_taxonomy,
             insurance_network_verification=_normalize_verification_status(
                 raw_provider.insurance_network_verification,
                 default_status="unverified",
                 default_basis=INSURANCE_UNVERIFIED_BASIS,
-                default_source=optional_string(raw_provider.source),
+                default_source=normalized_source,
             ),
             accepting_new_patients_status=_normalize_verification_status(
                 raw_provider.accepting_new_patients_status,
                 default_status="unknown",
                 default_basis=NEW_PATIENTS_UNKNOWN_BASIS,
-                default_source=optional_string(raw_provider.source),
+                default_source=normalized_source,
             ),
             medicare_opt_out=_normalize_medicare_opt_out_status(raw_provider.medicare_opt_out),
             freshness=_normalize_freshness_metadata(
                 raw_provider.freshness,
-                default_source=optional_string(raw_provider.source),
+                default_source=normalized_source,
                 default_dataset=_extract_dataset(
-                    raw_provider.provenance,
-                    raw_provider.retrieval_metadata,
+                    normalized_provenance,
+                    normalized_retrieval_metadata,
                 ),
-                retrieval_metadata=raw_provider.retrieval_metadata,
+                retrieval_metadata=normalized_retrieval_metadata,
                 raw=raw_provider.raw,
             ),
-            provenance=_normalize_object_dict(raw_provider.provenance),
-            retrieval_metadata=_normalize_object_dict(raw_provider.retrieval_metadata),
+            provenance=normalized_provenance,
+            retrieval_metadata=normalized_retrieval_metadata,
             ranking_metadata=_normalize_object_dict(raw_provider.ranking_metadata),
             raw=dict(raw_provider.raw),
         )
 
-    provider_id = normalize_text(
-        raw_provider.get("id", raw_provider.get("provider_id", ""))
-    ) or ""
     name = normalize_text(raw_provider.get("name", "Unknown Provider")) or "Unknown Provider"
 
     source = normalize_text(raw_provider.get("source"))
@@ -253,25 +300,43 @@ def normalize_provider(
 
     telehealth_value = raw_provider.get("telehealth")
     telehealth = telehealth_value if isinstance(telehealth_value, bool) else None
+    address = normalize_text(raw_provider.get("address"))
+    city = normalize_text(raw_provider.get("city"))
+    state = normalize_text(raw_provider.get("state"))
+    country = normalize_text(raw_provider.get("country"))
+    phone = normalize_text(raw_provider.get("phone"))
+    taxonomy = normalize_text(raw_provider.get("taxonomy"))
 
     return CanonicalProvider(
-        provider_id=provider_id,
+        provider_id=_resolve_provider_id(
+            provider_id=raw_provider.get("provider_id", raw_provider.get("id")),
+            source=source,
+            dataset=dataset,
+            name=name,
+            address=address,
+            city=city,
+            state=state,
+            country=country,
+            phone=phone,
+            taxonomy=taxonomy,
+            raw_payload=raw_provider,
+        ),
         name=name,
         specialties=normalize_string_list(raw_provider.get("specialties")),
         languages=normalize_string_list(raw_provider.get("languages")),
         insurance_reported=normalize_string_list(
             raw_provider.get("insurance_reported", raw_provider.get("accepted_insurance"))
         ),
-        address=normalize_text(raw_provider.get("address")),
-        city=normalize_text(raw_provider.get("city")),
-        state=normalize_text(raw_provider.get("state")),
-        country=normalize_text(raw_provider.get("country")),
-        phone=normalize_text(raw_provider.get("phone")),
+        address=address,
+        city=city,
+        state=state,
+        country=country,
+        phone=phone,
         website=normalize_text(raw_provider.get("website")),
         telehealth=telehealth,
         description=normalize_text(raw_provider.get("description")),
         source=source,
-        taxonomy=normalize_text(raw_provider.get("taxonomy")),
+        taxonomy=taxonomy,
         insurance_network_verification=_normalize_verification_status(
             raw_provider.get("insurance_network_verification"),
             default_status="unverified",
@@ -334,6 +399,7 @@ def _merge_provider_context(
     fallback: CanonicalProvider,
 ) -> CanonicalProvider:
     return primary.with_updates(
+        provider_id=_merge_provider_id(primary.provider_id, fallback.provider_id),
         source=primary.source or fallback.source,
         insurance_network_verification=_select_verification_status(
             primary.insurance_network_verification,
@@ -393,6 +459,101 @@ def _normalize_verification_status(
         basis=default_basis,
         source=default_source,
     )
+
+
+def _resolve_provider_id(
+    *,
+    provider_id: object,
+    source: Optional[str],
+    dataset: Optional[str],
+    name: object,
+    address: object,
+    city: object,
+    state: object,
+    country: object,
+    phone: object,
+    taxonomy: object,
+    raw_payload: object = None,
+) -> str:
+    explicit_provider_id = _normalize_provider_id_candidate(provider_id)
+    if explicit_provider_id is not None:
+        return explicit_provider_id
+
+    raw_candidate = _extract_source_identifier(raw_payload)
+    if raw_candidate is not None:
+        return raw_candidate
+
+    identity_payload = {
+        "source": normalize_text(source, lowercase=True) or "unknown-source",
+        "dataset": normalize_text(dataset, lowercase=True) or "unknown-dataset",
+        "name": normalize_text(name, lowercase=True) or "unknown-provider",
+        "address": normalize_text(address, lowercase=True),
+        "city": normalize_text(city, lowercase=True),
+        "state": normalize_text(state, lowercase=True),
+        "country": normalize_text(country, lowercase=True),
+        "phone": normalize_text(phone, lowercase=True),
+        "taxonomy": normalize_text(taxonomy, lowercase=True),
+    }
+    serialized = json.dumps(identity_payload, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
+    source_key = _slugify_identity_segment(identity_payload["source"])
+    dataset_key = _slugify_identity_segment(identity_payload["dataset"])
+    return f"generated:{source_key}:{dataset_key}:{digest}"
+
+
+def _merge_provider_id(primary: str, fallback: str) -> str:
+    if not _is_generated_provider_id(primary):
+        return primary
+    if fallback and not _is_generated_provider_id(fallback):
+        return fallback
+    return primary or fallback
+
+
+def _extract_source_identifier(value: object) -> Optional[str]:
+    if not isinstance(value, Mapping):
+        return None
+
+    candidate_keys = (
+        "provider_id",
+        "id",
+        "source_id",
+        "record_id",
+        "external_id",
+        "npi",
+        "NPI",
+    )
+    for key in candidate_keys:
+        candidate = _normalize_provider_id_candidate(value.get(key))
+        if candidate is not None:
+            return candidate
+
+    for key in ("provenance", "retrieval_metadata", "raw"):
+        nested_value = value.get(key)
+        candidate = _extract_source_identifier(nested_value)
+        if candidate is not None:
+            return candidate
+
+    return None
+
+
+def _normalize_provider_id_candidate(value: object) -> Optional[str]:
+    normalized = optional_string(value)
+    if normalized is None:
+        return None
+    if normalized.casefold() in _INVALID_PROVIDER_ID_MARKERS:
+        return None
+    return normalized
+
+
+def _slugify_identity_segment(value: Optional[str]) -> str:
+    if value is None:
+        return "unknown"
+    slug = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
+    return slug or "unknown"
+
+
+def _is_generated_provider_id(value: Optional[str]) -> bool:
+    return bool(value) and value.startswith("generated:")
 
 
 def _normalize_medicare_opt_out_status(

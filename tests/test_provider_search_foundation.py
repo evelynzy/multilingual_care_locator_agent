@@ -18,6 +18,7 @@ from provider_search.models import (
     VerificationStatus,
 )
 from provider_search.normalization import (
+    build_canonical_provider,
     build_request_fingerprint,
     normalize_provider,
     normalize_search_request,
@@ -61,6 +62,31 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
         self.assertEqual(build_request_fingerprint(left), build_request_fingerprint(right))
 
+    def test_build_canonical_provider_generates_stable_source_aware_id_when_missing(self) -> None:
+        left = build_canonical_provider(
+            provider_id="  ",
+            name="Harmony Family Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            address="123 Main St",
+            city="Pittsburgh",
+            state="PA",
+            taxonomy="Family Medicine",
+        )
+        right = build_canonical_provider(
+            provider_id=None,
+            name=" Harmony Family Clinic ",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            address=" 123 Main St ",
+            city=" Pittsburgh ",
+            state="PA",
+            taxonomy="Family Medicine",
+        )
+
+        self.assertTrue(left.provider_id.startswith("generated:clinicaltables:npi-idv:"))
+        self.assertEqual(left.provider_id, right.provider_id)
+
     def test_normalize_provider_uses_reported_insurance_and_provenance_source(self) -> None:
         provider = normalize_provider(
             {
@@ -83,6 +109,20 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertEqual(provider.insurance_reported, ("Medicare", "Aetna"))
         self.assertEqual(provider.source, "NPI Registry")
         self.assertEqual(provider.location_summary, "San Francisco, CA, USA")
+
+    def test_normalize_provider_generates_source_aware_id_for_missing_input_id(self) -> None:
+        provider = normalize_provider(
+            {
+                "provider_id": " ",
+                "name": "Harmony Family Clinic",
+                "source": "ClinicalTables",
+                "provenance": {"dataset": "npi_idv"},
+                "city": "Pittsburgh",
+                "state": "PA",
+            }
+        )
+
+        self.assertTrue(provider.provider_id.startswith("generated:clinicaltables:npi-idv:"))
 
     def test_normalize_search_result_preserves_nested_retriever_metadata(self) -> None:
         result = normalize_search_result(
@@ -242,6 +282,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
     def test_normalize_search_result_preserves_nested_provider_trust_and_context(self) -> None:
         result = normalize_search_result(
             {
+                "provider_id": "outer-source-id",
                 "source": "ClinicalTables",
                 "provenance": {
                     "source": "ClinicalTables",
@@ -264,7 +305,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
                     "outer_context": {"phase": "search"},
                 },
                 "provider": {
-                    "provider_id": "provider-123",
+                    "provider_id": " ",
                     "name": "Harmony Family Clinic",
                     "accepting_new_patients_status": {
                         "status": "accepting",
@@ -292,7 +333,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(result.provider.provider_id, "provider-123")
+        self.assertEqual(result.provider.provider_id, "outer-source-id")
         self.assertEqual(result.provider.insurance_network_verification.status, "verified")
         self.assertTrue(result.provider.insurance_network_verification.verified)
         self.assertTrue(result.provider.accepting_new_patients_status.verified)
