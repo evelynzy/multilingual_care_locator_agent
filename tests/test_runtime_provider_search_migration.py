@@ -168,6 +168,66 @@ class _KeywordOnlyClinicalTablesSource:
         )
 
 
+class _PrimaryCareRetryClinicalTablesSource:
+    def __init__(
+        self,
+        retry_providers: List[Any],
+        *,
+        location_only_providers: Optional[List[Any]] = None,
+    ) -> None:
+        self.retry_providers = list(retry_providers)
+        self.location_only_providers = list(location_only_providers or [])
+        self.calls = []
+
+    def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if (
+            request.search_terms == "Primary Care"
+            and request.query_filter == "addr_practice.state:TX AND addr_practice.zip:75001"
+        ):
+            return SourceSearchResult(
+                providers=[],
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=0,
+                ),
+            )
+        if (
+            request.search_terms == "Primary Care"
+            and request.query_filter == "addr_practice.state:TX"
+        ):
+            return SourceSearchResult(
+                providers=list(self.retry_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.retry_providers),
+                ),
+            )
+        if request.search_terms == "Dallas, TX 75001":
+            return SourceSearchResult(
+                providers=list(self.location_only_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.location_only_providers),
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
 class _DuplicatePrimaryCareClinicalTablesSource:
     def __init__(self) -> None:
         self.calls = []
@@ -447,6 +507,82 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(result.count("provider-card__title"), 1)
         self.assertIn('<div class="provider-card__title">1. Dallas Family Clinic</div>', result)
         self.assertNotIn("2. Dallas Family Clinic", result)
+
+    def test_handle_request_primary_care_75001_uses_relaxed_retry_and_avoids_fallback_when_provider_found(self) -> None:
+        primary_care_provider = build_canonical_provider(
+            provider_id="provider-primary-care",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+        )
+        location_only_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            city="Dallas",
+            state="TX",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+            phone="214-555-0199",
+        )
+        source = _PrimaryCareRetryClinicalTablesSource(
+            [primary_care_provider],
+            location_only_providers=[location_only_provider],
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="primary care 75001",
+            medical_need=True,
+            location="Dallas, TX 75001",
+            specialties=["Primary Care"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "primary care 75001",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(len(source.calls), 2)
+        _, first_request = source.calls[0]
+        _, retry_request = source.calls[1]
+        self.assertEqual(first_request.search_terms, "Primary Care")
+        self.assertEqual(retry_request.search_terms, "Primary Care")
+        self.assertEqual(
+            first_request.query_filter,
+            "addr_practice.state:TX AND addr_practice.zip:75001",
+        )
+        self.assertEqual(retry_request.query_filter, "addr_practice.state:TX")
+        self.assertNotIn("Dallas, TX 75001", [request.search_terms for _, request in source.calls])
+        trusted_fallback.assert_not_called()
+        self.assertIn("Dallas Family Clinic", result)
+        self.assertNotIn("Downtown Imaging Associates", result)
+        self.assertNotIn("Medicare Care Compare", result)
 
     def test_handle_request_same_site_different_service_lines_renders_separate_cards(self) -> None:
         service = ProviderSearchService(
