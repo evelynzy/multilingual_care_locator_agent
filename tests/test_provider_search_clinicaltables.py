@@ -169,6 +169,36 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(result.providers, [])
         self.assertIn("timed out", result.trace.error)
 
+    def test_search_dataset_generates_stable_source_aware_id_when_npi_missing(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            ["name.full", "NPI", "provider_type", "addr_practice.city", "addr_practice.state"],
+            [["Harmony Family Clinic", "", "Family Medicine", "Pittsburgh", "PA"]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+
+        first_result = source.search_dataset(
+            "npi_idv",
+            SourceSearchRequest(search_terms="family medicine pittsburgh", limit=1),
+        )
+        second_result = source.search_dataset(
+            "npi_idv",
+            SourceSearchRequest(search_terms="family medicine pittsburgh", limit=1),
+        )
+
+        first_provider_id = first_result.providers[0].provider_id
+        second_provider_id = second_result.providers[0].provider_id
+
+        self.assertTrue(first_provider_id.startswith("generated:npi-registry-individual:npi-idv:"))
+        self.assertEqual(first_provider_id, second_provider_id)
+
 
 if __name__ == "__main__":
     unittest.main()

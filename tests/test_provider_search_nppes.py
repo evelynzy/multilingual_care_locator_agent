@@ -143,6 +143,37 @@ class NPPESSourceTests(unittest.TestCase):
 
         self.assertIsNone(source.lookup("1619271780"))
 
+    def test_lookup_retries_after_transient_request_failure(self) -> None:
+        failed_session = Mock()
+        failed_session.get.side_effect = RuntimeError("boom")
+        source = NPPESSource(session=failed_session)
+
+        self.assertIsNone(source.lookup("1619271780"))
+        failed_session.get.assert_called_once()
+
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "results": [
+                {
+                    "addresses": [],
+                    "taxonomies": [{"desc": "Urology"}],
+                    "created_epoch": 100,
+                    "last_updated_epoch": 200,
+                }
+            ]
+        }
+        recovering_session = Mock()
+        recovering_session.get.return_value = response
+        source.session = recovering_session
+
+        record = source.lookup("1619271780")
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.last_updated_epoch, 200)
+        recovering_session.get.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

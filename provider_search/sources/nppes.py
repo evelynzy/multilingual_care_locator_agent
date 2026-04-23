@@ -48,16 +48,16 @@ class NPPESSource:
             response = self.session.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
         except Exception:
-            self._cache[normalized_npi] = None
             return None
 
         try:
             payload = response.json()
         except ValueError:
-            payload = None
+            return None
 
         record = self.parse_payload(normalized_npi, payload)
-        self._cache[normalized_npi] = record
+        if record is not None or self._is_cacheable_negative_payload(payload):
+            self._cache[normalized_npi] = record
         return record
 
     def parse_payload(self, npi: str, payload: Any) -> Optional[NPPESRecord]:
@@ -209,3 +209,7 @@ class NPPESSource:
             return None
         cleaned = str(value).strip()
         return cleaned or None
+
+    @staticmethod
+    def _is_cacheable_negative_payload(payload: Any) -> bool:
+        return isinstance(payload, dict) and isinstance(payload.get("results"), list)
