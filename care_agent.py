@@ -634,6 +634,32 @@ _PLAN_TYPE_PATTERNS = ("hmo", "ppo", "pos")
 _INTERPRET_RESCUE_SPECIALTY_ALIASES: Tuple[Tuple[str, str], ...] = (
     ("primary care", "Primary Care"),
     ("pcp", "Primary Care"),
+    ("pediatrics", "Pediatrics"),
+    ("pediatrician", "Pediatrics"),
+    ("pediatric", "Pediatrics"),
+    ("dermatology", "Dermatology"),
+    ("dermatologist", "Dermatology"),
+    ("ent", "ENT"),
+    ("ear nose throat", "ENT"),
+    ("otolaryngology", "ENT"),
+    ("cardiology", "Cardiology"),
+    ("cardiologist", "Cardiology"),
+    ("neurology", "Neurology"),
+    ("neurologist", "Neurology"),
+    ("psychiatry", "Psychiatry"),
+    ("psychiatrist", "Psychiatry"),
+    ("urology", "Urology"),
+    ("urologist", "Urology"),
+    ("oncology", "Oncology"),
+    ("oncologist", "Oncology"),
+    ("endocrinology", "Endocrinology"),
+    ("endocrinologist", "Endocrinology"),
+    ("gastroenterology", "Gastroenterology"),
+    ("gastroenterologist", "Gastroenterology"),
+    ("orthopedic", "Orthopedic"),
+    ("orthopedics", "Orthopedic"),
+    ("orthopaedic", "Orthopedic"),
+    ("urgent care", "Urgent Care"),
     ("dentista", "Dentistry"),
     ("dentistry", "Dentistry"),
 )
@@ -1560,7 +1586,7 @@ class CareLocatorAgent:
     # ------------------------------------------------------------------
     def _rescue_location_from_message(self, message: str) -> Optional[str]:
         zip_code = self._extract_zip_code(message)
-        city_state = self._match_city_state(message)
+        city_state = self._rescue_city_state_from_message(message)
 
         if city_state and zip_code:
             city, state_code = city_state
@@ -1578,6 +1604,57 @@ class CareLocatorAgent:
             if self._contains_phrase(normalized_message, alias):
                 rescued_specialties.append(specialty)
         return self._dedupe_preserve_order(rescued_specialties)
+
+    # ------------------------------------------------------------------
+    def _rescue_city_state_from_message(self, message: str) -> Optional[Tuple[str, str]]:
+        best_candidate: Optional[Tuple[int, Tuple[str, str]]] = None
+        for pattern in (self._city_state_code_regex, self._city_state_name_regex):
+            for match in pattern.finditer(message):
+                city = match.group("city").strip().strip(",")
+                state_fragment = match.group("state").strip()
+
+                state_code = None
+                if pattern is self._city_state_code_regex:
+                    state_code = state_fragment.upper()
+                else:
+                    state_code = _US_STATE_NAMES.get(state_fragment.lower())
+
+                if not state_code:
+                    continue
+                if not self._rescue_city_token_is_valid(city):
+                    continue
+
+                location = f"{city} {state_code}"
+                if not self._location_has_city(location):
+                    continue
+
+                candidate_score = len(city.replace(" ", ""))
+                if best_candidate is None or candidate_score >= best_candidate[0]:
+                    best_candidate = (candidate_score, (city.strip(), state_code))
+
+        if best_candidate is None:
+            return None
+        return best_candidate[1]
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _rescue_city_token_is_valid(city: str) -> bool:
+        normalized_city = city.strip().lower()
+        if not normalized_city:
+            return False
+
+        if normalized_city in _LOCATION_NOISE_TOKENS:
+            return False
+
+        specialty_like_terms = {
+            alias.lower()
+            for alias, _ in _INTERPRET_RESCUE_SPECIALTY_ALIASES
+            if " " not in alias
+        }
+        if normalized_city in specialty_like_terms:
+            return False
+
+        return True
 
     # ------------------------------------------------------------------
     def _merge_parsed_queries(
