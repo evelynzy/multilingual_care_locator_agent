@@ -103,12 +103,44 @@ class ProviderSearchService:
                         fallback=existing_provider,
                     )
 
-        ranked_results = rank_provider_results(
-            normalized_request,
-            list(deduped_providers.values()),
+        ranked_results = self._rank_results(
+            request=normalized_request,
+            deduped_providers=deduped_providers,
             limit=limit,
-            cached_provider_ids=cache_entry.provider_ids if cache_entry is not None else (),
+            cache_entry=cache_entry,
         )
+        if self._should_retry_with_nearby_state(
+            request=normalized_request,
+            deduped_providers=deduped_providers,
+            ranked_results=ranked_results,
+            missing_location_hint=missing_location_hint,
+        ):
+            nearby_retry_requests = self._plan_nearby_retry_source_requests(
+                normalized_request,
+                limit=limit,
+                candidate_providers=deduped_providers.values(),
+            )
+            nearby_retry_traces, nearby_retry_missing_location_hint, nearby_retry_candidates = (
+                self._collect_planned_source_candidates(nearby_retry_requests)
+            )
+            source_traces.extend(nearby_retry_traces)
+            if missing_location_hint is None and nearby_retry_missing_location_hint:
+                missing_location_hint = nearby_retry_missing_location_hint
+            for provider_id, provider in nearby_retry_candidates.items():
+                existing_provider = deduped_providers.get(provider_id)
+                if existing_provider is None:
+                    deduped_providers[provider_id] = provider
+                else:
+                    deduped_providers[provider_id] = self._merge_provider_records(
+                        primary=provider,
+                        fallback=existing_provider,
+                    )
+            ranked_results = self._rank_results(
+                request=normalized_request,
+                deduped_providers=deduped_providers,
+                limit=limit,
+                cache_entry=cache_entry,
+            )
         display_results = self._dedupe_display_results(ranked_results)
         self._log_debug_summary(
             request_fingerprint=request_fingerprint,
@@ -154,6 +186,21 @@ class ProviderSearchService:
                 request_fingerprint=request_fingerprint,
                 total_candidates=len(deduped_providers),
             ),
+        )
+
+    @staticmethod
+    def _rank_results(
+        *,
+        request: ProviderSearchRequest,
+        deduped_providers: dict[str, CanonicalProvider],
+        limit: int,
+        cache_entry: Optional[ProviderSearchCacheEntry],
+    ) -> list["ProviderSearchResult"]:
+        return rank_provider_results(
+            request,
+            list(deduped_providers.values()),
+            limit=limit,
+            cached_provider_ids=cache_entry.provider_ids if cache_entry is not None else (),
         )
 
     def _log_debug_summary(
@@ -340,6 +387,32 @@ class ProviderSearchService:
             request,
             limit=limit,
             location_only=True,
+        )
+
+    def _plan_nearby_retry_source_requests(
+        self,
+        request: ProviderSearchRequest,
+        *,
+        limit: int,
+        candidate_providers: Sequence[CanonicalProvider],
+    ) -> list[SourceSearchRequest]:
+        inferred_state = self._infer_retry_state_hint(
+            request=request,
+            candidate_providers=candidate_providers,
+        )
+        if inferred_state is None:
+            return []
+
+        nearby_request = ProviderSearchRequest(
+            specialties=request.specialties,
+            location=inferred_state,
+            insurance=request.insurance,
+            preferred_languages=request.preferred_languages,
+            keywords=request.keywords,
+        )
+        return self._plan_source_requests(
+            nearby_request,
+            limit=limit,
         )
 
     def _collect_planned_source_candidates(
@@ -557,6 +630,50 @@ class ProviderSearchService:
         if source_request.search_terms == request.location.strip():
             return False
         return any(trace.error is None for trace in source_traces)
+
+    def _should_retry_with_nearby_state(
+        self,
+        *,
+        request: ProviderSearchRequest,
+        deduped_providers: dict[str, CanonicalProvider],
+        ranked_results: Sequence["ProviderSearchResult"],
+        missing_location_hint: Optional[str],
+    ) -> bool:
+        if ranked_results or missing_location_hint or not deduped_providers:
+            return False
+        if not request.specialties:
+            return False
+
+        city_hint, state_hint, zip_hint = self._extract_location_hints(request.location)
+        if not zip_hint or city_hint:
+            return False
+
+        return (
+            self._infer_retry_state_hint(
+                request=request,
+                candidate_providers=deduped_providers.values(),
+            )
+            is not None
+        )
+
+    def _infer_retry_state_hint(
+        self,
+        *,
+        request: ProviderSearchRequest,
+        candidate_providers: Sequence[CanonicalProvider],
+    ) -> Optional[str]:
+        _, state_hint, _ = self._extract_location_hints(request.location)
+        if state_hint:
+            return state_hint
+
+        inferred_states = {
+            provider.state.strip().upper()
+            for provider in candidate_providers
+            if isinstance(provider.state, str) and re.fullmatch(r"[A-Za-z]{2}", provider.state.strip())
+        }
+        if len(inferred_states) != 1:
+            return None
+        return next(iter(inferred_states))
 
     @staticmethod
     def _extract_location_hints(location: Optional[str]) -> tuple[Optional[str], Optional[str], Optional[str]]:
