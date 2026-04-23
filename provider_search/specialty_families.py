@@ -90,6 +90,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "obgyn",
             "obstetrics and gynecology",
             "obstetrics gynecology",
+            "207v00000x",
             "gynecology",
             "obstetrics",
             "womens health",
