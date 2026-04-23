@@ -1395,10 +1395,13 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             side_effect=lambda _self, provider: provider,
         ):
             agent = CareLocatorAgent()
-            dataset_config = agent.provider_search_service.clinicaltables_source.dataset_configs["npi_idv"]
             self.assertEqual(
-                dataset_config.result_fields,
-                DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields,
+                agent.provider_search_service.clinicaltables_source.dataset_configs,
+                DEFAULT_DATASET_CONFIGS,
+            )
+            self.assertEqual(
+                agent.provider_search_service.datasets,
+                tuple(DEFAULT_DATASET_CONFIGS.keys()),
             )
             with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
                 agent,
