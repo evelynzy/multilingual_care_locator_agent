@@ -1,19 +1,29 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import unicodedata
 from html import escape
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import logging
 
-import requests
 from huggingface_hub import InferenceClient
 
 from config_loader import get_prompt, get_search_settings
-from retriever import ProviderRepository, SearchCriteria
+from provider_search import (
+    ProviderSearchRequest,
+    ProviderSearchService,
+    SQLiteProviderSearchCache,
+    normalize_search_result,
+)
+from provider_search.sources import (
+    ClinicalTablesDatasetConfig,
+    ClinicalTablesSource,
+    NPPESSource,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +292,34 @@ _DETERMINISTIC_RENDER_TRANSLATIONS = {
     "Call the provider and insurer to confirm network status, accepted insurance plan, referral requirements, new-patient availability, location, and appointment availability.": {
         "spanish": "Llame al proveedor y a la aseguradora para confirmar el estado de la red, el plan de seguro aceptado, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas.",
         "simplified_chinese": "请致电服务提供者和保险公司，确认网络状态、接受的保险计划、转诊要求、新患者接收情况、地点和预约可用性。",
+    },
+    "Provider search sources were temporarily unavailable. Showing trusted fallback resources when available.": {
+        "spanish": "Las fuentes de búsqueda de proveedores no estuvieron disponibles temporalmente. Se mostrarán recursos de respaldo confiables cuando estén disponibles.",
+        "simplified_chinese": "提供者搜索来源暂时不可用。如有可信的备用资源，将优先显示。",
+    },
+    "What city and state or ZIP code should I search?": {
+        "spanish": "¿Qué ciudad y estado o código postal debo buscar?",
+        "simplified_chinese": "我应该搜索哪个城市和州，或哪个邮政编码？",
+    },
+    "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?": {
+        "spanish": "¿Qué tipo de atención necesita (por ejemplo atención primaria, pediatría, dermatología, otorrinolaringología o atención urgente)?",
+        "simplified_chinese": "您需要哪种类型的医疗服务（例如初级保健、儿科、皮肤科、耳鼻喉科或急诊门诊）？",
+    },
+    "Which insurance plan should I use when tailoring listed-insurance guidance?": {
+        "spanish": "¿Qué plan de seguro debo usar para adaptar la orientación sobre el seguro listado?",
+        "simplified_chinese": "在调整列出保险的说明时，我应该使用哪个保险计划？",
+    },
+    "Do you want a provider who speaks a specific language?": {
+        "spanish": "¿Desea un proveedor que hable un idioma específico?",
+        "simplified_chinese": "您是否希望服务提供者会说某种特定语言？",
+    },
+    "What plan type do you have, if you want me to tailor referral guidance (for example HMO, PPO, or POS)?": {
+        "spanish": "Si desea que adapte la orientación sobre remisiones, ¿qué tipo de plan tiene (por ejemplo HMO, PPO o POS)?",
+        "simplified_chinese": "如果您希望我调整转诊说明，您的计划类型是什么（例如 HMO、PPO 或 POS）？",
+    },
+    "If symptoms are severe or life-threatening, call emergency services now or go to the nearest emergency room.": {
+        "spanish": "Si los síntomas son graves o ponen en peligro la vida, llame a los servicios de emergencia ahora o vaya a la sala de emergencias más cercana.",
+        "simplified_chinese": "如果症状严重或危及生命，请立即拨打急救电话或前往最近的急诊室。",
     },
 }
 
@@ -593,6 +631,39 @@ _REFERRAL_PATTERNS = (
 
 _PLAN_TYPE_PATTERNS = ("hmo", "ppo", "pos")
 
+_INTERPRET_RESCUE_SPECIALTY_ALIASES: Tuple[Tuple[str, str], ...] = (
+    ("primary care", "Primary Care"),
+    ("pcp", "Primary Care"),
+    ("pediatrics", "Pediatrics"),
+    ("pediatrician", "Pediatrics"),
+    ("pediatric", "Pediatrics"),
+    ("dermatology", "Dermatology"),
+    ("dermatologist", "Dermatology"),
+    ("ent", "ENT"),
+    ("ear nose throat", "ENT"),
+    ("otolaryngology", "ENT"),
+    ("cardiology", "Cardiology"),
+    ("cardiologist", "Cardiology"),
+    ("neurology", "Neurology"),
+    ("neurologist", "Neurology"),
+    ("psychiatry", "Psychiatry"),
+    ("psychiatrist", "Psychiatry"),
+    ("urology", "Urology"),
+    ("urologist", "Urology"),
+    ("oncology", "Oncology"),
+    ("oncologist", "Oncology"),
+    ("endocrinology", "Endocrinology"),
+    ("endocrinologist", "Endocrinology"),
+    ("gastroenterology", "Gastroenterology"),
+    ("gastroenterologist", "Gastroenterology"),
+    ("orthopedic", "Orthopedic"),
+    ("orthopedics", "Orthopedic"),
+    ("orthopaedic", "Orthopedic"),
+    ("urgent care", "Urgent Care"),
+    ("dentista", "Dentistry"),
+    ("dentistry", "Dentistry"),
+)
+
 
 @dataclass
 class ParsedCareQuery:
@@ -617,8 +688,10 @@ class ParsedCareQuery:
 class CareLocatorAgent:
     """Coordinates LLM reasoning, dataset search, and fallback lookups."""
 
-    def __init__(self, provider_repository: Optional[ProviderRepository] = None) -> None:
-        self.provider_repository = provider_repository or ProviderRepository()
+    def __init__(
+        self,
+        provider_search_service: Optional[ProviderSearchService] = None,
+    ) -> None:
         self.prompts = {
             "interpret": get_prompt("interpret_user_need"),
             "response_system": get_prompt("response_system"),
@@ -641,7 +714,6 @@ class CareLocatorAgent:
         field_probe_terms = clinical.get("field_probe_terms", {}) or {}
         self.ctss_timeout = clinical.get("timeout", 6)
         self.ctss_max_results = clinical.get("max_results", 3)
-        self.ctss_values_max_results = clinical.get("values_max_results", 10)
 
         self.npi_registry_config = self.search_settings.get("npi_registry", {}) or {}
         self._npi_registry_enabled = bool(
@@ -655,7 +727,6 @@ class CareLocatorAgent:
         self.npi_registry_version = str(
             self.npi_registry_config.get("version", "2.1")
         )
-        self._npi_registry_cache: Dict[str, Optional[dict]] = {}
 
         self.ctss_dataset_configs: Dict[str, Dict[str, Any]] = {
             "npi_idv": {
@@ -722,29 +793,6 @@ class CareLocatorAgent:
         ]
 
         self.fallback_resources = self.search_settings.get("fallback_resources", [])
-        self._ctss_field_map: Dict[str, Dict[str, int]] = {}
-        self._ctss_result_field_order: Dict[str, List[str]] = {}
-        self._ctss_suggest_cache: Dict[Tuple[str, str, str], List[str]] = {}
-        self._ctss_taxonomy_fields: List[str] = [
-            "provider_type",
-            "taxonomies[0].desc",
-        ]
-        self._ctss_location_fields: List[str] = [
-            "addr_practice.city",
-            "addr_practice.state",
-            "addr_practice.zip",
-            "addr_practice.country_name",
-        ]
-        self._location_aliases: Dict[str, str] = {
-            "bay area": "San Francisco CA",
-            "sf bay area": "San Francisco CA",
-            "silicon valley": "San Jose CA",
-            "south bay": "San Jose CA",
-            "east bay": "Oakland CA",
-            "la": "Los Angeles CA",
-            "greater los angeles": "Los Angeles CA",
-            "dallas fort worth": "Dallas TX",
-        }
 
         state_code_pattern = "|".join(sorted(_US_STATE_CODES))
         state_name_pattern = "|".join(
@@ -761,8 +809,9 @@ class CareLocatorAgent:
             rf"{city_pattern}{separator_pattern}(?P<state>{state_name_pattern})\b",
             re.IGNORECASE,
         )
-
-        self._initialize_clinicaltables_field_maps()
+        self.provider_search_service = (
+            provider_search_service or self._build_provider_search_service()
+        )
 
     # ------------------------------------------------------------------
     def handle_request(
@@ -853,42 +902,65 @@ class CareLocatorAgent:
         fallback_results: List[dict] = []
 
         missing_location_hint = None
+        had_source_failures = False
 
         if parsed_query.medical_need:
-            search_criteria = SearchCriteria(
-                specialties=parsed_query.specialties,
+            provider_request = ProviderSearchRequest(
+                specialties=tuple(parsed_query.specialties),
                 location=parsed_query.location,
-                insurance=parsed_query.insurance,
-                preferred_languages=parsed_query.preferred_languages,
-                keywords=parsed_query.keywords,
+                insurance=tuple(parsed_query.insurance),
+                preferred_languages=tuple(parsed_query.preferred_languages),
+                keywords=tuple(parsed_query.keywords),
+            )
+            search_response = self.provider_search_service.search(
+                provider_request,
+                limit=self.ctss_max_results,
+            )
+            missing_location_hint = search_response.missing_location_hint
+            had_source_failures = any(
+                bool(trace.error)
+                for trace in search_response.search_trace.source_traces
             )
 
             local_results = [
-                self._normalize_result_trust_metadata(result)
-                for result in self.provider_repository.search(search_criteria)
-            ]
-            logger.info("Local semantic search results=%s", len(local_results))
-
-            if not local_results:
-                fallback_results, missing_location_hint = self._search_clinicaltables(
-                    parsed_query,
-                    limit=self.ctss_max_results,
+                self._normalize_result_trust_metadata(
+                    self._provider_search_result_to_payload(result)
                 )
+                for result in search_response.provider_results
+            ]
+            logger.info(
+                "ProviderSearchService results=%s cache_hit=%s candidates=%s",
+                len(local_results),
+                search_response.search_trace.cache_hit,
+                search_response.search_trace.total_candidates,
+            )
+
+            if search_response.fallback_resources:
+                fallback_results = [
+                    self._normalize_result_trust_metadata(
+                        self._fallback_resource_to_payload(resource, parsed_query)
+                    )
+                    for resource in search_response.fallback_resources
+                ]
+
+            if not local_results and not fallback_results and not missing_location_hint:
                 fallback_results = [
                     self._normalize_result_trust_metadata(result)
-                    for result in fallback_results
+                    for result in self._trusted_resource_fallback(parsed_query)
                 ]
                 logger.info(
-                    "ClinicalTables fallback results=%s", len(fallback_results)
+                    "Trusted resource fallback results=%s", len(fallback_results)
                 )
-                if not fallback_results and not missing_location_hint:
-                    fallback_results = [
-                        self._normalize_result_trust_metadata(result)
-                        for result in self._trusted_resource_fallback(parsed_query)
-                    ]
-                    logger.info(
-                        "Trusted resource fallback results=%s", len(fallback_results)
-                    )
+            if os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() == "1":
+                logger.info(
+                    "care_agent_result_debug request_fingerprint=%s local_results=%s fallback_results=%s final_visible=%s had_source_failures=%s missing_location_hint=%s",
+                    search_response.search_trace.request_fingerprint,
+                    len(local_results),
+                    len(fallback_results),
+                    len(local_results) + len(fallback_results),
+                    had_source_failures,
+                    bool(missing_location_hint),
+                )
         else:
             logger.info("Parsed request marked as non-medical; skipping provider search")
 
@@ -906,20 +978,17 @@ class CareLocatorAgent:
         response_payload["local_results"] = local_results
         response_payload["fallback_results"] = fallback_results
 
-        fallback_only_mode = self._should_use_fallback_only_template()
-
         if missing_location_hint:
             response_payload.setdefault("notes", missing_location_hint)
+        elif had_source_failures and not local_results:
+            response_payload.setdefault(
+                "notes",
+                "Provider search sources were temporarily unavailable. Showing trusted fallback resources when available.",
+            )
         elif no_results_found:
             response_payload.setdefault(
                 "notes",
-                "No providers were found in the local dataset or via the ClinicalTables API."
-            )
-
-        if self.provider_repository.load_error and not fallback_only_mode:
-            response_payload["notes"] = (
-                "Local dataset fallback was used because loading the configured Hugging Face "
-                f"dataset failed: {self.provider_repository.load_error}"
+                "No providers were found via the configured provider search sources."
             )
 
         if parsed_query.medical_need and (local_results or fallback_results) and not missing_location_hint:
@@ -927,13 +996,8 @@ class CareLocatorAgent:
 
         if missing_location_hint:
             template_key = "response_template_location_needed"
-            fallback_only_mode = False
         else:
-            template_key = (
-                "response_template_fallback_only"
-                if fallback_only_mode
-                else "response_template"
-            )
+            template_key = "response_template_fallback_only"
 
         return self._compose_response(
             client,
@@ -1415,7 +1479,8 @@ class CareLocatorAgent:
             top_p=0.1,
         )
 
-        content = completion.choices[0].message["content"] if completion.choices else ""
+        first_choice = completion.choices[0] if completion.choices else None
+        content = self._content_from_completion_choice(first_choice) or ""
         logger.debug("Interpret response received. length=%s", len(content))
         parsed_payload = self._safe_json_parse(content)
 
@@ -1440,31 +1505,17 @@ class CareLocatorAgent:
                 temperature=0.0,
                 top_p=0.1,
             )
-            retry_content = (
-                retry_completion.choices[0].message["content"]
+            retry_first_choice = (
+                retry_completion.choices[0]
                 if retry_completion.choices
-                else ""
+                else None
             )
+            retry_content = self._content_from_completion_choice(retry_first_choice) or ""
             logger.debug("Interpret retry response received. length=%s", len(retry_content))
             parsed_payload = self._safe_json_parse(retry_content)
 
         if not parsed_payload:
-            parsed_payload = {
-                "detected_language": "unknown",
-                "response_language": "English",
-                "summary": message,
-                "medical_need": True,
-                "location": None,
-                "specialties": [],
-                "insurance": [],
-                "preferred_languages": [],
-                "keywords": [],
-                "patient_context": None,
-                "care_setting": None,
-                "urgency": None,
-                "needs_clarification": False,
-                "follow_up_focus": [],
-            }
+            parsed_payload = self._rescue_interpret_payload_from_message(message)
 
         detected_language = str(parsed_payload.get("detected_language", "unknown"))
         response_language = parsed_payload.get("response_language") or detected_language or "English"
@@ -1493,6 +1544,117 @@ class CareLocatorAgent:
             needs_clarification=bool(parsed_payload.get("needs_clarification", False)),
             follow_up_focus=self._ensure_list(parsed_payload.get("follow_up_focus")),
         )
+
+    # ------------------------------------------------------------------
+    def _rescue_interpret_payload_from_message(self, message: str) -> Dict[str, Any]:
+        rescued_payload = self._default_interpret_payload(message)
+        rescued_location = self._rescue_location_from_message(message)
+        rescued_specialties = self._rescue_specialties_from_message(message)
+
+        if rescued_location:
+            rescued_payload["location"] = rescued_location
+        if rescued_specialties:
+            rescued_payload["specialties"] = rescued_specialties
+
+        logger.warning(
+            "Interpret response remained invalid after retry; applied deterministic rescue. location_present=%s specialties=%s",
+            bool(rescued_location),
+            len(rescued_specialties),
+        )
+        return rescued_payload
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _default_interpret_payload(message: str) -> Dict[str, Any]:
+        return {
+            "detected_language": "unknown",
+            "response_language": "English",
+            "summary": message,
+            "medical_need": True,
+            "location": None,
+            "specialties": [],
+            "insurance": [],
+            "preferred_languages": [],
+            "keywords": [],
+            "patient_context": None,
+            "care_setting": None,
+            "urgency": None,
+            "needs_clarification": False,
+            "follow_up_focus": [],
+        }
+
+    # ------------------------------------------------------------------
+    def _rescue_location_from_message(self, message: str) -> Optional[str]:
+        zip_code = self._extract_zip_code(message)
+        city_state = self._rescue_city_state_from_message(message)
+
+        if city_state and zip_code:
+            city, state_code = city_state
+            return f"{city}, {state_code} {zip_code}"
+        if city_state:
+            city, state_code = city_state
+            return f"{city}, {state_code}"
+        return zip_code
+
+    # ------------------------------------------------------------------
+    def _rescue_specialties_from_message(self, message: str) -> List[str]:
+        rescued_specialties: List[str] = []
+        normalized_message = message.lower()
+        for alias, specialty in _INTERPRET_RESCUE_SPECIALTY_ALIASES:
+            if self._contains_phrase(normalized_message, alias):
+                rescued_specialties.append(specialty)
+        return self._dedupe_preserve_order(rescued_specialties)
+
+    # ------------------------------------------------------------------
+    def _rescue_city_state_from_message(self, message: str) -> Optional[Tuple[str, str]]:
+        best_candidate: Optional[Tuple[int, Tuple[str, str]]] = None
+        for pattern in (self._city_state_code_regex, self._city_state_name_regex):
+            for match in pattern.finditer(message):
+                city = match.group("city").strip().strip(",")
+                state_fragment = match.group("state").strip()
+
+                state_code = None
+                if pattern is self._city_state_code_regex:
+                    state_code = state_fragment.upper()
+                else:
+                    state_code = _US_STATE_NAMES.get(state_fragment.lower())
+
+                if not state_code:
+                    continue
+                if not self._rescue_city_token_is_valid(city):
+                    continue
+
+                location = f"{city} {state_code}"
+                if not self._location_has_city(location):
+                    continue
+
+                candidate_score = len(city.replace(" ", ""))
+                if best_candidate is None or candidate_score >= best_candidate[0]:
+                    best_candidate = (candidate_score, (city.strip(), state_code))
+
+        if best_candidate is None:
+            return None
+        return best_candidate[1]
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _rescue_city_token_is_valid(city: str) -> bool:
+        normalized_city = city.strip().lower()
+        if not normalized_city:
+            return False
+
+        if normalized_city in _LOCATION_NOISE_TOKENS:
+            return False
+
+        specialty_like_terms = {
+            alias.lower()
+            for alias, _ in _INTERPRET_RESCUE_SPECIALTY_ALIASES
+            if " " not in alias
+        }
+        if normalized_city in specialty_like_terms:
+            return False
+
+        return True
 
     # ------------------------------------------------------------------
     def _merge_parsed_queries(
@@ -1764,770 +1926,6 @@ class CareLocatorAgent:
         return deduped
 
     # ------------------------------------------------------------------
-    def _search_clinicaltables(
-        self, query: ParsedCareQuery, limit: int = 3
-    ) -> tuple[List[dict], Optional[str]]:
-        (
-            search_terms,
-            query_filter,
-            location_was_specific,
-            city_hint,
-            zip_hint,
-            state_hint,
-        ) = self._compose_clinicaltables_query_parts(query)
-        logger.debug(
-            "ClinicalTables combined query prepared. search_terms_length=%s has_filter=%s",
-            len(search_terms),
-            bool(query_filter),
-        )
-
-        if not search_terms.strip():
-            return [], None
-
-        if not location_was_specific:
-            return [], self._location_hint()
-
-        per_dataset_limit = max(limit, self.ctss_max_results)
-
-        search_variants: List[tuple[str, Optional[str], str]] = [
-            (search_terms, query_filter, "primary"),
-        ]
-
-        location_only_terms = " ".join(
-            part for part in [zip_hint, city_hint, state_hint] if part
-        )
-        if (
-            location_only_terms
-            and location_only_terms.strip()
-            and location_only_terms.strip() != search_terms.strip()
-        ):
-            search_variants.append(
-                (location_only_terms.strip(), query_filter, "location-only")
-            )
-
-        for variant_terms, variant_filter, variant_label in search_variants:
-            variant_results: List[dict] = []
-            logger.debug(
-                "ClinicalTables search variant=%s terms_length=%s has_filter=%s",
-                variant_label,
-                len(variant_terms),
-                bool(variant_filter),
-            )
-            for dataset in self._ctss_dataset_priority:
-                dataset_results = self._clinicaltables_search_dataset(
-                    dataset,
-                    variant_terms,
-                    variant_filter,
-                    per_dataset_limit,
-                    city_hint=city_hint,
-                    zip_hint=zip_hint,
-                    state_hint=state_hint,
-                )
-                for record in dataset_results:
-                    variant_results.append(record)
-                    if len(variant_results) >= limit:
-                        return variant_results[:limit], None
-
-            if variant_results:
-                return variant_results[:limit], None
-
-        return [], None
-
-    # ------------------------------------------------------------------
-    def _clinicaltables_search_dataset(
-        self,
-        dataset: str,
-        search_terms: str,
-        query_filter: Optional[str],
-        limit: int,
-        *,
-        city_hint: Optional[str] = None,
-        zip_hint: Optional[str] = None,
-        state_hint: Optional[str] = None,
-    ) -> List[dict]:
-        config = self.ctss_dataset_configs.get(dataset, {})
-        url = config.get("search_url")
-        if not url:
-            return []
-
-        params = {"terms": search_terms, "maxList": str(limit)}
-        if query_filter:
-            params["q"] = query_filter
-        field_names = self._ctss_result_field_order.get(dataset)
-        if field_names:
-            params["df"] = ",".join(field_names)
-
-        try:
-            response = requests.get(url, params=params, timeout=self.ctss_timeout)
-            response.raise_for_status()
-        except Exception as exc:
-            logger.warning(
-                "ClinicalTables %s search failed. terms_length=%s error=%s",
-                dataset,
-                len(search_terms),
-                exc,
-            )
-            return []
-
-        try:
-            payload = response.json()
-        except ValueError:
-            payload = None
-
-        logger.debug(
-            "ClinicalTables %s raw response status=%s text=%s",
-            dataset,
-            response.status_code,
-            response.text[:500],
-        )
-        fields, entries = self._parse_clinicaltables_payload(dataset, payload)
-        logger.debug(
-            "ClinicalTables %s parsed fields_count=%s entries_count=%s sample=%s",
-            dataset,
-            len(fields) if fields else 0,
-            len(entries) if entries else 0,
-            entries[:1] if entries else entries,
-        )
-        if not entries:
-            return []
-
-        results: List[dict] = []
-
-        for row in entries[:limit]:
-            if not isinstance(row, (list, tuple)):
-                continue
-            data = {
-                str(fields[idx]): row[idx]
-                for idx in range(min(len(fields), len(row)))
-            }
-
-            if not data:
-                fallback_record = self._clinicaltables_build_fallback_record(dataset, row, config)
-                if fallback_record:
-                    logger.debug(
-                        "ClinicalTables %s fallback record constructed: %s",
-                        dataset,
-                        fallback_record,
-                    )
-                    enhanced = self._enhance_with_npi_registry(
-                        dataset, fallback_record
-                    )
-                    results.append(enhanced)
-                continue
-
-            name = self._first_match(
-                data,
-                [
-                    "name.full",
-                    "name.last",
-                    "name.first",
-                ],
-                default="Healthcare Provider",
-            )
-
-            if dataset == "npi_idv":
-                first = data.get("name.first")
-                last = data.get("name.last")
-                middle = data.get("name.middle")
-                combined = " ".join(
-                    chunk
-                    for chunk in [first, middle, last]
-                    if isinstance(chunk, str) and chunk.strip()
-                )
-                if combined.strip():
-                    name = combined.strip()
-
-            full_address = self._first_match(data, ["addr_practice.full"])
-            city = self._first_match(
-                data,
-                ["addr_practice.city"],
-            )
-
-            state = self._first_match(
-                data,
-                ["addr_practice.state"],
-            )
-
-            postal_code = self._first_match(
-                data,
-                ["addr_practice.zip"],
-            )
-
-            street = self._first_match(
-                data,
-                ["addr_practice.address_1"],
-            )
-
-            country = self._first_match(
-                data,
-                ["addr_practice.country_name"],
-            )
-
-            phone = self._first_match(
-                data,
-                ["addr_practice.phone"],
-            )
-
-            taxonomy = self._first_match(
-                data,
-                [
-                    "provider_type",
-                    "taxonomies[0].desc",
-                    "taxonomies[0].code",
-                ],
-            )
-
-            languages = self._ensure_list(data.get("languages"))
-
-            npi = data.get("NPI")
-
-            if state_hint:
-                state_str = str(state).strip().upper() if state else ""
-                if state_str and state_str != state_hint.upper():
-                    continue
-
-            if zip_hint:
-                postal_str = str(postal_code).strip() if postal_code else ""
-                if not postal_str or not postal_str.startswith(zip_hint):
-                    continue
-
-            if city_hint:
-                city_str = str(city).strip().lower() if city else ""
-                if city_str != city_hint.strip().lower():
-                    continue
-
-            location_parts: List[str] = []
-            if full_address and isinstance(full_address, str) and full_address.strip():
-                location_parts.append(full_address.strip())
-            else:
-                if street:
-                    location_parts.append(str(street))
-
-                city_state = ", ".join(
-                    chunk for chunk in [city, state] if isinstance(chunk, str) and chunk.strip()
-                )
-                if city_state:
-                    if postal_code and isinstance(postal_code, str) and postal_code.strip():
-                        city_state = f"{city_state} {postal_code.strip()}"
-                    location_parts.append(city_state)
-                elif postal_code:
-                    location_parts.append(str(postal_code))
-
-                if country and isinstance(country, str) and country.strip() and country.strip().upper() not in {"US", "USA"}:
-                    location_parts.append(country.strip())
-
-            location_text = ", ".join(location_parts)
-
-            record = {
-                "name": name,
-                "location": location_text
-                or ", ".join(
-                    chunk
-                    for chunk in [city, state]
-                    if isinstance(chunk, str) and chunk.strip()
-                ),
-                "phone": phone,
-                "npi": npi,
-                "languages": languages,
-                "taxonomy": taxonomy,
-                "source": config.get(
-                    "source_label", "NPI Registry via clinicaltables.nlm.nih.gov"
-                ),
-                "dataset": dataset,
-                "raw": data,
-            }
-            results.append(self._enhance_with_npi_registry(dataset, record))
-
-        return results
-
-    # ------------------------------------------------------------------
-    def _clinicaltables_build_fallback_record(
-        self, dataset: str, row: Tuple[Any, ...], config: Dict[str, Any]
-    ) -> Optional[dict]:
-        if not isinstance(row, (list, tuple)) or not row:
-            return None
-
-        def _get(index: int) -> Optional[Any]:
-            return row[index] if len(row) > index else None
-
-        raw_name = _get(0)
-        name = str(raw_name).strip() if raw_name else "Healthcare Provider"
-        if dataset == "npi_idv" and "," in name:
-            parts = [part.strip() for part in name.split(",", 1)]
-            if len(parts) == 2:
-                formatted = f"{parts[1]} {parts[0]}".strip()
-                if formatted:
-                    name = formatted
-
-        npi = _get(1)
-        taxonomy = _get(2)
-        address = _get(3)
-
-        phone = None
-        if len(row) > 4:
-            phone_candidate = _get(4)
-            if isinstance(phone_candidate, str) and phone_candidate.strip():
-                phone = phone_candidate.strip()
-
-        location = str(address).strip() if address else ""
-
-        return {
-            "name": name,
-            "location": location,
-            "phone": phone,
-            "npi": npi,
-            "languages": [],
-            "taxonomy": taxonomy,
-            "source": config.get(
-                "source_label", "NPI Registry via clinicaltables.nlm.nih.gov"
-            ),
-            "dataset": dataset,
-            "raw": {"fallback_row": list(row)},
-        }
-
-    # ------------------------------------------------------------------
-    def _enhance_with_npi_registry(self, dataset: str, record: dict) -> dict:
-        if not self._npi_registry_enabled:
-            return record
-        if not isinstance(record, dict):
-            return record
-
-        npi = record.get("npi")
-        if not npi:
-            return record
-
-        npi_str = str(npi).strip()
-        if not npi_str.isdigit():
-            return record
-
-        lookup = self._lookup_npi_registry_entry(npi_str)
-        if not lookup:
-            return record
-
-        practice_address = lookup.get("practice_address")
-        mailing_address = lookup.get("mailing_address")
-        location_override = self._format_npi_registry_location(practice_address)
-        if location_override:
-            record["location"] = location_override
-
-        phone_value = None
-        if isinstance(practice_address, dict):
-            phone_value = practice_address.get("telephone_number")
-        if not phone_value and isinstance(mailing_address, dict):
-            phone_value = mailing_address.get("telephone_number")
-        if isinstance(phone_value, str) and phone_value.strip():
-            record["phone"] = phone_value.strip()
-
-        if not record.get("taxonomy") and lookup.get("taxonomies"):
-            taxonomy = self._first_non_empty_taxonomy_description(
-                lookup.get("taxonomies")
-            )
-            if taxonomy:
-                record["taxonomy"] = taxonomy
-
-        record.setdefault("raw", {})["npi_registry"] = {
-            "dataset": dataset,
-            "lookup": lookup,
-        }
-        # check CMS opt‑out status and attach the result
-        try:
-            opt_out_info = self._check_medicare_opt_out(str(record["npi"]))
-            if opt_out_info:
-                record["medicare_opt_out"] = opt_out_info
-        except Exception:
-            # do not break provider enrichment if opt‑out lookup fails
-            logger.warning("Error checking opt‑out status for %s", record.get("npi"))
-
-        return record
-
-    # ------------------------------------------------------------------
-    def _lookup_npi_registry_entry(self, npi: str) -> Optional[dict]:
-        cached = self._npi_registry_cache.get(npi)
-        if cached is not None:
-            return cached
-
-        if not self._npi_registry_enabled or not self.npi_registry_url:
-            self._npi_registry_cache[npi] = None
-            return None
-
-        params = {
-            "number": npi,
-            "version": self.npi_registry_version,
-            "limit": 1,
-        }
-
-        try:
-            response = requests.get(
-                self.npi_registry_url,
-                params=params,
-                timeout=self.npi_registry_timeout,
-            )
-            response.raise_for_status()
-        except Exception as exc:
-            logger.warning("NPI registry lookup failed for %s: %s", npi, exc)
-            self._npi_registry_cache[npi] = None
-            return None
-
-        try:
-            payload = response.json()
-        except ValueError:
-            payload = None
-
-        entry: Optional[dict] = None
-        if isinstance(payload, dict):
-            results = payload.get("results") or []
-            if results:
-                candidate = results[0]
-                if isinstance(candidate, dict):
-                    entry = candidate
-
-        if not entry:
-            self._npi_registry_cache[npi] = None
-            return None
-
-        addresses = entry.get("addresses")
-        practice = self._select_npi_registry_address(addresses, target="LOCATION")
-        mailing = self._select_npi_registry_address(addresses, target="MAILING")
-
-        normalized = {
-            "npi": npi,
-            "practice_address": practice,
-            "mailing_address": mailing,
-            "taxonomies": entry.get("taxonomies"),
-            "basic": entry.get("basic"),
-            "enumeration_type": entry.get("enumeration_type"),
-            "created_epoch": entry.get("created_epoch"),
-            "last_updated_epoch": entry.get("last_updated_epoch"),
-            "raw_entry": entry,
-        }
-
-        self._npi_registry_cache[npi] = normalized
-        return normalized
-
-        # ------------------------------------------------------------------
-    def _check_medicare_opt_out(self, npi: str) -> Optional[dict]:
-        """
-        Look up a provider's Medicare opt‑out status using CMS's Opt‑Out Affidavits API.
-        Returns a dict with opted_out (bool), optout_effective_date, optout_end_date,
-        or None if no record is found or the request fails.
-        """
-        # Dataset ID for the Opt‑Out Affidavits (as of 2025-09-28).
-        # Fields include NPI, Optout Effective Date, and Optout End Date:contentReference[oaicite:0]{index=0}.
-        dataset_id = "9887a515-7552-4693-bf58-735c77af46d7"
-        base_url = f"https://data.cms.gov/data-api/v1/dataset/{dataset_id}/data"
-
-        try:
-            # Build query: filter by exact NPI
-            resp = requests.get(
-                base_url,
-                params={
-                    "filter[NPI]": str(npi),
-                    # limit results to one record; not strictly necessary but avoids large payloads
-                    "size": "1",
-                },
-                timeout=6,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as exc:
-            logger.warning("Opt‑out lookup failed for %s: %s", npi, exc)
-            return None
-
-        # API returns an array of records; if empty, provider has no opt‑out on file
-        if not isinstance(data, list) or not data:
-            return {"opted_out": False}
-
-        record = data[0]
-        effective = record.get("Optout Effective Date")
-        end = record.get("Optout End Date")
-
-        # Determine if the opt‑out is currently in effect.  An open‑ended (null) end date
-        # or end date in the future means the provider is opted out.
-        opted_out = False
-        if effective:
-            # End date might be empty or a future date (YYYY/MM/DD format)
-            if not end:
-                opted_out = True
-            else:
-                try:
-                    from datetime import date
-                    end_date = date.fromisoformat(end.replace("/", "-"))
-                    opted_out = end_date >= date.today()
-                except Exception:
-                    opted_out = True
-
-        return {
-            "opted_out": opted_out,
-            "optout_effective_date": effective,
-            "optout_end_date": end,
-        }
-    
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _select_npi_registry_address(addresses: Any, *, target: str) -> Optional[dict]:
-        if not isinstance(addresses, list):
-            return None
-
-        fallback: Optional[dict] = None
-        for entry in addresses:
-            if not isinstance(entry, dict):
-                continue
-            if fallback is None:
-                fallback = entry
-            purpose = entry.get("address_purpose")
-            if isinstance(purpose, str) and purpose.strip().upper() == target.upper():
-                return entry
-
-        return fallback
-
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _format_npi_registry_location(address: Optional[dict]) -> str:
-        if not isinstance(address, dict):
-            return ""
-
-        parts: List[str] = []
-        for key in ("address_1", "address_2"):
-            value = address.get(key)
-            if isinstance(value, str) and value.strip():
-                parts.append(value.strip())
-
-        city = address.get("city")
-        state = address.get("state")
-        locality_parts: List[str] = []
-        if isinstance(city, str) and city.strip():
-            locality_parts.append(city.strip())
-        if isinstance(state, str) and state.strip():
-            locality_parts.append(state.strip())
-
-        locality = ", ".join(locality_parts)
-        postal = address.get("postal_code")
-        if isinstance(postal, str) and postal.strip():
-            postal_clean = postal.strip()
-            if locality:
-                locality = f"{locality} {postal_clean}"
-            else:
-                locality = postal_clean
-
-        if locality:
-            parts.append(locality)
-
-        country = address.get("country_name") or address.get("country_code")
-        if isinstance(country, str):
-            country_clean = country.strip()
-            if country_clean and country_clean.upper() not in {"US", "USA", "UNITED STATES"}:
-                parts.append(country_clean)
-
-        return ", ".join(parts)
-
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _first_non_empty_taxonomy_description(taxonomies: Any) -> Optional[str]:
-        if not isinstance(taxonomies, list):
-            return None
-
-        for entry in taxonomies:
-            if not isinstance(entry, dict):
-                continue
-            for key in ("desc", "code"):
-                value = entry.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
-        return None
-
-    # ------------------------------------------------------------------
-    def _compose_clinicaltables_query_parts(
-        self, query: ParsedCareQuery
-    ) -> Tuple[str, Optional[str], bool]:
-        parts: List[str] = []
-        filters: List[str] = []
-        location_was_specific = False
-
-        # Specialty: pick the first reasonable suggestion
-        for specialty in query.specialties:
-            best = self._best_suggestion_across_datasets(
-                specialty, self._ctss_taxonomy_fields
-            )
-            if best:
-                parts.append(best)
-                break
-
-        # Location: reduce to one normalized chunk (city/state/zip)
-        alias_used = False
-
-        location_inputs: List[str] = []
-        city_hint: Optional[str] = None
-        zip_hint: Optional[str] = None
-        state_hint: Optional[str] = None
-
-        if query.location:
-            location_inputs.append(query.location)
-
-        inferred_location = self._infer_location_hint(query)
-        if inferred_location and inferred_location not in location_inputs:
-            location_inputs.append(inferred_location)
-
-        for location_input in location_inputs:
-            normalized_location, alias_used = self._normalize_location_alias(
-                location_input
-            )
-            for chunk in self._split_location(normalized_location):
-                user_chunk = chunk.strip()
-                if not user_chunk:
-                    continue
-
-                match = self._match_city_state(user_chunk)
-                chunk_city: Optional[str] = None
-                chunk_state: Optional[str] = None
-                if match:
-                    chunk_city, chunk_state = match
-                else:
-                    chunk_state = self._extract_state_code(user_chunk)
-
-                chunk_zip = self._extract_zip_code(user_chunk)
-
-                if chunk_city and not city_hint:
-                    city_hint = chunk_city
-                if chunk_state and not state_hint:
-                    state_hint = chunk_state
-                if chunk_zip and not zip_hint:
-                    zip_hint = chunk_zip
-
-                if user_chunk not in parts:
-                    parts.append(user_chunk)
-
-                suggestion = self._best_suggestion_across_datasets(
-                    user_chunk, self._ctss_location_fields
-                )
-
-                suggestion_for_filters: Optional[str] = None
-                suggestion_for_terms: Optional[str] = None
-
-                if suggestion and suggestion.strip() and suggestion != user_chunk:
-                    user_state = self._extract_state_code(user_chunk)
-                    suggestion_state = self._extract_state_code(suggestion)
-                    if user_state and suggestion_state and user_state != suggestion_state:
-                        suggestion_for_filters = None
-                        suggestion_for_terms = None
-                    else:
-                        suggestion_for_filters = suggestion
-                        suggestion_for_terms = suggestion
-
-                if suggestion_for_terms and suggestion_for_terms not in parts:
-                    parts.append(suggestion_for_terms)
-
-                chunk_filters = self._build_query_filters(
-                    user_chunk,
-                    suggestion_for_filters,
-                    city_hint=chunk_city,
-                    zip_hint=chunk_zip,
-                    state_hint=chunk_state,
-                )
-                for filter_value in chunk_filters:
-                    if filter_value not in filters:
-                        filters.append(filter_value)
-                if self._location_filters_are_specific(
-                    chunk_filters, user_chunk, alias_used
-                ):
-                    location_was_specific = True
-
-                should_stop = bool(chunk_filters) or bool(chunk_zip) or bool(chunk_city)
-                if location_was_specific or should_stop:
-                    break
-
-            if location_was_specific or city_hint or zip_hint:
-                break
-
-        if not zip_hint and query.location:
-            explicit_zip = self._extract_zip_code(query.location)
-            if explicit_zip:
-                zip_hint = explicit_zip
-                filter_value = f"addr_practice.zip:{explicit_zip}"
-                if filter_value not in filters:
-                    filters.append(filter_value)
-                location_was_specific = True
-
-        if not state_hint:
-            for filter_value in filters:
-                if filter_value.startswith("addr_practice.state:"):
-                    state_hint = filter_value.split(":", 1)[1]
-                    break
-
-        if not zip_hint:
-            for filter_value in filters:
-                if filter_value.startswith("addr_practice.zip:"):
-                    zip_hint = filter_value.split(":", 1)[1].strip()
-                    break
-
-        if not city_hint and filters:
-            for filter_value in filters:
-                if filter_value.startswith("addr_practice.city:"):
-                    value = filter_value.split(":", 1)[1].strip()
-                    if value.startswith('"') and value.endswith('"') and len(value) >= 2:
-                        value = value[1:-1]
-                    city_hint = value
-                    break
-
-        query_filter = " AND ".join(filters) if filters else None
-
-        return (
-            " ".join(part for part in parts if part),
-            query_filter,
-            location_was_specific,
-            city_hint,
-            zip_hint,
-            state_hint,
-        )
-
-    # ------------------------------------------------------------------
-    def _build_query_filters(
-        self,
-        user_location: str,
-        suggestion: Optional[str] = None,
-        *,
-        city_hint: Optional[str] = None,
-        zip_hint: Optional[str] = None,
-        state_hint: Optional[str] = None,
-    ) -> List[str]:
-        filters: List[str] = []
-
-        user_state = self._extract_state_code(user_location)
-        suggestion_state = (
-            self._extract_state_code(suggestion) if suggestion else None
-        )
-
-        state_code = state_hint or user_state or suggestion_state
-        if user_state and suggestion_state and user_state != suggestion_state:
-            state_code = user_state
-
-        if state_code:
-            filters.append(f"addr_practice.state:{state_code}")
-
-        if zip_hint:
-            filters.append(f"addr_practice.zip:{zip_hint}")
-        elif city_hint and state_code:
-            escaped_city = city_hint.replace('"', '\"')
-            filters.append(f'addr_practice.city:"{escaped_city}"')
-
-        return list(dict.fromkeys(filters))
-
-    # ------------------------------------------------------------------
-    def _location_filters_are_specific(
-        self, filters: List[str], user_location: str, alias_used: bool
-    ) -> bool:
-        if self._extract_zip_code(user_location):
-            return True
-
-        if alias_used:
-            return False
-
-        has_state = any(filter_str.startswith("addr_practice.state") for filter_str in filters)
-        if not has_state:
-            return False
-
-        return self._location_has_city(user_location)
-
-    # ------------------------------------------------------------------
     def _location_has_city(self, value: str) -> bool:
         normalized = value.strip().lower()
         if not normalized:
@@ -2594,35 +1992,6 @@ class CareLocatorAgent:
         return None
 
     # ------------------------------------------------------------------
-    def _normalize_location_alias(self, location: str) -> Tuple[str, bool]:
-        key = location.strip().lower()
-        if key in self._location_aliases:
-            return self._location_aliases[key], True
-        return location, False
-
-    # ------------------------------------------------------------------
-    def _location_hint(self) -> str:
-        return (
-            "Please share a specific city, state, or ZIP code so I can refine the search."
-        )
-
-    # ------------------------------------------------------------------
-    def _infer_location_hint(self, query: ParsedCareQuery) -> Optional[str]:
-        texts: List[str] = []
-        if query.summary:
-            texts.append(query.summary)
-        texts.extend(query.keywords)
-
-        for text in texts:
-            if not text or not isinstance(text, str):
-                continue
-            match = self._match_city_state(text)
-            if match:
-                city, state_code = match
-                return f"{city} {state_code}"
-        return None
-
-    # ------------------------------------------------------------------
     def _match_city_state(self, text: str) -> Optional[Tuple[str, str]]:
         for pattern in (self._city_state_code_regex, self._city_state_name_regex):
             match = pattern.search(text)
@@ -2646,329 +2015,6 @@ class CareLocatorAgent:
                 return city.strip(), state_code
 
         return None
-
-    # ------------------------------------------------------------------
-    def _parse_clinicaltables_payload(
-        self,
-        dataset: str,
-        payload: Any,
-    ) -> Tuple[List[str], List[List[Any]]]:
-        fields: List[str] = []
-        entries: List[List[Any]] = []
-
-        if not isinstance(payload, list):
-            return fields, entries
-
-        if len(payload) >= 4 and isinstance(payload[2], list) and isinstance(payload[3], list):
-            potential_fields = payload[2]
-            potential_entries = payload[3]
-        elif len(payload) >= 3 and isinstance(payload[1], list) and isinstance(payload[2], list):
-            potential_fields = payload[1]
-            potential_entries = payload[2]
-        else:
-            potential_fields = (
-                payload[2] if len(payload) > 2 and isinstance(payload[2], list) else []
-            )
-            potential_entries = (
-                payload[3] if len(payload) > 3 and isinstance(payload[3], list) else []
-            )
-
-        if all(isinstance(item, str) for item in potential_fields):
-            fields = [str(item) for item in potential_fields]
-        elif all(isinstance(item, int) for item in potential_fields):
-            reverse_map = {
-                index: name
-                for name, index in self._ctss_field_map.get(dataset, {}).items()
-            }
-            fields = [reverse_map.get(int(item), str(item)) for item in potential_fields]
-        else:
-            configured_fields = self._ctss_result_field_order.get(dataset, [])
-            if not configured_fields:
-                configured_fields = (
-                    self.ctss_dataset_configs.get(dataset, {}).get("result_fields")
-                    or []
-                )
-            if configured_fields:
-                fields = list(configured_fields)
-            else:
-                fields = []
-
-        filtered_entries: List[List[Any]] = []
-        for row in potential_entries:
-            if isinstance(row, (list, tuple)):
-                filtered_entries.append(list(row))
-        entries = filtered_entries
-
-        return fields, entries
-
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _parse_clinicaltables_fields_payload(payload: Any) -> Dict[str, int]:
-        mapping: Dict[str, int] = {}
-
-        if not isinstance(payload, list):
-            return mapping
-
-        if payload and isinstance(payload[0], list) and len(payload[0]) >= 2:
-            entries = payload
-        else:
-            entries = payload[1:] if len(payload) > 1 else []
-
-        for entry in entries:
-            if not isinstance(entry, list) or len(entry) < 2:
-                continue
-
-            field_index: Optional[int] = None
-            index_candidate = entry[0]
-            if isinstance(index_candidate, (int, str)):
-                try:
-                    field_index = int(index_candidate)
-                except (TypeError, ValueError):
-                    field_index = None
-
-            field_name_candidate = entry[1]
-            if not isinstance(field_name_candidate, str) or not field_name_candidate:
-                continue
-
-            if field_index is None:
-                field_index = len(mapping)
-
-            mapping[field_name_candidate] = field_index
-
-        return mapping
-
-    # ------------------------------------------------------------------
-    def _best_suggestion_across_datasets(
-        self, term: Optional[str], candidate_fields: List[str]
-    ) -> str:
-        if not term:
-            return ""
-
-        cleaned = term.strip()
-        if not cleaned:
-            return ""
-
-        for dataset in self._ctss_dataset_priority:
-            suggestions = self._clinicaltables_suggest_for_dataset(
-                dataset, cleaned, candidate_fields
-            )
-            if suggestions:
-                return suggestions[0]
-
-        return cleaned
-
-    # ------------------------------------------------------------------
-    def _clinicaltables_suggest_for_dataset(
-        self, dataset: str, term: str, candidate_fields: List[str]
-    ) -> List[str]:
-        config = self.ctss_dataset_configs.get(dataset, {})
-        values_url = config.get("values_url")
-        if not values_url:
-            return []
-
-        field_map = self._ctss_field_map.get(dataset)
-        if not field_map:
-            return []
-
-        aggregated: List[str] = []
-        for field in candidate_fields:
-            field_index = field_map.get(field)
-            if field_index is None:
-                continue
-
-            cache_key = (dataset, term, field)
-            cached = self._ctss_suggest_cache.get(cache_key)
-            if cached is not None:
-                aggregated.extend(cached)
-                continue
-
-            suggestions = self._clinicaltables_request_values(
-                dataset, term, field_index, values_url
-            )
-            self._ctss_suggest_cache[cache_key] = suggestions
-            aggregated.extend(suggestions)
-
-        return list(dict.fromkeys(aggregated))
-
-    # ------------------------------------------------------------------
-    def _clinicaltables_request_values(
-        self, dataset: str, term: str, field_index: int, values_url: str
-    ) -> List[str]:
-        params = {
-            "terms": term,
-            "df": str(field_index),
-            "maxList": str(self.ctss_values_max_results),
-        }
-
-        logger.debug(
-            "ClinicalTables values request dataset=%s term_length=%s field_index=%s",
-            dataset,
-            len(term),
-            field_index,
-        )
-
-        try:
-            response = requests.get(values_url, params=params, timeout=self.ctss_timeout)
-            response.raise_for_status()
-        except Exception as exc:
-            logger.warning(
-                "ClinicalTables values failed dataset=%s term_length=%s field_index=%s error=%s",
-                dataset,
-                len(term),
-                field_index,
-                exc,
-            )
-            return []
-
-        try:
-            payload = response.json()
-        except ValueError:
-            payload = None
-
-        suggestions: List[str] = []
-
-        if isinstance(payload, dict):
-            for value in payload.values():
-                if isinstance(value, list):
-                    suggestions.extend(self._flatten_suggestions(value))
-                elif isinstance(value, str):
-                    suggestions.append(value)
-        elif isinstance(payload, list):
-            if payload and isinstance(payload[0], int):
-                for item in payload[1:]:
-                    if isinstance(item, list):
-                        suggestions.extend(self._flatten_suggestions(item))
-                    elif isinstance(item, str):
-                        suggestions.append(item)
-            else:
-                suggestions.extend(self._flatten_suggestions(payload))
-
-        return list(dict.fromkeys(suggestions))
-
-    # ------------------------------------------------------------------
-    def _initialize_clinicaltables_field_maps(self) -> None:
-        for dataset, config in self.ctss_dataset_configs.items():
-            requested_fields = config.get("result_fields") or []
-            alias_map: Dict[str, List[str]] = config.get("field_aliases", {}) or {}
-
-            if requested_fields:
-                field_map = {
-                    field: index for index, field in enumerate(requested_fields)
-                }
-            else:
-                field_map = self._fetch_field_map_for_dataset(dataset, config)
-
-            self._ctss_field_map[dataset] = field_map
-
-            resolved_fields: List[str] = list(requested_fields) or list(field_map.keys())
-            if not resolved_fields:
-                continue
-
-            if alias_map and field_map:
-                filtered_fields: List[str] = []
-                for canonical_field in resolved_fields:
-                    candidates = [canonical_field] + alias_map.get(canonical_field, [])
-                    if any(candidate in field_map for candidate in candidates):
-                        filtered_fields.append(canonical_field)
-                    else:
-                        logger.warning(
-                            "ClinicalTables %s missing requested field '%s'",
-                            dataset,
-                            canonical_field,
-                        )
-                if filtered_fields:
-                    resolved_fields = filtered_fields
-
-            self._ctss_result_field_order[dataset] = list(dict.fromkeys(resolved_fields))
-
-    # ------------------------------------------------------------------
-    def _fetch_field_map_for_dataset(
-        self, dataset: str, config: Dict[str, Any]
-    ) -> Dict[str, int]:
-        fields_url = config.get("fields_url")
-        if fields_url:
-            try:
-                response = requests.get(fields_url, timeout=self.ctss_timeout)
-                response.raise_for_status()
-            except Exception as exc:
-                logger.warning(
-                    "ClinicalTables %s fields fetch failed: %s",
-                    dataset,
-                    exc,
-                )
-            else:
-                try:
-                    payload = response.json()
-                except ValueError:
-                    payload = None
-                else:
-                    mapping = self._parse_clinicaltables_fields_payload(payload)
-                    if mapping:
-                        logger.debug(
-                            "ClinicalTables %s field map loaded (sample=%s)",
-                            dataset,
-                            list(mapping.keys())[:6],
-                        )
-                        return mapping
-
-        # Fallback: probe the search endpoint for at least one result and infer fields
-        url = config.get("search_url")
-        if not url:
-            return {}
-
-        probe_term = config.get("probe_term") or "urology"
-        params = {"terms": probe_term, "maxList": "1"}
-
-        try:
-            response = requests.get(url, params=params, timeout=self.ctss_timeout)
-            response.raise_for_status()
-        except Exception as exc:
-            logger.warning(
-                "ClinicalTables %s field map probe failed: %s",
-                dataset,
-                exc,
-            )
-            return {}
-
-        try:
-            payload = response.json()
-        except ValueError:
-            payload = None
-
-        fields, _ = self._parse_clinicaltables_payload(dataset, payload)
-        if not fields:
-            return {}
-
-        mapping = {str(field): idx for idx, field in enumerate(fields)}
-        logger.debug(
-            "ClinicalTables %s fallback field map loaded (sample=%s)",
-            dataset,
-            list(mapping.keys())[:6],
-        )
-        return mapping
-
-    # ------------------------------------------------------------------
-    def _flatten_suggestions(self, values: List[Any]) -> List[str]:
-        flattened: List[str] = []
-        for value in values:
-            if isinstance(value, str):
-                flattened.append(value)
-            elif isinstance(value, list):
-                flattened.extend(
-                    [item for item in value if isinstance(item, str) and item]
-                )
-        return flattened
-
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _split_location(location: str) -> List[str]:
-        parts = [part.strip() for part in re.split(r"[|/,]", location) if part.strip()]
-        if parts:
-            return parts
-        stripped = location.strip()
-        return [stripped] if stripped else [location]
-
-    # ------------------------------------------------------------------
     def _trusted_resource_fallback(self, query: ParsedCareQuery) -> List[dict]:
         region_hint = query.location or "international"
         if not self.fallback_resources:
@@ -2979,7 +2025,7 @@ class CareLocatorAgent:
             for term in (query.specialties + query.keywords)
             if isinstance(term, str)
         }
-        location_text = (query.location or "").lower()
+        region_contexts = self._fallback_region_contexts(query)
 
         suggestions: List[dict] = []
         for resource in self.fallback_resources:
@@ -3003,8 +2049,12 @@ class CareLocatorAgent:
                     continue
 
             if region_filters:
-                if location_text:
-                    if not any(filter_term in location_text for filter_term in region_filters):
+                if region_contexts:
+                    if not any(
+                        filter_term in context
+                        for filter_term in region_filters
+                        for context in region_contexts
+                    ):
                         continue
                 else:
                     if not any(filter_term in {"international", "global"} for filter_term in region_filters):
@@ -3021,6 +2071,85 @@ class CareLocatorAgent:
             )
 
         return suggestions
+
+    # ------------------------------------------------------------------
+    def _fallback_region_contexts(self, query: ParsedCareQuery) -> set[str]:
+        location_text = (query.location or "").strip().lower()
+        if not location_text:
+            return set()
+
+        contexts = {location_text}
+        if self._extract_state_code(query.location) or self._extract_zip_code(query.location):
+            contexts.update({"united states", "usa", "us"})
+        return contexts
+
+    # ------------------------------------------------------------------
+    def _build_provider_search_service(self) -> ProviderSearchService:
+        nppes_source = NPPESSource(
+            lookup_url=self.npi_registry_url or "https://npiregistry.cms.hhs.gov/api/",
+            version=self.npi_registry_version,
+            timeout=self.npi_registry_timeout,
+        )
+        clinicaltables_source = ClinicalTablesSource(
+            timeout=self.ctss_timeout,
+            dataset_configs=self._provider_search_dataset_configs(),
+            nppes_source=nppes_source if self._npi_registry_enabled else None,
+        )
+        cache = SQLiteProviderSearchCache()
+        return ProviderSearchService(
+            clinicaltables_source=clinicaltables_source,
+            cache=cache,
+            datasets=tuple(self._ctss_dataset_priority),
+            per_dataset_limit=self.ctss_max_results,
+        )
+
+    # ------------------------------------------------------------------
+    def _provider_search_dataset_configs(self) -> dict[str, ClinicalTablesDatasetConfig]:
+        configs: dict[str, ClinicalTablesDatasetConfig] = {}
+        for dataset, config in self.ctss_dataset_configs.items():
+            search_url = config.get("search_url")
+            if not search_url:
+                continue
+            configs[dataset] = ClinicalTablesDatasetConfig(
+                search_url=search_url,
+                values_url=config.get("values_url"),
+                fields_url=config.get("fields_url"),
+                probe_term=config.get("probe_term"),
+                source_label=str(
+                    config.get("source_label") or "NPI Registry via clinicaltables.nlm.nih.gov"
+                ),
+                result_fields=list(config.get("result_fields") or []),
+            )
+        return configs
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _provider_search_result_to_payload(result: Any) -> dict:
+        normalized_result = normalize_search_result(asdict(result))
+        provider_payload = asdict(normalized_result.provider)
+        provider_payload["provider_id"] = normalized_result.provider.provider_id
+        provider_payload["source"] = normalized_result.source or normalized_result.provider.source
+        provider_payload["location"] = normalized_result.provider.location_summary
+        if normalized_result.score is not None:
+            provider_payload["score"] = normalized_result.score
+        if normalized_result.retriever_metadata:
+            provider_payload["retriever_metadata"] = dict(normalized_result.retriever_metadata)
+        return provider_payload
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _fallback_resource_to_payload(resource: Any, query: ParsedCareQuery) -> dict:
+        resource_dict = asdict(resource)
+        return {
+            "name": resource_dict.get("name"),
+            "location": query.location or "international",
+            "website": resource_dict.get("url"),
+            "description": resource_dict.get("description"),
+            "source": resource_dict.get("source") or "Trusted public directories",
+            "provenance": {
+                "source": resource_dict.get("source") or "Trusted public directories",
+            },
+        }
 
     # ------------------------------------------------------------------
     def _normalize_result_trust_metadata(self, result: dict) -> dict:
@@ -3186,17 +2315,37 @@ class CareLocatorAgent:
         logger.info("Response generation finish_reason=%s", finish_reason)
 
         if first_choice is None:
-            raise RuntimeError("Model did not return any choices")
+            logger.warning(
+                "Response generation returned no choices; using deterministic fallback. template_key=%s",
+                template_key,
+            )
+            return self._compose_safe_fallback_response(
+                payload,
+                response_language,
+                template_key,
+                finish_reason=finish_reason,
+            )
 
         content = self._content_from_completion_choice(first_choice)
+        normalized_content = content.strip() if isinstance(content, str) else ""
 
-        if not content:
-            raise RuntimeError("Model response missing content")
+        if finish_reason == "length" or not normalized_content:
+            logger.warning(
+                "Response generation returned incomplete or empty content; using deterministic fallback. finish_reason=%s template_key=%s",
+                finish_reason,
+                template_key,
+            )
+            return self._compose_safe_fallback_response(
+                payload,
+                response_language,
+                template_key,
+                finish_reason=finish_reason,
+            )
 
-        if not isinstance(content, str):
-            content = str(content)
-
-        return self._append_required_trust_guidance(content.strip(), response_language)
+        return self._append_required_trust_guidance(
+            normalized_content,
+            response_language,
+        )
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -3227,6 +2376,96 @@ class CareLocatorAgent:
         return content
 
     # ------------------------------------------------------------------
+    def _compose_safe_fallback_response(
+        self,
+        payload: Dict[str, Any],
+        response_language: Optional[str],
+        template_key: str,
+        finish_reason: Optional[str] = None,
+    ) -> str:
+        query = payload.get("query", {})
+        language_key = _resolved_supported_language_key(response_language)
+        lines: List[str] = []
+
+        primary_guidance = ""
+        if template_key == "response_template_emergency":
+            primary_guidance = (
+                payload.get("emergency_guidance")
+                or payload.get("care_setting_guidance")
+                or ""
+            )
+        else:
+            primary_guidance = payload.get("care_setting_guidance") or ""
+
+        translated_primary_guidance = self._translate_deterministic_text(
+            primary_guidance,
+            language_key,
+        )
+        if translated_primary_guidance:
+            lines.append(
+                f"**{self._render_copy(language_key, 'care_route_label')}:** {translated_primary_guidance}"
+            )
+
+        translated_specialist_guidance = self._translate_deterministic_text(
+            payload.get("specialist_plan_guidance") or "",
+            language_key,
+        )
+        if translated_specialist_guidance:
+            if lines:
+                lines.append("")
+            lines.append(
+                f"**{self._render_copy(language_key, 'referral_note_label')}:** {translated_specialist_guidance}"
+            )
+
+        translated_notes = self._translate_deterministic_text(
+            self._clean_card_value(payload.get("notes")),
+            language_key,
+        )
+        if translated_notes:
+            if lines:
+                lines.append("")
+            lines.append(
+                f"**{self._render_copy(language_key, 'note_label')}:** {translated_notes}"
+            )
+
+        follow_up_questions = [
+            self._translate_deterministic_text(question, language_key)
+            for question in self._ensure_list(payload.get("follow_up_questions"))
+        ]
+        follow_up_questions = [question for question in follow_up_questions if question]
+        if follow_up_questions:
+            if lines:
+                lines.append("")
+            lines.extend(f"- {question}" for question in follow_up_questions)
+
+        verification_guidance = self._translate_deterministic_text(
+            payload.get("verification_guidance") or "",
+            language_key,
+        )
+        if verification_guidance:
+            if lines:
+                lines.append("")
+            lines.append(
+                f"**{self._render_copy(language_key, 'before_contact_label')}:** {verification_guidance}"
+            )
+
+        if not lines:
+            summary = self._clean_card_value(query.get("summary")) or "your care search"
+            lines.append(
+                self._render_copy(language_key, "results_intro", summary=summary)
+            )
+            if finish_reason == "length":
+                lines.append(
+                    f"**{self._render_copy(language_key, 'note_label')}:** "
+                    f"{self._render_copy(language_key, 'verification_reminder')}"
+                )
+
+        return self._append_required_trust_guidance(
+            "\n".join(lines).strip(),
+            response_language,
+        )
+
+    # ------------------------------------------------------------------
     def _append_required_trust_guidance(
         self,
         content: str,
@@ -3241,18 +2480,6 @@ class CareLocatorAgent:
         if trust_guidance in content:
             return content
         return f"{content}\n\n{trust_guidance}"
-
-    # ------------------------------------------------------------------
-    def _should_use_fallback_only_template(self) -> bool:
-        repository = self.provider_repository
-
-        if repository is None:
-            return True
-
-        has_dataset_id = bool(getattr(repository, "dataset_id", None))
-        has_local_records = bool(getattr(repository, "providers", []))
-
-        return (not has_dataset_id) and (not has_local_records)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -3308,7 +2535,7 @@ class CareLocatorAgent:
     def _ensure_list(value: Any) -> List[str]:
         if value is None:
             return []
-        if isinstance(value, list):
+        if isinstance(value, (list, tuple)):
             normalized: List[str] = []
             for item in value:
                 if item is None:

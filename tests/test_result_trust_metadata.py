@@ -81,6 +81,13 @@ if "llama_index" not in sys.modules:
 
 
 from care_agent import CareLocatorAgent, ParsedCareQuery
+from provider_search.models import (
+    ProviderSearchRequest,
+    ProviderSearchResponse,
+    ProviderSearchResult,
+    SearchTrace,
+)
+from provider_search.normalization import build_canonical_provider
 from retriever import ProviderRecord, ProviderRepository
 
 
@@ -123,31 +130,43 @@ class _SequencedChatClient:
 
 class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
     def setUp(self) -> None:
-        with patch.object(
-            CareLocatorAgent,
-            "_initialize_clinicaltables_field_maps",
-            return_value=None,
-        ):
-            self.agent = CareLocatorAgent(provider_repository=Mock())
+        self.agent = CareLocatorAgent(provider_search_service=Mock())
 
-        self.agent.provider_repository.load_error = None
-        self.agent.provider_repository.search.return_value = [
-            {
-                "id": "provider_001",
-                "name": "Harmony Family Clinic",
-                "specialties": ["Primary Care"],
-                "insurance": ["Medicare", "Aetna"],
-                "source": "Local provider dataset",
-                "location": "San Francisco, CA",
-                "phone": "415-555-0100",
-            }
-        ]
+        provider = build_canonical_provider(
+            provider_id="1619271780",
+            name="Harmony Family Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="San Francisco",
+            state="CA",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            insurance_reported=("Medicare", "Aetna"),
+            phone="415-555-0100",
+        )
+        self.agent.provider_search_service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="San Francisco, CA",
+                insurance=("Medicare",),
+                preferred_languages=("English",),
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=provider,
+                    score=7.0,
+                    source=provider.source,
+                    retriever_metadata={"ranking_version": "deterministic-v1"},
+                ),
+            ),
+            search_trace=SearchTrace(total_candidates=1),
+        )
 
     @staticmethod
     def _client_with_response(response_text: str):
         return _SequencedChatClient(response_text)
 
-    def test_handle_request_normalizes_local_provider_trust_metadata(self) -> None:
+    def test_handle_request_normalizes_provider_search_service_trust_metadata(self) -> None:
         query = ParsedCareQuery(
             detected_language="English",
             response_language="English",
@@ -182,12 +201,12 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn('<div class="provider-card__title">1. Harmony Family Clinic</div>', result)
         self.assertIn('<div class="provider-card__subtitle">Primary Care • San Francisco, CA</div>', result)
         self.assertIn('Phone</span><span class="provider-card__meta-value">415-555-0100</span>', result)
-        self.assertIn('Source</span><span class="provider-card__meta-value">Local provider dataset</span>', result)
+        self.assertIn('Source</span><span class="provider-card__meta-value">NPI Registry (individual)</span>', result)
         self.assertIn('<span class="provider-card__badge">Informational</span>', result)
         self.assertIn('<span class="provider-card__badge">Network unverified</span>', result)
         self.assertIn('<span class="provider-card__badge">New patients unknown</span>', result)
         self.assertIn('<span class="provider-card__badge">Appointments unverified</span>', result)
-        self.assertNotIn('<span class="provider-card__badge">Source: Local provider dataset</span>', result)
+        self.assertNotIn('<span class="provider-card__badge">Source: NPI Registry (individual)</span>', result)
         self.assertIn('Why matched</span><span class="provider-card__value">Relevant to your search for primary care in San Francisco.</span>', result)
         self.assertIn('Listed insurance</span><span class="provider-card__value">Medicare, Aetna (reported only; network participation is not verified here)</span>', result)
         self.assertNotIn('Insurance/network verification</span>', result)
@@ -196,6 +215,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn('Next step</span><span class="provider-card__value">Call to confirm network status, referral needs, new-patient status, and appointment availability.</span>', result)
         self.assertIn("Important safety and trust notes:", result)
         self.assertNotIn("### 1. Harmony Family Clinic", result)
+        self.agent.provider_search_service.search.assert_called_once()
 
     def test_provider_record_uses_reported_insurance_metadata(self) -> None:
         record = ProviderRecord(
