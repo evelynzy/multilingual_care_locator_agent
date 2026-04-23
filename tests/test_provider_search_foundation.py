@@ -103,7 +103,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(provider.provider_id, "provider-123")
+        self.assertTrue(provider.provider_id.startswith("source:npi-registry:unknown:provider-123:"))
         self.assertEqual(provider.name, "Harmony Family Clinic")
         self.assertEqual(provider.specialties, ("Primary Care",))
         self.assertEqual(provider.insurance_reported, ("Medicare", "Aetna"))
@@ -124,6 +124,51 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
         self.assertTrue(provider.provider_id.startswith("generated:clinicaltables:npi-idv:"))
 
+    def test_normalize_provider_namespaces_explicit_source_local_ids_by_source_and_dataset(self) -> None:
+        first = normalize_provider(
+            {
+                "provider_id": "provider-123",
+                "name": "Harmony Family Clinic",
+                "source": "ClinicalTables",
+                "provenance": {"dataset": "npi_idv"},
+            }
+        )
+        second = normalize_provider(
+            {
+                "provider_id": "provider-123",
+                "name": "Harmony Family Clinic",
+                "source": "ClinicalTables",
+                "provenance": {"dataset": "npi_org"},
+            }
+        )
+        third = normalize_provider(
+            {
+                "provider_id": "provider-123",
+                "name": "Harmony Family Clinic",
+                "source": "Trusted Directory",
+                "provenance": {"dataset": "npi_idv"},
+            }
+        )
+
+        self.assertTrue(first.provider_id.startswith("source:clinicaltables:npi-idv:provider-123:"))
+        self.assertTrue(second.provider_id.startswith("source:clinicaltables:npi-org:provider-123:"))
+        self.assertTrue(third.provider_id.startswith("source:trusted-directory:npi-idv:provider-123:"))
+        self.assertNotEqual(first.provider_id, second.provider_id)
+        self.assertNotEqual(first.provider_id, third.provider_id)
+
+    def test_normalize_provider_preserves_global_npi_backed_id(self) -> None:
+        provider = normalize_provider(
+            {
+                "provider_id": "1619271780",
+                "name": "Harmony Family Clinic",
+                "source": "NPI Registry (individual)",
+                "provenance": {"dataset": "npi_idv"},
+                "NPI": "1619271780",
+            }
+        )
+
+        self.assertEqual(provider.provider_id, "1619271780")
+
     def test_normalize_search_result_preserves_nested_retriever_metadata(self) -> None:
         result = normalize_search_result(
             {
@@ -139,7 +184,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(result.provider.provider_id, "provider-123")
+        self.assertTrue(result.provider.provider_id.startswith("source:clinicaltables:unknown:provider-123:"))
         self.assertEqual(result.source, "ClinicalTables")
         self.assertEqual(result.score, 0.875)
         self.assertEqual(
@@ -239,7 +284,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
         normalized = normalize_provider(provider)
 
-        self.assertEqual(normalized.provider_id, "provider-123")
+        self.assertTrue(normalized.provider_id.startswith("source:clinicaltables:clinicaltables:provider-123:"))
         self.assertEqual(normalized.name, "Harmony Family Clinic")
         self.assertEqual(normalized.source, "ClinicalTables")
         self.assertEqual(
@@ -333,7 +378,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(result.provider.provider_id, "outer-source-id")
+        self.assertTrue(result.provider.provider_id.startswith("source:clinicaltables:npi-idv:outer-source-id:"))
         self.assertEqual(result.provider.insurance_network_verification.status, "verified")
         self.assertTrue(result.provider.insurance_network_verification.verified)
         self.assertTrue(result.provider.accepting_new_patients_status.verified)
