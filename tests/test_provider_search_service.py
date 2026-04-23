@@ -233,6 +233,10 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(first_request.city_hint, "Pittsburgh")
         self.assertEqual(first_request.state_hint, "PA")
         self.assertEqual(first_request.zip_hint, "15213")
+        self.assertEqual(
+            first_request.query_filter,
+            "addr_practice.state:PA AND addr_practice.zip:15213",
+        )
         self.assertEqual(first_request.limit, 4)
 
         self.assertEqual(len(response.provider_results), 2)
@@ -403,6 +407,47 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(response.search_trace.sources_attempted, ("clinicaltables:npi_idv", "clinicaltables:npi_org"))
         self.assertEqual(response.search_trace.source_traces[0].error, "clinicaltables timeout")
         self.assertEqual(response.search_trace.source_traces[1].result_count, 1)
+
+    def test_search_applies_city_state_query_filter_for_location_specific_searches(self) -> None:
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=0),
+                ),
+                "npi_org": SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_org", result_count=0),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Pittsburgh, PA",
+            ),
+            limit=3,
+        )
+
+        self.assertEqual(len(source.calls), 2)
+        for dataset, request in source.calls:
+            self.assertEqual(dataset in {"npi_idv", "npi_org"}, True)
+            self.assertEqual(request.search_terms, "Primary Care")
+            self.assertEqual(request.city_hint, "Pittsburgh")
+            self.assertEqual(request.state_hint, "PA")
+            self.assertIsNone(request.zip_hint)
+            self.assertEqual(
+                request.query_filter,
+                'addr_practice.state:PA AND addr_practice.city:"Pittsburgh"',
+            )
+        self.assertEqual(len(response.provider_results), 0)
+        self.assertEqual(response.search_trace.total_candidates, 0)
 
 
 if __name__ == "__main__":

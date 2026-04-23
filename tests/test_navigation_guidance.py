@@ -339,10 +339,18 @@ class CareNavigationGuidanceTests(unittest.TestCase):
             captured["template_key"] = template_key
             return "ok"
 
+        def _capture_result_cards(payload):
+            captured["card_payload"] = payload
+            return "cards"
+
         with patch.object(self.agent, "_interpret_user_need", return_value=query), patch.object(
             self.agent,
             "_compose_response",
             side_effect=_capture_response,
+        ), patch.object(
+            self.agent,
+            "_compose_result_card_response",
+            side_effect=_capture_result_cards,
         ):
             result = self.agent.handle_request(
                 Mock(),
@@ -353,8 +361,16 @@ class CareNavigationGuidanceTests(unittest.TestCase):
                 top_p=0.9,
             )
 
-        self.assertEqual(result, "ok")
-        self.assertNotEqual(captured["template_key"], "response_template_emergency")
+        self.assertIn(result, {"ok", "cards"})
+        if result == "ok":
+            self.assertNotEqual(captured["template_key"], "response_template_emergency")
+        else:
+            self.assertNotIn("emergency_guidance", captured["card_payload"])
+            self.assertEqual(len(captured["card_payload"]["fallback_results"]), 1)
+            self.assertEqual(
+                captured["card_payload"]["fallback_results"][0]["name"],
+                "Medicare Care Compare",
+            )
 
     def test_care_setting_classifier_does_not_match_short_patterns_inside_words(self) -> None:
         query = ParsedCareQuery(

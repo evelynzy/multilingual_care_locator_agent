@@ -147,9 +147,15 @@ class ProviderSearchService:
     ) -> SourceSearchRequest:
         city_hint, state_hint, zip_hint = self._extract_location_hints(request.location)
         search_terms = self._compose_search_terms(request)
+        query_filter = self._build_location_query_filter(
+            city_hint=city_hint,
+            state_hint=state_hint,
+            zip_hint=zip_hint,
+        )
         return SourceSearchRequest(
             search_terms=search_terms,
             limit=max(limit, self.per_dataset_limit),
+            query_filter=query_filter,
             city_hint=city_hint,
             state_hint=state_hint,
             zip_hint=zip_hint,
@@ -251,6 +257,28 @@ class ProviderSearchService:
         if re.fullmatch(r"[A-Za-z]{2}", candidate):
             return candidate.upper()
         return None
+
+    @staticmethod
+    def _build_location_query_filter(
+        *,
+        city_hint: Optional[str],
+        state_hint: Optional[str],
+        zip_hint: Optional[str],
+    ) -> Optional[str]:
+        filters: list[str] = []
+
+        if state_hint:
+            filters.append(f"addr_practice.state:{state_hint}")
+
+        if zip_hint:
+            filters.append(f"addr_practice.zip:{zip_hint}")
+        elif city_hint and state_hint:
+            escaped_city = city_hint.replace('"', '\\"')
+            filters.append(f'addr_practice.city:"{escaped_city}"')
+
+        if not filters:
+            return None
+        return " AND ".join(filters)
 
     @staticmethod
     def _trace_label(trace: SourceTrace) -> str:

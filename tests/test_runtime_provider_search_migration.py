@@ -31,6 +31,7 @@ from provider_search.models import (
     ProviderSearchResponse,
     ProviderSearchResult,
     SearchTrace,
+    SourceTrace,
 )
 from provider_search.normalization import build_canonical_provider
 
@@ -338,6 +339,140 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn("Important safety and trust notes:", result)
         self.assertEqual(len(client.calls), 3)
         service.search.assert_not_called()
+
+    def test_handle_request_uses_us_trusted_fallback_resources_for_city_state_zero_results(self) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Pittsburgh, PA",
+            ),
+            provider_results=(),
+            fallback_resources=(),
+            missing_location_hint=None,
+            search_trace=SearchTrace(
+                source_traces=(
+                    SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=0),
+                    SourceTrace(source_name="clinicaltables", dataset="npi_org", result_count=0),
+                ),
+                sources_attempted=("clinicaltables:npi_idv", "clinicaltables:npi_org"),
+                total_candidates=0,
+            ),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="primary care in Pittsburgh",
+            medical_need=True,
+            location="Pittsburgh, PA",
+            specialties=["Primary Care"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+        captured: Dict[str, Any] = {}
+
+        def _capture(payload: Dict[str, Any]) -> str:
+            captured["payload"] = payload
+            return "fallback-cards"
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_compose_result_card_response",
+            side_effect=_capture,
+        ):
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "primary care in Pittsburgh, PA",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "fallback-cards")
+        self.assertEqual(captured["payload"]["local_results"], [])
+        self.assertEqual(len(captured["payload"]["fallback_results"]), 1)
+        self.assertEqual(
+            captured["payload"]["fallback_results"][0]["name"],
+            "Medicare Care Compare",
+        )
+        self.assertNotIn("notes", captured["payload"])
+
+    def test_handle_request_uses_source_failure_note_instead_of_no_providers_note(self) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Pittsburgh, PA",
+            ),
+            provider_results=(),
+            fallback_resources=(),
+            missing_location_hint=None,
+            search_trace=SearchTrace(
+                source_traces=(
+                    SourceTrace(
+                        source_name="clinicaltables",
+                        dataset="npi_idv",
+                        result_count=0,
+                        error="clinicaltables timeout",
+                    ),
+                    SourceTrace(
+                        source_name="clinicaltables",
+                        dataset="npi_org",
+                        result_count=0,
+                        error="clinicaltables timeout",
+                    ),
+                ),
+                sources_attempted=("clinicaltables:npi_idv", "clinicaltables:npi_org"),
+                total_candidates=0,
+            ),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="primary care in Pittsburgh",
+            medical_need=True,
+            location="Pittsburgh, PA",
+            specialties=["Primary Care"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+        captured: Dict[str, Any] = {}
+
+        def _capture(payload: Dict[str, Any]) -> str:
+            captured["payload"] = payload
+            return "fallback-cards"
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_compose_result_card_response",
+            side_effect=_capture,
+        ):
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "primary care in Pittsburgh, PA",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "fallback-cards")
+        self.assertEqual(
+            captured["payload"]["notes"],
+            "Provider search sources were temporarily unavailable. Showing trusted fallback resources when available.",
+        )
+        self.assertEqual(len(captured["payload"]["fallback_results"]), 1)
+        self.assertNotEqual(
+            captured["payload"]["notes"],
+            "No providers were found via the configured provider search sources.",
+        )
 
 
 if __name__ == "__main__":
