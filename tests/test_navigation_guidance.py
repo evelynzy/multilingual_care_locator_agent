@@ -81,6 +81,7 @@ if "llama_index" not in sys.modules:
 
 
 from care_agent import CareLocatorAgent, ParsedCareQuery
+from provider_search.models import ProviderSearchRequest, ProviderSearchResponse, SearchTrace
 
 
 class _StubCompletionChoice:
@@ -105,10 +106,15 @@ class CareNavigationGuidanceTests(unittest.TestCase):
             "_initialize_clinicaltables_field_maps",
             return_value=None,
         ):
-            self.agent = CareLocatorAgent(provider_repository=Mock())
+            self.agent = CareLocatorAgent(
+                provider_repository=Mock(),
+                provider_search_service=Mock(),
+            )
 
-        self.agent.provider_repository.load_error = None
-        self.agent.provider_repository.search.return_value = []
+        self.agent.provider_search_service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
 
     def test_handle_request_asks_for_location_and_care_need_when_request_is_vague(self) -> None:
         query = ParsedCareQuery(
@@ -153,7 +159,7 @@ class CareNavigationGuidanceTests(unittest.TestCase):
             captured["payload"]["follow_up_questions"][1],
         )
         self.assertNotIn("care_setting_guidance", captured["payload"])
-        self.agent.provider_repository.search.assert_not_called()
+        self.agent.provider_search_service.search.assert_not_called()
 
     def test_handle_request_adds_referral_guidance_for_specialist_search(self) -> None:
         query = ParsedCareQuery(
@@ -239,7 +245,7 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         self.assertEqual(result, "ok")
         self.assertEqual(captured["template_key"], "response_template_emergency")
         self.assertIn("emergency services", captured["payload"]["emergency_guidance"])
-        self.agent.provider_repository.search.assert_not_called()
+        self.agent.provider_search_service.search.assert_not_called()
 
     def test_handle_request_uses_emergency_template_for_standalone_911(self) -> None:
         query = ParsedCareQuery(
@@ -318,7 +324,7 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         self.assertEqual(captured["template_key"], "response_template_emergency")
         self.assertTrue(captured["payload"]["query"]["medical_need"])
         self.assertIn("emergency services", captured["payload"]["emergency_guidance"])
-        self.agent.provider_repository.search.assert_not_called()
+        self.agent.provider_search_service.search.assert_not_called()
 
     def test_handle_request_does_not_treat_zip_91101_as_emergency(self) -> None:
         query = ParsedCareQuery(
