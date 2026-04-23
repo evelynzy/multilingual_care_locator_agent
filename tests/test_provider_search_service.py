@@ -28,6 +28,43 @@ class FakeClinicalTablesSource:
         return response
 
 
+class RetryAwareClinicalTablesSource:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, object]] = []
+
+    def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if request.search_terms == "Dallas, TX 75001":
+            provider = build_canonical_provider(
+                provider_id="provider-location-retry",
+                name="Dallas Family Clinic",
+                source_name="ClinicalTables",
+                dataset=dataset,
+                city="Dallas",
+                state="TX",
+                taxonomy="Primary Care",
+                specialties=("Primary Care",),
+            )
+            return SourceSearchResult(
+                providers=[provider],
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=1,
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
 class FakeCache:
     def __init__(
         self,
@@ -429,7 +466,6 @@ class ProviderSearchServiceTests(unittest.TestCase):
 
         response = service.search(
             ProviderSearchRequest(
-                specialties=("Primary Care",),
                 location="Pittsburgh, PA",
             ),
             limit=3,
@@ -438,7 +474,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(len(source.calls), 2)
         for dataset, request in source.calls:
             self.assertEqual(dataset in {"npi_idv", "npi_org"}, True)
-            self.assertEqual(request.search_terms, "Primary Care")
+            self.assertEqual(request.search_terms, "Pittsburgh, PA")
             self.assertEqual(request.city_hint, "Pittsburgh")
             self.assertEqual(request.state_hint, "PA")
             self.assertIsNone(request.zip_hint)
@@ -448,6 +484,66 @@ class ProviderSearchServiceTests(unittest.TestCase):
             )
         self.assertEqual(len(response.provider_results), 0)
         self.assertEqual(response.search_trace.total_candidates, 0)
+
+    def test_search_builds_non_empty_query_filter_for_dallas_zip_search(self) -> None:
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=0),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        service.search(
+            ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Dallas, TX 75001",
+            ),
+            limit=3,
+        )
+
+        _, request = source.calls[0]
+        self.assertEqual(
+            request.query_filter,
+            "addr_practice.state:TX AND addr_practice.zip:75001",
+        )
+
+    def test_search_retries_with_location_only_terms_when_specialty_search_survives_no_candidates(self) -> None:
+        source = RetryAwareClinicalTablesSource()
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Dermatology",),
+                location="Dallas, TX 75001",
+            ),
+            limit=3,
+        )
+
+        self.assertEqual(len(source.calls), 2)
+        _, first_request = source.calls[0]
+        _, retry_request = source.calls[1]
+        self.assertEqual(first_request.search_terms, "Dermatology")
+        self.assertEqual(retry_request.search_terms, "Dallas, TX 75001")
+        self.assertEqual(
+            first_request.query_filter,
+            "addr_practice.state:TX AND addr_practice.zip:75001",
+        )
+        self.assertEqual(retry_request.query_filter, first_request.query_filter)
+        self.assertEqual(len(response.provider_results), 1)
+        self.assertEqual(response.provider_results[0].provider.name, "Dallas Family Clinic")
 
 
 if __name__ == "__main__":
