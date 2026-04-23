@@ -69,28 +69,34 @@ class ProviderSearchService:
         cache_entry = self._read_cache_entry(cache_key)
 
         source_request = self._build_source_request(normalized_request, limit=limit)
-        source_traces: list[SourceTrace] = []
-        missing_location_hint: Optional[str] = None
-        deduped_providers: dict[str, CanonicalProvider] = {}
+        source_traces, missing_location_hint, deduped_providers = self._collect_source_candidates(
+            source_request
+        )
 
-        for dataset in self.datasets:
-            source_result = self._search_dataset(dataset, source_request)
-            trace = source_result.trace or SourceTrace(
-                source_name="clinicaltables",
-                dataset=dataset,
-                error="Provider source did not return trace metadata.",
+        if self._should_retry_with_location_only_terms(
+            request=normalized_request,
+            source_request=source_request,
+            source_traces=source_traces,
+            deduped_providers=deduped_providers,
+            missing_location_hint=missing_location_hint,
+        ):
+            retry_request = self._build_source_request(
+                normalized_request,
+                limit=limit,
+                location_only=True,
             )
-            source_traces.append(trace)
-            if missing_location_hint is None and source_result.missing_location_hint:
-                missing_location_hint = source_result.missing_location_hint
-
-            for raw_provider in source_result.providers:
-                provider = normalize_provider(raw_provider)
-                existing_provider = deduped_providers.get(provider.provider_id)
+            retry_traces, retry_missing_location_hint, retry_candidates = (
+                self._collect_source_candidates(retry_request)
+            )
+            source_traces.extend(retry_traces)
+            if missing_location_hint is None and retry_missing_location_hint:
+                missing_location_hint = retry_missing_location_hint
+            for provider_id, provider in retry_candidates.items():
+                existing_provider = deduped_providers.get(provider_id)
                 if existing_provider is None:
-                    deduped_providers[provider.provider_id] = provider
+                    deduped_providers[provider_id] = provider
                 else:
-                    deduped_providers[provider.provider_id] = self._merge_provider_records(
+                    deduped_providers[provider_id] = self._merge_provider_records(
                         primary=provider,
                         fallback=existing_provider,
                     )
@@ -144,9 +150,10 @@ class ProviderSearchService:
         request: ProviderSearchRequest,
         *,
         limit: int,
+        location_only: bool = False,
     ) -> SourceSearchRequest:
         city_hint, state_hint, zip_hint = self._extract_location_hints(request.location)
-        search_terms = self._compose_search_terms(request)
+        search_terms = self._compose_search_terms(request, location_only=location_only)
         query_filter = self._build_location_query_filter(
             city_hint=city_hint,
             state_hint=state_hint,
@@ -160,6 +167,38 @@ class ProviderSearchService:
             state_hint=state_hint,
             zip_hint=zip_hint,
         )
+
+    def _collect_source_candidates(
+        self,
+        request: SourceSearchRequest,
+    ) -> tuple[list[SourceTrace], Optional[str], dict[str, CanonicalProvider]]:
+        source_traces: list[SourceTrace] = []
+        missing_location_hint: Optional[str] = None
+        deduped_providers: dict[str, CanonicalProvider] = {}
+
+        for dataset in self.datasets:
+            source_result = self._search_dataset(dataset, request)
+            trace = source_result.trace or SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                error="Provider source did not return trace metadata.",
+            )
+            source_traces.append(trace)
+            if missing_location_hint is None and source_result.missing_location_hint:
+                missing_location_hint = source_result.missing_location_hint
+
+            for raw_provider in source_result.providers:
+                provider = normalize_provider(raw_provider)
+                existing_provider = deduped_providers.get(provider.provider_id)
+                if existing_provider is None:
+                    deduped_providers[provider.provider_id] = provider
+                else:
+                    deduped_providers[provider.provider_id] = self._merge_provider_records(
+                        primary=provider,
+                        fallback=existing_provider,
+                    )
+
+        return source_traces, missing_location_hint, deduped_providers
 
     @staticmethod
     def _build_cache_key(request_fingerprint: str) -> str:
@@ -203,7 +242,14 @@ class ProviderSearchService:
             )
 
     @staticmethod
-    def _compose_search_terms(request: ProviderSearchRequest) -> str:
+    def _compose_search_terms(
+        request: ProviderSearchRequest,
+        *,
+        location_only: bool = False,
+    ) -> str:
+        if location_only:
+            return (request.location or "").strip()
+
         terms = [*request.specialties, *request.keywords]
         if not terms and request.location:
             terms.append(request.location)
@@ -212,6 +258,25 @@ class ProviderSearchService:
         if not terms:
             terms.extend(request.preferred_languages)
         return " ".join(term for term in terms if term).strip()
+
+    @staticmethod
+    def _should_retry_with_location_only_terms(
+        *,
+        request: ProviderSearchRequest,
+        source_request: SourceSearchRequest,
+        source_traces: Sequence[SourceTrace],
+        deduped_providers: dict[str, CanonicalProvider],
+        missing_location_hint: Optional[str],
+    ) -> bool:
+        if deduped_providers or missing_location_hint:
+            return False
+        if not request.location or not source_request.query_filter:
+            return False
+        if not request.specialties and not request.keywords:
+            return False
+        if source_request.search_terms == request.location.strip():
+            return False
+        return any(trace.error is None for trace in source_traces)
 
     @staticmethod
     def _extract_location_hints(location: Optional[str]) -> tuple[Optional[str], Optional[str], Optional[str]]:
