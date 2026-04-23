@@ -730,6 +730,148 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(client.calls), 3)
         service.search.assert_not_called()
 
+    def test_handle_request_rescues_primary_care_zip_from_malformed_interpret_json(self) -> None:
+        primary_care_provider = build_canonical_provider(
+            provider_id="provider-primary-care",
+            name="Dallas Family Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+            phone="214-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="75001",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=primary_care_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(
+                source_traces=(
+                    SourceTrace(
+                        source_name="clinicaltables",
+                        dataset="npi_idv",
+                        status_code=200,
+                        result_count=1,
+                    ),
+                ),
+                sources_attempted=("clinicaltables",),
+                sources_used=("clinicaltables",),
+                total_candidates=1,
+            ),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {"content": "not valid json", "finish_reason": "stop"},
+                {"content": "{still not valid json", "finish_reason": "stop"},
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "primary care 75001",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 2)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("Primary Care",))
+        self.assertEqual(provider_request.location, "75001")
+        self.assertIn("Dallas Family Clinic", result)
+        self.assertIn("Primary Care", result)
+
+    def test_handle_request_rescues_dentista_zip_from_malformed_interpret_json(self) -> None:
+        local_zip_providers = [
+            build_canonical_provider(
+                provider_id="provider-local-1",
+                name="Florida Children's Dentistry, P.A.",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist", "Dentist, Pediatric Dentistry", "1223P0221X"),
+            ),
+            build_canonical_provider(
+                provider_id="provider-local-2",
+                name="Hialeah Square Dentistry, PA",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist", "Dentist, General Practice", "1223G0001X"),
+            ),
+            build_canonical_provider(
+                provider_id="provider-local-3",
+                name="Caplin and Gober Dentistry, PA",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Hialeah",
+                state="FL",
+                taxonomy="Dentist",
+                specialties=("Dentist", "Dentist, Periodontics", "1223P0300X"),
+            ),
+        ]
+        nearby_state_provider = build_canonical_provider(
+            provider_id="provider-nearby-1",
+            name="Miami Lakes Dentistry Center",
+            source_name="NPI Registry (organization)",
+            dataset="npi_org",
+            city="Miami Lakes",
+            state="FL",
+            taxonomy="Dentistry",
+            specialties=("Dentistry",),
+            phone="305-555-0101",
+        )
+        source = _NearbyDentalClinicalTablesSource(local_zip_providers, [nearby_state_provider])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {"content": "not valid json", "finish_reason": "stop"},
+                {"content": '{"invalid_json":', "finish_reason": "stop"},
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "dentista 33012",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 2)
+        self.assertEqual(len(source.calls), 4)
+        _, first_request = source.calls[0]
+        _, retry_request = source.calls[2]
+        self.assertEqual(first_request.search_terms, "Dentistry")
+        self.assertEqual(first_request.query_filter, "addr_practice.zip:33012")
+        self.assertEqual(retry_request.search_terms, "Dentistry")
+        self.assertEqual(retry_request.query_filter, "addr_practice.state:FL")
+        self.assertIn("Miami Lakes Dentistry Center", result)
+
     def test_handle_request_uses_emergency_fallback_when_final_model_response_is_truncated(self) -> None:
         service = Mock()
         agent = CareLocatorAgent(provider_search_service=service)
