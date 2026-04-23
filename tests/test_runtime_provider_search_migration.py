@@ -277,6 +277,39 @@ class _PrimaryCareRetryClinicalTablesSource:
         )
 
 
+class _PrimaryCareSynonymClinicalTablesSource:
+    def __init__(self, retry_providers: List[Any]) -> None:
+        self.retry_providers = list(retry_providers)
+        self.calls = []
+
+    def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if request.query_filter == "addr_practice.state:TX" and request.search_terms in {
+            "Primary Care",
+            "Primary Care Dallas",
+            "Primary Care TX 75001",
+            "Primary Care 75001 Dallas TX",
+        }:
+            return SourceSearchResult(
+                providers=list(self.retry_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.retry_providers),
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
 class _DuplicatePrimaryCareClinicalTablesSource:
     def __init__(self) -> None:
         self.calls = []
@@ -634,6 +667,70 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn("Dallas Family Clinic", result)
         self.assertNotIn("Downtown Imaging Associates", result)
         self.assertNotIn("Medicare Care Compare", result)
+
+    def test_handle_request_primary_care_75001_keeps_live_primary_care_synonym_candidates(self) -> None:
+        retry_providers = [
+            build_canonical_provider(
+                provider_id="provider-clinic-primary-care",
+                name="Concentra Primary Care PA",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Dallas",
+                state="TX",
+                taxonomy="Clinic/Center",
+                specialties=("Clinic/Center", "Clinic/Center, Primary Care", "261QP2300X"),
+                phone="214-555-0100",
+            ),
+            build_canonical_provider(
+                provider_id="provider-family-med",
+                name="North Dallas Primary Care Doctors PLLC",
+                source_name="NPI Registry (organization)",
+                dataset="npi_org",
+                city="Dallas",
+                state="TX",
+                taxonomy="Physician/Internal Medicine",
+                specialties=("Physician/Internal Medicine", "Family Medicine", "Internal Medicine"),
+                phone="214-555-0101",
+            ),
+        ]
+        source = _PrimaryCareSynonymClinicalTablesSource(retry_providers)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_org",),
+            per_dataset_limit=10,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="primary care 75001",
+            medical_need=True,
+            location="Dallas, TX 75001",
+            specialties=["Primary Care"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "primary care 75001",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertIn("Concentra Primary Care PA", result)
+        self.assertIn("North Dallas Primary Care Doctors PLLC", result)
+        self.assertNotIn("Medicare Care Compare", result)
+        trusted_fallback.assert_not_called()
 
     def test_handle_request_primary_care_75001_renders_two_cards_when_duplicate_pair_crowds_retry_limit(self) -> None:
         duplicate_primary_care_individual = build_canonical_provider(

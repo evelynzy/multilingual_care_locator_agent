@@ -11,6 +11,18 @@ RANKING_VERSION = "deterministic-v1"
 
 _ACCEPTING_STATUSES = {"accepting", "accepting new patients", "open"}
 _TELEHEALTH_TERMS = {"telehealth", "virtual", "video", "remote", "online"}
+_REQUEST_SPECIALTY_EQUIVALENTS = {
+    "primary care": (
+        "primary care",
+        "clinic/center, primary care",
+        "family medicine",
+        "family practice",
+        "physician/family practice",
+        "internal medicine",
+        "physician/internal medicine",
+        "general practice",
+    ),
+}
 
 
 def rank_provider_results(
@@ -145,22 +157,43 @@ def _match_values(
     *,
     extra_values: Iterable[str] = (),
 ) -> tuple[str, ...]:
-    requested_lookup = {
-        value.casefold(): value
-        for value in requested
-        if isinstance(value, str) and value.strip()
-    }
+    requested_lookup = _build_requested_lookup(requested)
     available_values = list(available) + list(extra_values)
     matches: list[str] = []
-    seen: set[str] = set()
+    seen_keys: set[str] = set()
+    seen_matches: set[str] = set()
     for value in available_values:
         if not isinstance(value, str):
             continue
         key = value.casefold()
-        if key in requested_lookup and key not in seen:
-            seen.add(key)
-            matches.append(requested_lookup[key])
+        if key not in requested_lookup or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        matched_label = requested_lookup[key]
+        matched_lookup_key = matched_label.casefold()
+        if matched_lookup_key in seen_matches:
+            continue
+        seen_matches.add(matched_lookup_key)
+        matches.append(matched_label)
     return tuple(matches)
+
+
+def _build_requested_lookup(requested: Iterable[str]) -> dict[str, str]:
+    requested_lookup: dict[str, str] = {}
+    for value in requested:
+        if not isinstance(value, str):
+            continue
+        normalized_value = value.strip()
+        if not normalized_value:
+            continue
+        requested_label = normalized_value
+        requested_lookup[requested_label.casefold()] = requested_label
+        for equivalent_value in _REQUEST_SPECIALTY_EQUIVALENTS.get(
+            requested_label.casefold(),
+            (),
+        ):
+            requested_lookup[equivalent_value.casefold()] = requested_label
+    return requested_lookup
 
 
 def _match_keywords(
