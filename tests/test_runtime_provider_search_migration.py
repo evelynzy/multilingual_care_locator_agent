@@ -36,7 +36,7 @@ from provider_search.models import (
 )
 from provider_search.normalization import build_canonical_provider
 from provider_search.service import ProviderSearchService
-from provider_search.sources.clinicaltables import ClinicalTablesSource
+from provider_search.sources.clinicaltables import ClinicalTablesSource, DEFAULT_DATASET_CONFIGS
 
 
 class _SequencedChatClient:
@@ -1336,6 +1336,89 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         _, kwargs = session.get.call_args
         self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
         self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101")
+        self.assertIn("Cupertino OB/GYN Associates", result)
+        self.assertIn("Obstetrics &amp; Gynecology", result)
+        self.assertNotIn("Medicare Care Compare", result)
+        trusted_fallback.assert_not_called()
+
+    def test_default_carelocatoragent_path_uses_shared_clinicaltables_defaults_for_obgyn_98101(
+        self,
+    ) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+                "addr_practice.phone",
+            ],
+            [[
+                "Cupertino OB/GYN Associates",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "Santa Clara",
+                "CA",
+                "98101",
+                "408-555-0100",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn 98101",
+            medical_need=True,
+            location="98101",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch("provider_search.cache.resolve_provider_cache_path", return_value=None), patch(
+            "provider_search.sources.clinicaltables.requests.get",
+            return_value=response,
+        ) as mocked_get, patch(
+            "provider_search.sources.nppes.NPPESSource.enrich_provider",
+            autospec=True,
+            side_effect=lambda _self, provider: provider,
+        ):
+            agent = CareLocatorAgent()
+            dataset_config = agent.provider_search_service.clinicaltables_source.dataset_configs["npi_idv"]
+            self.assertEqual(
+                dataset_config.result_fields,
+                DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields,
+            )
+            with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+                agent,
+                "_trusted_resource_fallback",
+            ) as trusted_fallback:
+                result = agent.handle_request(
+                    _SequencedChatClient(),
+                    "ob gyn 98101",
+                    [],
+                    max_tokens=256,
+                    temperature=0.2,
+                    top_p=0.9,
+                )
+
+        self.assertGreaterEqual(mocked_get.call_count, 1)
+        for _, kwargs in mocked_get.call_args_list:
+            self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+            self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101")
+            self.assertIn("taxonomies[0].desc", kwargs["params"]["df"])
+            self.assertIn("taxonomies[0].code", kwargs["params"]["df"])
         self.assertIn("Cupertino OB/GYN Associates", result)
         self.assertIn("Obstetrics &amp; Gynecology", result)
         self.assertNotIn("Medicare Care Compare", result)
