@@ -129,6 +129,66 @@ class PediatricRetryClinicalTablesSource:
         )
 
 
+class PrimaryCareRetryClinicalTablesSource:
+    def __init__(
+        self,
+        retry_providers: list,
+        *,
+        location_only_providers: list | None = None,
+    ) -> None:
+        self.retry_providers = list(retry_providers)
+        self.location_only_providers = list(location_only_providers or [])
+        self.calls: list[tuple[str, object]] = []
+
+    def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        if (
+            request.search_terms == "Primary Care"
+            and request.query_filter == "addr_practice.state:TX AND addr_practice.zip:75001"
+        ):
+            return SourceSearchResult(
+                providers=[],
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=0,
+                ),
+            )
+        if (
+            request.search_terms == "Primary Care"
+            and request.query_filter == "addr_practice.state:TX"
+        ):
+            return SourceSearchResult(
+                providers=list(self.retry_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.retry_providers),
+                ),
+            )
+        if request.search_terms == "Dallas, TX 75001":
+            return SourceSearchResult(
+                providers=list(self.location_only_providers),
+                trace=SourceTrace(
+                    source_name="clinicaltables",
+                    dataset=dataset,
+                    status_code=200,
+                    result_count=len(self.location_only_providers),
+                ),
+            )
+        return SourceSearchResult(
+            providers=[],
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=0,
+            ),
+        )
+
+
 class FakeCache:
     def __init__(
         self,
@@ -915,6 +975,107 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(retry_request.query_filter, "addr_practice.state:TX")
         self.assertEqual(len(response.provider_results), 1)
         self.assertEqual(response.provider_results[0].provider.name, "Dallas Family Clinic")
+
+    def test_search_primary_care_75001_uses_relaxed_specialty_retry_before_location_only(self) -> None:
+        primary_care_provider = build_canonical_provider(
+            provider_id="provider-primary-care",
+            name="Dallas Family Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+        )
+        location_only_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+        source = PrimaryCareRetryClinicalTablesSource(
+            [primary_care_provider],
+            location_only_providers=[location_only_provider],
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Dallas, TX 75001",
+            ),
+            limit=3,
+        )
+
+        self.assertEqual(len(source.calls), 2)
+        _, first_request = source.calls[0]
+        _, retry_request = source.calls[1]
+        self.assertEqual(first_request.search_terms, "Primary Care")
+        self.assertEqual(retry_request.search_terms, "Primary Care")
+        self.assertEqual(
+            first_request.query_filter,
+            "addr_practice.state:TX AND addr_practice.zip:75001",
+        )
+        self.assertEqual(retry_request.query_filter, "addr_practice.state:TX")
+        self.assertNotIn("Dallas, TX 75001", [request.search_terms for _, request in source.calls])
+        self.assertEqual(len(response.provider_results), 1)
+        self.assertEqual(response.provider_results[0].provider.name, "Dallas Family Clinic")
+
+    def test_search_primary_care_75001_keeps_only_primary_care_choice_when_retry_returns_mixed_candidates(self) -> None:
+        primary_care_provider = build_canonical_provider(
+            provider_id="provider-primary-care",
+            name="Dallas Family Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+        )
+        radiology_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+        source = PrimaryCareRetryClinicalTablesSource(
+            [primary_care_provider, radiology_provider],
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="Dallas, TX 75001",
+            ),
+            limit=3,
+        )
+
+        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(response.provider_results), 1)
+        self.assertEqual(response.provider_results[0].provider.name, "Dallas Family Clinic")
+        self.assertEqual(
+            response.provider_results[0].provider.ranking_metadata.get("matched_specialties"),
+            ("Primary Care",),
+        )
 
     def test_search_retries_pediatric_request_with_specialty_terms_instead_of_location_only(self) -> None:
         pediatric_provider = build_canonical_provider(
