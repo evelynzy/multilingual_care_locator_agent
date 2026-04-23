@@ -106,7 +106,7 @@ class ProviderSearchService:
         ranked_results = self._rank_results(
             request=normalized_request,
             deduped_providers=deduped_providers,
-            limit=limit,
+            limit=None,
             cache_entry=cache_entry,
         )
         if self._should_retry_with_nearby_state(
@@ -138,10 +138,12 @@ class ProviderSearchService:
             ranked_results = self._rank_results(
                 request=normalized_request,
                 deduped_providers=deduped_providers,
-                limit=limit,
+                limit=None,
                 cache_entry=cache_entry,
             )
         display_results = self._dedupe_display_results(ranked_results)
+        if limit is not None:
+            display_results = display_results[: max(limit, 0)]
         self._log_debug_summary(
             request_fingerprint=request_fingerprint,
             cache_hit=cache_entry is not None,
