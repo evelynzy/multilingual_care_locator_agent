@@ -70,9 +70,13 @@ class ProviderSearchService:
         cache_key = self._build_cache_key(request_fingerprint)
         cache_entry = self._read_cache_entry(cache_key)
 
-        source_request = self._build_source_request(normalized_request, limit=limit)
-        source_traces, missing_location_hint, deduped_providers = self._collect_source_candidates(
-            source_request
+        planned_requests = self._plan_source_requests(normalized_request, limit=limit)
+        source_request = planned_requests[0] if planned_requests else self._build_source_request(
+            normalized_request,
+            limit=limit,
+        )
+        source_traces, missing_location_hint, deduped_providers = (
+            self._collect_planned_source_candidates(planned_requests)
         )
 
         if self._should_retry_search(
@@ -82,9 +86,9 @@ class ProviderSearchService:
             deduped_providers=deduped_providers,
             missing_location_hint=missing_location_hint,
         ):
-            retry_request = self._build_retry_source_request(normalized_request, limit=limit)
+            retry_requests = self._plan_retry_source_requests(normalized_request, limit=limit)
             retry_traces, retry_missing_location_hint, retry_candidates = (
-                self._collect_source_candidates(retry_request)
+                self._collect_planned_source_candidates(retry_requests)
             )
             source_traces.extend(retry_traces)
             if missing_location_hint is None and retry_missing_location_hint:
@@ -250,6 +254,58 @@ class ProviderSearchService:
             zip_hint=zip_hint,
         )
 
+    def _plan_source_requests(
+        self,
+        request: ProviderSearchRequest,
+        *,
+        limit: int,
+        location_only: bool = False,
+        relax_location_filter: bool = False,
+    ) -> list[SourceSearchRequest]:
+        city_hint, state_hint, zip_hint = self._extract_location_hints(request.location)
+        planned_terms = self._plan_search_terms(
+            request,
+            location_only=location_only,
+            city_hint=city_hint,
+            state_hint=state_hint,
+            zip_hint=zip_hint,
+        )
+        query_filter = self._build_location_query_filter(
+            city_hint=city_hint,
+            state_hint=state_hint,
+            zip_hint=zip_hint,
+            relax_location_filter=relax_location_filter,
+        )
+
+        planned_requests: list[SourceSearchRequest] = []
+        seen_terms: set[str] = set()
+        for search_terms in planned_terms:
+            normalized_terms = search_terms.strip()
+            if not normalized_terms or normalized_terms in seen_terms:
+                continue
+            seen_terms.add(normalized_terms)
+            planned_requests.append(
+                SourceSearchRequest(
+                    search_terms=normalized_terms,
+                    limit=max(limit, self.per_dataset_limit),
+                    query_filter=query_filter,
+                    city_hint=city_hint,
+                    state_hint=state_hint,
+                    zip_hint=zip_hint,
+                )
+            )
+
+        if planned_requests:
+            return planned_requests
+        return [
+            self._build_source_request(
+                request,
+                limit=limit,
+                location_only=location_only,
+                relax_location_filter=relax_location_filter,
+            )
+        ]
+
     def _build_retry_source_request(
         self,
         request: ProviderSearchRequest,
@@ -267,6 +323,51 @@ class ProviderSearchService:
             limit=limit,
             location_only=True,
         )
+
+    def _plan_retry_source_requests(
+        self,
+        request: ProviderSearchRequest,
+        *,
+        limit: int,
+    ) -> list[SourceSearchRequest]:
+        if request.specialties:
+            return self._plan_source_requests(
+                request,
+                limit=limit,
+                relax_location_filter=True,
+            )
+        return self._plan_source_requests(
+            request,
+            limit=limit,
+            location_only=True,
+        )
+
+    def _collect_planned_source_candidates(
+        self,
+        requests: Sequence[SourceSearchRequest],
+    ) -> tuple[list[SourceTrace], Optional[str], dict[str, CanonicalProvider]]:
+        source_traces: list[SourceTrace] = []
+        missing_location_hint: Optional[str] = None
+        deduped_providers: dict[str, CanonicalProvider] = {}
+
+        for request in requests:
+            request_traces, request_missing_location_hint, request_candidates = (
+                self._collect_source_candidates(request)
+            )
+            source_traces.extend(request_traces)
+            if missing_location_hint is None and request_missing_location_hint:
+                missing_location_hint = request_missing_location_hint
+            for provider_id, provider in request_candidates.items():
+                existing_provider = deduped_providers.get(provider_id)
+                if existing_provider is None:
+                    deduped_providers[provider_id] = provider
+                else:
+                    deduped_providers[provider_id] = self._merge_provider_records(
+                        primary=provider,
+                        fallback=existing_provider,
+                    )
+
+        return source_traces, missing_location_hint, deduped_providers
 
     def _collect_source_candidates(
         self,
@@ -360,6 +461,83 @@ class ProviderSearchService:
         if not terms:
             terms.extend(request.preferred_languages)
         return " ".join(term for term in terms if term).strip()
+
+    def _plan_search_terms(
+        self,
+        request: ProviderSearchRequest,
+        *,
+        location_only: bool,
+        city_hint: Optional[str],
+        state_hint: Optional[str],
+        zip_hint: Optional[str],
+    ) -> list[str]:
+        base_terms = self._compose_search_terms(request, location_only=location_only)
+        if not base_terms.strip():
+            return []
+        if location_only or not request.specialties:
+            return [base_terms]
+
+        planned_terms = [base_terms]
+
+        suggested_specialties = self._suggest_specialty_terms(request.specialties)
+        suggested_base_terms = " ".join(suggested_specialties).strip()
+        if suggested_base_terms and suggested_base_terms not in planned_terms:
+            planned_terms.append(suggested_base_terms)
+        else:
+            suggested_base_terms = base_terms
+
+        location_assisted_terms = self._build_location_assisted_terms(
+            suggested_base_terms,
+            location=request.location,
+            city_hint=city_hint,
+            state_hint=state_hint,
+            zip_hint=zip_hint,
+        )
+        for candidate in location_assisted_terms:
+            if candidate not in planned_terms:
+                planned_terms.append(candidate)
+
+        return planned_terms
+
+    def _suggest_specialty_terms(self, specialties: Sequence[str]) -> tuple[str, ...]:
+        suggest_specialty_terms = getattr(self.clinicaltables_source, "suggest_specialty_terms", None)
+        if callable(suggest_specialty_terms):
+            suggested = suggest_specialty_terms(specialties)
+            if suggested:
+                return tuple(term for term in suggested if isinstance(term, str) and term.strip())
+        return tuple(term for term in specialties if isinstance(term, str) and term.strip())
+
+    def _build_location_assisted_terms(
+        self,
+        base_terms: str,
+        *,
+        location: Optional[str],
+        city_hint: Optional[str],
+        state_hint: Optional[str],
+        zip_hint: Optional[str],
+    ) -> list[str]:
+        build_location_assisted_terms = getattr(
+            self.clinicaltables_source,
+            "build_location_assisted_terms",
+            None,
+        )
+        if callable(build_location_assisted_terms):
+            return list(
+                build_location_assisted_terms(
+                    base_terms,
+                    location=location,
+                    city_hint=city_hint,
+                    state_hint=state_hint,
+                    zip_hint=zip_hint,
+                )
+            )
+
+        fallback_terms = " ".join(
+            part for part in (city_hint, state_hint, zip_hint) if isinstance(part, str) and part.strip()
+        ).strip()
+        if not fallback_terms:
+            return []
+        return [f"{base_terms} {fallback_terms}".strip()]
 
     @staticmethod
     def _should_retry_search(

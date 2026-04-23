@@ -199,6 +199,28 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertTrue(first_provider_id.startswith("generated:npi-registry-individual:npi-idv:"))
         self.assertEqual(first_provider_id, second_provider_id)
 
+    def test_suggest_specialty_terms_falls_back_to_cleaned_specialty_when_values_unavailable(self) -> None:
+        suggested = self.source.suggest_specialty_terms((" Pediatrics ",))
+
+        self.assertEqual(suggested, ("Pediatrics",))
+
+    def test_build_location_assisted_terms_uses_alias_and_hints(self) -> None:
+        assisted_terms = self.source.build_location_assisted_terms(
+            "Pediatrics",
+            location="dallas fort worth",
+            city_hint="Dallas",
+            state_hint="TX",
+            zip_hint="75001",
+        )
+
+        self.assertEqual(
+            assisted_terms,
+            [
+                "Pediatrics Dallas TX",
+                "Pediatrics 75001 Dallas TX",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+import re
+from typing import Any, Iterable, Optional
 
 import requests
 
 from provider_search.models import SourceSearchRequest, SourceSearchResult, SourceTrace
-from provider_search.normalization import build_canonical_provider, ensure_string_list
+from provider_search.normalization import (
+    build_canonical_provider,
+    ensure_string_list,
+    normalize_text,
+)
 
 
 @dataclass(frozen=True)
@@ -65,6 +70,18 @@ DEFAULT_DATASET_CONFIGS: dict[str, ClinicalTablesDatasetConfig] = {
     ),
 }
 
+_TAXONOMY_CANDIDATE_FIELDS = ("provider_type", "taxonomies[0].desc")
+_LOCATION_ALIASES = {
+    "bay area": "San Francisco CA",
+    "sf bay area": "San Francisco CA",
+    "silicon valley": "San Jose CA",
+    "south bay": "San Jose CA",
+    "east bay": "Oakland CA",
+    "la": "Los Angeles CA",
+    "greater los angeles": "Los Angeles CA",
+    "dallas fort worth": "Dallas TX",
+}
+
 
 class ClinicalTablesSource:
     """Adapter for ClinicalTables NPI datasets."""
@@ -89,6 +106,7 @@ class ClinicalTablesSource:
             dataset: list(config.result_fields)
             for dataset, config in self.dataset_configs.items()
         }
+        self._suggest_cache: dict[tuple[str, str, str], list[str]] = {}
 
     def build_search_request(
         self,
@@ -169,6 +187,54 @@ class ClinicalTablesSource:
                 result_count=len(providers),
             ),
         )
+
+    def suggest_specialty_terms(self, specialties: Iterable[str]) -> tuple[str, ...]:
+        suggested_terms: list[str] = []
+        for specialty in specialties:
+            cleaned = normalize_text(specialty)
+            if not cleaned:
+                continue
+            suggested = self._best_suggestion_across_datasets(
+                cleaned,
+                _TAXONOMY_CANDIDATE_FIELDS,
+            )
+            candidate = suggested or cleaned
+            if candidate not in suggested_terms:
+                suggested_terms.append(candidate)
+        return tuple(suggested_terms)
+
+    def build_location_assisted_terms(
+        self,
+        base_terms: str,
+        *,
+        location: Optional[str],
+        city_hint: Optional[str],
+        state_hint: Optional[str],
+        zip_hint: Optional[str],
+    ) -> list[str]:
+        cleaned_base_terms = normalize_text(base_terms)
+        if not cleaned_base_terms:
+            return []
+
+        variants: list[str] = []
+        normalized_location, _ = self._normalize_location_alias(location or "")
+        for chunk in self._split_location(normalized_location):
+            normalized_chunk = normalize_text(chunk)
+            if not normalized_chunk:
+                continue
+            candidate = f"{cleaned_base_terms} {normalized_chunk}".strip()
+            if candidate not in variants:
+                variants.append(candidate)
+
+        hint_terms = " ".join(
+            part for part in (zip_hint, city_hint, state_hint) if isinstance(part, str) and part.strip()
+        ).strip()
+        if hint_terms:
+            candidate = f"{cleaned_base_terms} {hint_terms}".strip()
+            if candidate not in variants:
+                variants.append(candidate)
+
+        return variants
 
     def _normalize_row(
         self,
@@ -361,6 +427,120 @@ class ClinicalTablesSource:
             mapping[field_name] = field_index
 
         return mapping
+
+    def _best_suggestion_across_datasets(
+        self,
+        term: str,
+        candidate_fields: Iterable[str],
+    ) -> str:
+        cleaned = normalize_text(term)
+        if not cleaned:
+            return ""
+
+        for dataset in self.dataset_configs:
+            suggestions = self._suggest_for_dataset(dataset, cleaned, candidate_fields)
+            if suggestions:
+                return suggestions[0]
+
+        return cleaned
+
+    def _suggest_for_dataset(
+        self,
+        dataset: str,
+        term: str,
+        candidate_fields: Iterable[str],
+    ) -> list[str]:
+        config = self.dataset_configs.get(dataset)
+        if config is None or not config.values_url:
+            return []
+
+        field_map = self.field_map.get(dataset, {})
+        aggregated: list[str] = []
+        for field in candidate_fields:
+            field_index = field_map.get(field)
+            if field_index is None:
+                continue
+
+            cache_key = (dataset, term, field)
+            if cache_key in self._suggest_cache:
+                aggregated.extend(self._suggest_cache[cache_key])
+                continue
+
+            suggestions = self._request_values(dataset, term, field_index, config.values_url)
+            self._suggest_cache[cache_key] = suggestions
+            aggregated.extend(suggestions)
+
+        return list(dict.fromkeys(aggregated))
+
+    def _request_values(
+        self,
+        dataset: str,
+        term: str,
+        field_index: int,
+        values_url: str,
+    ) -> list[str]:
+        try:
+            response = self.session.get(
+                values_url,
+                params={
+                    "terms": term,
+                    "df": str(field_index),
+                    "maxList": "5",
+                },
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+        except Exception:
+            return []
+
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = None
+
+        suggestions: list[str] = []
+        if isinstance(payload, dict):
+            for value in payload.values():
+                if isinstance(value, list):
+                    suggestions.extend(self._flatten_suggestions(value))
+                elif isinstance(value, str):
+                    suggestions.append(value)
+        elif isinstance(payload, list):
+            if payload and isinstance(payload[0], int):
+                values = payload[1:]
+            else:
+                values = payload
+            suggestions.extend(self._flatten_suggestions(values))
+
+        return list(dict.fromkeys(suggestions))
+
+    @staticmethod
+    def _flatten_suggestions(values: Iterable[Any]) -> list[str]:
+        flattened: list[str] = []
+        for value in values:
+            if isinstance(value, str):
+                cleaned = normalize_text(value)
+                if cleaned:
+                    flattened.append(cleaned)
+            elif isinstance(value, list):
+                flattened.extend(ClinicalTablesSource._flatten_suggestions(value))
+        return flattened
+
+    @staticmethod
+    def _normalize_location_alias(location: str) -> tuple[str, bool]:
+        cleaned = (location or "").strip()
+        key = cleaned.lower()
+        if key in _LOCATION_ALIASES:
+            return _LOCATION_ALIASES[key], True
+        return cleaned, False
+
+    @staticmethod
+    def _split_location(location: str) -> list[str]:
+        parts = [part.strip() for part in re.split(r"[|/,]", location) if part.strip()]
+        if parts:
+            return parts
+        stripped = location.strip()
+        return [stripped] if stripped else []
 
     @staticmethod
     def _first_match(

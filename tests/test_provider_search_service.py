@@ -487,7 +487,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=2,
         )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 4)
         first_dataset, first_request = source.calls[0]
         self.assertEqual(first_dataset, "npi_idv")
         self.assertEqual(first_request.search_terms, "Primary Care")
@@ -499,13 +499,22 @@ class ProviderSearchServiceTests(unittest.TestCase):
             "addr_practice.state:PA AND addr_practice.zip:15213",
         )
         self.assertEqual(first_request.limit, 4)
+        third_dataset, third_request = source.calls[2]
+        self.assertEqual(third_dataset, "npi_idv")
+        self.assertEqual(third_request.search_terms, "Primary Care Pittsburgh PA 15213")
+        self.assertEqual(third_request.query_filter, first_request.query_filter)
 
         self.assertEqual(len(response.provider_results), 1)
         self.assertEqual(response.provider_results[0].provider.name, "Harmony Family Clinic")
         self.assertFalse(response.search_trace.cache_hit)
         self.assertEqual(
             response.search_trace.sources_attempted,
-            ("clinicaltables:npi_idv", "clinicaltables:npi_org"),
+            (
+                "clinicaltables:npi_idv",
+                "clinicaltables:npi_org",
+                "clinicaltables:npi_idv",
+                "clinicaltables:npi_org",
+            ),
         )
         self.assertEqual(response.search_trace.total_candidates, 2)
         self.assertEqual(len(cache.set_entries), 1)
@@ -963,16 +972,22 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=3,
         )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 4)
         _, first_request = source.calls[0]
-        _, retry_request = source.calls[1]
+        _, second_request = source.calls[1]
+        _, retry_request = source.calls[2]
+        _, relaxed_assisted_request = source.calls[3]
         self.assertEqual(first_request.search_terms, "Dermatology")
+        self.assertEqual(second_request.search_terms, "Dermatology Dallas TX 75001")
         self.assertEqual(retry_request.search_terms, "Dermatology")
+        self.assertEqual(relaxed_assisted_request.search_terms, "Dermatology Dallas TX 75001")
         self.assertEqual(
             first_request.query_filter,
             "addr_practice.state:TX AND addr_practice.zip:75001",
         )
+        self.assertEqual(second_request.query_filter, first_request.query_filter)
         self.assertEqual(retry_request.query_filter, "addr_practice.state:TX")
+        self.assertEqual(relaxed_assisted_request.query_filter, retry_request.query_filter)
         self.assertEqual(len(response.provider_results), 1)
         self.assertEqual(response.provider_results[0].provider.name, "Dallas Family Clinic")
 
@@ -1016,10 +1031,12 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=3,
         )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 4)
         _, first_request = source.calls[0]
-        _, retry_request = source.calls[1]
+        _, second_request = source.calls[1]
+        _, retry_request = source.calls[2]
         self.assertEqual(first_request.search_terms, "Primary Care")
+        self.assertEqual(second_request.search_terms, "Primary Care Dallas TX 75001")
         self.assertEqual(retry_request.search_terms, "Primary Care")
         self.assertEqual(
             first_request.query_filter,
@@ -1069,7 +1086,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=3,
         )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 4)
         self.assertEqual(len(response.provider_results), 1)
         self.assertEqual(response.provider_results[0].provider.name, "Dallas Family Clinic")
         self.assertEqual(
@@ -1122,13 +1139,15 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=3,
         )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 4)
         _, first_request = source.calls[0]
-        _, retry_request = source.calls[1]
+        _, second_request = source.calls[1]
+        _, retry_request = source.calls[2]
         self.assertEqual(
             first_request.search_terms,
             "Pediatrics",
         )
+        self.assertEqual(second_request.search_terms, "Pediatrics Manhattan NY 10013")
         self.assertEqual(retry_request.search_terms, first_request.search_terms)
         self.assertEqual(
             first_request.query_filter,
@@ -1179,10 +1198,12 @@ class ProviderSearchServiceTests(unittest.TestCase):
             limit=3,
         )
 
-        self.assertEqual(len(source.calls), 2)
+        self.assertEqual(len(source.calls), 4)
         _, first_request = source.calls[0]
-        _, retry_request = source.calls[1]
+        _, second_request = source.calls[1]
+        _, retry_request = source.calls[2]
         self.assertEqual(first_request.search_terms, "Pediatrics")
+        self.assertEqual(second_request.search_terms, "Pediatrics Manhattan NY 10013")
         self.assertEqual(retry_request.search_terms, first_request.search_terms)
         self.assertEqual(retry_request.query_filter, "addr_practice.state:NY")
         self.assertEqual(len(response.provider_results), 1)
