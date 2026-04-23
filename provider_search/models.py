@@ -17,6 +17,7 @@ class ProviderSearchRequest:
     """Normalized, PHI-free inputs for provider retrieval."""
 
     specialties: Tuple[str, ...] = ()
+    specialty_family_ids: Tuple[str, ...] = ()
     location: Optional[str] = None
     insurance: Tuple[str, ...] = ()
     preferred_languages: Tuple[str, ...] = ()
@@ -78,6 +79,7 @@ class CanonicalProvider:
     provider_id: str
     name: str
     specialties: Tuple[str, ...] = ()
+    specialty_family_ids: Tuple[str, ...] = ()
     languages: Tuple[str, ...] = ()
     insurance_reported: Tuple[str, ...] = ()
     address: Optional[str] = None
