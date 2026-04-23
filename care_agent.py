@@ -292,6 +292,30 @@ _DETERMINISTIC_RENDER_TRANSLATIONS = {
         "spanish": "Llame al proveedor y a la aseguradora para confirmar el estado de la red, el plan de seguro aceptado, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas.",
         "simplified_chinese": "请致电服务提供者和保险公司，确认网络状态、接受的保险计划、转诊要求、新患者接收情况、地点和预约可用性。",
     },
+    "What city and state or ZIP code should I search?": {
+        "spanish": "¿Qué ciudad y estado o código postal debo buscar?",
+        "simplified_chinese": "我应该搜索哪个城市和州，或哪个邮政编码？",
+    },
+    "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?": {
+        "spanish": "¿Qué tipo de atención necesita (por ejemplo atención primaria, pediatría, dermatología, otorrinolaringología o atención urgente)?",
+        "simplified_chinese": "您需要哪种类型的医疗服务（例如初级保健、儿科、皮肤科、耳鼻喉科或急诊门诊）？",
+    },
+    "Which insurance plan should I use when tailoring listed-insurance guidance?": {
+        "spanish": "¿Qué plan de seguro debo usar para adaptar la orientación sobre el seguro listado?",
+        "simplified_chinese": "在调整列出保险的说明时，我应该使用哪个保险计划？",
+    },
+    "Do you want a provider who speaks a specific language?": {
+        "spanish": "¿Desea un proveedor que hable un idioma específico?",
+        "simplified_chinese": "您是否希望服务提供者会说某种特定语言？",
+    },
+    "What plan type do you have, if you want me to tailor referral guidance (for example HMO, PPO, or POS)?": {
+        "spanish": "Si desea que adapte la orientación sobre remisiones, ¿qué tipo de plan tiene (por ejemplo HMO, PPO o POS)?",
+        "simplified_chinese": "如果您希望我调整转诊说明，您的计划类型是什么（例如 HMO、PPO 或 POS）？",
+    },
+    "If symptoms are severe or life-threatening, call emergency services now or go to the nearest emergency room.": {
+        "spanish": "Si los síntomas son graves o ponen en peligro la vida, llame a los servicios de emergencia ahora o vaya a la sala de emergencias más cercana.",
+        "simplified_chinese": "如果症状严重或危及生命，请立即拨打急救电话或前往最近的急诊室。",
+    },
 }
 
 
@@ -2120,17 +2144,37 @@ class CareLocatorAgent:
         logger.info("Response generation finish_reason=%s", finish_reason)
 
         if first_choice is None:
-            raise RuntimeError("Model did not return any choices")
+            logger.warning(
+                "Response generation returned no choices; using deterministic fallback. template_key=%s",
+                template_key,
+            )
+            return self._compose_safe_fallback_response(
+                payload,
+                response_language,
+                template_key,
+                finish_reason=finish_reason,
+            )
 
         content = self._content_from_completion_choice(first_choice)
+        normalized_content = content.strip() if isinstance(content, str) else ""
 
-        if not content:
-            raise RuntimeError("Model response missing content")
+        if finish_reason == "length" or not normalized_content:
+            logger.warning(
+                "Response generation returned incomplete or empty content; using deterministic fallback. finish_reason=%s template_key=%s",
+                finish_reason,
+                template_key,
+            )
+            return self._compose_safe_fallback_response(
+                payload,
+                response_language,
+                template_key,
+                finish_reason=finish_reason,
+            )
 
-        if not isinstance(content, str):
-            content = str(content)
-
-        return self._append_required_trust_guidance(content.strip(), response_language)
+        return self._append_required_trust_guidance(
+            normalized_content,
+            response_language,
+        )
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -2159,6 +2203,96 @@ class CareLocatorAgent:
             content = str(content)
 
         return content
+
+    # ------------------------------------------------------------------
+    def _compose_safe_fallback_response(
+        self,
+        payload: Dict[str, Any],
+        response_language: Optional[str],
+        template_key: str,
+        finish_reason: Optional[str] = None,
+    ) -> str:
+        query = payload.get("query", {})
+        language_key = _resolved_supported_language_key(response_language)
+        lines: List[str] = []
+
+        primary_guidance = ""
+        if template_key == "response_template_emergency":
+            primary_guidance = (
+                payload.get("emergency_guidance")
+                or payload.get("care_setting_guidance")
+                or ""
+            )
+        else:
+            primary_guidance = payload.get("care_setting_guidance") or ""
+
+        translated_primary_guidance = self._translate_deterministic_text(
+            primary_guidance,
+            language_key,
+        )
+        if translated_primary_guidance:
+            lines.append(
+                f"**{self._render_copy(language_key, 'care_route_label')}:** {translated_primary_guidance}"
+            )
+
+        translated_specialist_guidance = self._translate_deterministic_text(
+            payload.get("specialist_plan_guidance") or "",
+            language_key,
+        )
+        if translated_specialist_guidance:
+            if lines:
+                lines.append("")
+            lines.append(
+                f"**{self._render_copy(language_key, 'referral_note_label')}:** {translated_specialist_guidance}"
+            )
+
+        translated_notes = self._translate_deterministic_text(
+            self._clean_card_value(payload.get("notes")),
+            language_key,
+        )
+        if translated_notes:
+            if lines:
+                lines.append("")
+            lines.append(
+                f"**{self._render_copy(language_key, 'note_label')}:** {translated_notes}"
+            )
+
+        follow_up_questions = [
+            self._translate_deterministic_text(question, language_key)
+            for question in self._ensure_list(payload.get("follow_up_questions"))
+        ]
+        follow_up_questions = [question for question in follow_up_questions if question]
+        if follow_up_questions:
+            if lines:
+                lines.append("")
+            lines.extend(f"- {question}" for question in follow_up_questions)
+
+        verification_guidance = self._translate_deterministic_text(
+            payload.get("verification_guidance") or "",
+            language_key,
+        )
+        if verification_guidance:
+            if lines:
+                lines.append("")
+            lines.append(
+                f"**{self._render_copy(language_key, 'before_contact_label')}:** {verification_guidance}"
+            )
+
+        if not lines:
+            summary = self._clean_card_value(query.get("summary")) or "your care search"
+            lines.append(
+                self._render_copy(language_key, "results_intro", summary=summary)
+            )
+            if finish_reason == "length":
+                lines.append(
+                    f"**{self._render_copy(language_key, 'note_label')}:** "
+                    f"{self._render_copy(language_key, 'verification_reminder')}"
+                )
+
+        return self._append_required_trust_guidance(
+            "\n".join(lines).strip(),
+            response_language,
+        )
 
     # ------------------------------------------------------------------
     def _append_required_trust_guidance(
