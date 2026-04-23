@@ -1232,7 +1232,10 @@ class ProviderSearchServiceTests(unittest.TestCase):
             per_dataset_limit=5,
         )
 
-        with patch.dict("os.environ", {"PROVIDER_SEARCH_DEBUG": "1"}):
+        with patch.dict(
+            "os.environ",
+            {"PROVIDER_SEARCH_DEBUG": "1", "CARE_LOCATOR_LOCAL_DEBUG": "1"},
+        ):
             with self.assertLogs("provider_search.service", level="INFO") as captured:
                 service.search(
                     ProviderSearchRequest(
@@ -1243,10 +1246,13 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 )
 
         joined_logs = "\n".join(captured.output)
+        self.assertIn("provider_search_debug_plan", joined_logs)
         self.assertIn("provider_search_debug request_fingerprint=", joined_logs)
         self.assertIn("raw_candidates=2", joined_logs)
         self.assertIn("post_gate=2", joined_logs)
         self.assertIn("post_display_dedupe=1", joined_logs)
+        self.assertIn("provider_search_debug_variant", joined_logs)
+        self.assertIn("provider_search_debug_candidate", joined_logs)
         self.assertIn("provider_search_debug_source dataset=npi_idv result_count=1 error=none", joined_logs)
         self.assertIn("provider_search_debug_source dataset=npi_org result_count=1 error=none", joined_logs)
         self.assertIn("provider_search_debug_display", joined_logs)

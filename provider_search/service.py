@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
+import hashlib
 import logging
 import os
 import re
@@ -75,6 +76,11 @@ class ProviderSearchService:
         cache_entry = self._read_cache_entry(cache_key)
 
         planned_requests = self._plan_source_requests(normalized_request, limit=limit)
+        self._log_debug_plan(
+            request_fingerprint=request_fingerprint,
+            request=normalized_request,
+            planned_requests=planned_requests,
+        )
         source_request = planned_requests[0] if planned_requests else self._build_source_request(
             normalized_request,
             limit=limit,
@@ -253,6 +259,93 @@ class ProviderSearchService:
                     display_dedupe_count or 0,
                     display_dedupe_ids or [],
                 )
+
+    def _log_debug_plan(
+        self,
+        *,
+        request_fingerprint: str,
+        request: ProviderSearchRequest,
+        planned_requests: Sequence[SourceSearchRequest],
+    ) -> None:
+        if not self._debug_enabled():
+            return
+
+        logger.info(
+            "provider_search_debug_plan request_fingerprint=%s specialties=%s requested_family_ids=%s location_present=%s keywords=%s variants=%s",
+            request_fingerprint,
+            tuple(request.specialties),
+            tuple(request.specialty_family_ids),
+            bool(request.location),
+            tuple(request.keywords),
+            tuple(
+                (source_request.search_terms, source_request.query_filter or "")
+                for source_request in planned_requests
+            ),
+        )
+
+    def _log_debug_variant_result(
+        self,
+        *,
+        source_request: SourceSearchRequest,
+        source_traces: Sequence[SourceTrace],
+        candidates: dict[str, CanonicalProvider],
+    ) -> None:
+        if not self._debug_enabled():
+            return
+
+        logger.info(
+            "provider_search_debug_variant terms=%s filter=%s traces=%s candidates=%s",
+            source_request.search_terms,
+            source_request.query_filter or "",
+            tuple(
+                (trace.dataset or "unknown", trace.result_count, bool(trace.error))
+                for trace in source_traces
+            ),
+            len(candidates),
+        )
+
+    def _log_debug_variant_stop(
+        self,
+        *,
+        source_request: SourceSearchRequest,
+        reason: str,
+        candidate_count: int,
+    ) -> None:
+        if not self._debug_enabled():
+            return
+
+        logger.info(
+            "provider_search_debug_variant_stop reason=%s terms=%s filter=%s candidate_count=%s",
+            reason,
+            source_request.search_terms,
+            source_request.query_filter or "",
+            candidate_count,
+        )
+
+    def _log_debug_candidate(
+        self,
+        *,
+        provider: CanonicalProvider,
+        dataset: str,
+    ) -> None:
+        if not self._debug_enabled():
+            return
+
+        logger.info(
+            "provider_search_debug_candidate dataset=%s provider_key=%s taxonomy=%s specialty_evidence=%s family_ids=%s freshness_present=%s",
+            dataset,
+            self._provider_debug_key(provider.provider_id),
+            provider.taxonomy or "",
+            tuple(provider.specialties[:6]),
+            tuple(provider.specialty_family_ids),
+            bool(
+                provider.freshness is not None
+                and (
+                    provider.freshness.created_epoch is not None
+                    or provider.freshness.last_updated_epoch is not None
+                )
+            ),
+        )
 
     def _dedupe_display_results(
         self,
@@ -442,6 +535,11 @@ class ProviderSearchService:
             request_traces, request_missing_location_hint, request_candidates = (
                 self._collect_source_candidates(source_request)
             )
+            self._log_debug_variant_result(
+                source_request=source_request,
+                source_traces=request_traces,
+                candidates=request_candidates,
+            )
             source_traces.extend(request_traces)
             if missing_location_hint is None and request_missing_location_hint:
                 missing_location_hint = request_missing_location_hint
@@ -462,6 +560,11 @@ class ProviderSearchService:
                     providers=deduped_providers.values(),
                 )
             ):
+                self._log_debug_variant_stop(
+                    source_request=source_request,
+                    reason="usable_specialty_evidence",
+                    candidate_count=len(deduped_providers),
+                )
                 break
 
         return source_traces, missing_location_hint, deduped_providers
@@ -487,6 +590,7 @@ class ProviderSearchService:
 
             for raw_provider in source_result.providers:
                 provider = normalize_provider(raw_provider)
+                self._log_debug_candidate(provider=provider, dataset=dataset)
                 existing_provider = deduped_providers.get(provider.provider_id)
                 if existing_provider is None:
                     deduped_providers[provider.provider_id] = provider
@@ -1044,4 +1148,13 @@ class ProviderSearchService:
 
     @staticmethod
     def _debug_enabled() -> bool:
-        return os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() == "1"
+        return (
+            os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() == "1"
+            and os.getenv("CARE_LOCATOR_LOCAL_DEBUG", "").strip() == "1"
+        )
+
+    @staticmethod
+    def _provider_debug_key(provider_id: str) -> str:
+        if not provider_id:
+            return "missing"
+        return hashlib.sha1(str(provider_id).encode("utf-8")).hexdigest()[:8]

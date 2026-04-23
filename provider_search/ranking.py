@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import logging
+import os
 import re
 from typing import Iterable, Optional, Sequence
 
@@ -9,6 +12,7 @@ from provider_search.specialty_families import derive_request_specialty_family_i
 
 
 RANKING_VERSION = "deterministic-v1"
+logger = logging.getLogger(__name__)
 
 _ACCEPTING_STATUSES = {"accepting", "accepting new patients", "open"}
 _TELEHEALTH_TERMS = {"telehealth", "virtual", "video", "remote", "online"}
@@ -32,8 +36,18 @@ def rank_provider_results(
         matched_specialties = _match_specialties(normalized_request, provider)
         matched_keywords = _match_keywords(normalized_request.keywords, provider)
         if normalized_request.specialties and not matched_specialties:
+            _log_gate_drop(
+                reason="specialty_mismatch",
+                request=normalized_request,
+                provider=provider,
+            )
             continue
         if normalized_request.keywords and not normalized_request.specialties and not matched_keywords:
+            _log_gate_drop(
+                reason="keyword_mismatch",
+                request=normalized_request,
+                provider=provider,
+            )
             continue
         breakdown = _build_score_breakdown(
             normalized_request,
@@ -255,3 +269,37 @@ def _tokenize(value: Optional[str]) -> set[str]:
         for token in re.findall(r"[a-z0-9]+", value.casefold())
         if len(token) > 1 or token.isdigit()
     }
+
+
+def _log_gate_drop(
+    *,
+    reason: str,
+    request: ProviderSearchRequest,
+    provider: CanonicalProvider,
+) -> None:
+    if not _debug_enabled():
+        return
+
+    logger.info(
+        "provider_search_debug_gate_drop reason=%s provider_key=%s requested_specialties=%s requested_family_ids=%s provider_family_ids=%s taxonomy=%s specialty_evidence=%s",
+        reason,
+        _provider_debug_key(provider.provider_id),
+        tuple(request.specialties),
+        tuple(request.specialty_family_ids),
+        tuple(provider.specialty_family_ids),
+        provider.taxonomy or "",
+        tuple(provider.specialties[:6]),
+    )
+
+
+def _provider_debug_key(provider_id: str) -> str:
+    if not provider_id:
+        return "missing"
+    return hashlib.sha1(str(provider_id).encode("utf-8")).hexdigest()[:8]
+
+
+def _debug_enabled() -> bool:
+    return (
+        os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() == "1"
+        and os.getenv("CARE_LOCATOR_LOCAL_DEBUG", "").strip() == "1"
+    )
