@@ -1079,6 +1079,69 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn("Dallas Family Clinic", result)
         self.assertIn("Primary Care", result)
 
+    def test_handle_request_rescues_obgyn_zip_from_malformed_interpret_json(self) -> None:
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn",
+            name="Cupertino OB/GYN Associates",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Cupertino",
+            state="CA",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="408-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="95051",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=obgyn_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(
+                source_traces=(
+                    SourceTrace(
+                        source_name="clinicaltables",
+                        dataset="npi_idv",
+                        status_code=200,
+                        result_count=1,
+                    ),
+                ),
+                sources_attempted=("clinicaltables",),
+                sources_used=("clinicaltables",),
+                total_candidates=1,
+            ),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {"content": "not valid json", "finish_reason": "stop"},
+                {"content": "{still not valid json", "finish_reason": "stop"},
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "ob gyn 95051",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 2)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("OB/GYN",))
+        self.assertEqual(provider_request.location, "95051")
+        self.assertIn("Cupertino OB/GYN Associates", result)
+
     def test_handle_request_rescue_does_not_misread_pcp_in_dallas_tx_as_pcp_in(self) -> None:
         service = Mock()
         service.search.return_value = ProviderSearchResponse(
