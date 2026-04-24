@@ -432,6 +432,7 @@ class ProviderSearchService:
         return SourceSearchRequest(
             search_terms=search_terms,
             limit=max(limit, self.per_dataset_limit),
+            specialty_driven=bool(request.specialties) and not location_only,
             query_filter=query_filter,
             city_hint=city_hint,
             state_hint=state_hint,
@@ -472,6 +473,7 @@ class ProviderSearchService:
                 SourceSearchRequest(
                     search_terms=normalized_terms,
                     limit=max(limit, self.per_dataset_limit),
+                    specialty_driven=bool(request.specialties) and not location_only,
                     query_filter=query_filter,
                     city_hint=city_hint,
                     state_hint=state_hint,
