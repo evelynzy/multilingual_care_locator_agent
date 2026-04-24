@@ -97,7 +97,7 @@ class _PediatricRetryClinicalTablesSource:
         self.calls.append((dataset, request))
         if (
             request.search_terms == "Pediatrics"
-            and request.query_filter == "addr_practice.state:NY AND addr_practice.zip:10013"
+            and request.query_filter == "addr_practice.state:NY AND addr_practice.zip:10013*"
         ):
             return SourceSearchResult(
                 providers=[],
@@ -158,7 +158,7 @@ class _ObgynZipClinicalTablesSource:
     def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
         self.calls.append((dataset, request))
         if dataset == "npi_idv" and (
-            request.query_filter == "addr_practice.zip:98101"
+            request.query_filter == "addr_practice.zip:98101*"
             and request.search_terms == "OB/GYN"
         ):
             return SourceSearchResult(
@@ -170,7 +170,7 @@ class _ObgynZipClinicalTablesSource:
                     result_count=len(self.noisy_zip_providers),
                 ),
             )
-        if request.query_filter == "addr_practice.zip:98101" and request.search_terms in {
+        if request.query_filter == "addr_practice.zip:98101*" and request.search_terms in {
             "Obstetrics & Gynecology",
             "Obstetrics & Gynecology 98101",
         }:
@@ -207,7 +207,7 @@ class _NearbyDentalClinicalTablesSource:
     def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
         self.calls.append((dataset, request))
         if (
-            request.query_filter == "addr_practice.zip:33012"
+            request.query_filter == "addr_practice.zip:33012*"
             and request.search_terms in {"Dentistry", "Dentistry 33012"}
         ):
             return SourceSearchResult(
@@ -285,7 +285,7 @@ class _PrimaryCareRetryClinicalTablesSource:
         self.calls.append((dataset, request))
         if (
             request.search_terms == "Primary Care"
-            and request.query_filter == "addr_practice.state:TX AND addr_practice.zip:75001"
+            and request.query_filter == "addr_practice.state:TX AND addr_practice.zip:75001*"
         ):
             return SourceSearchResult(
                 providers=[],
@@ -846,7 +846,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(retry_request.search_terms, "Primary Care")
         self.assertEqual(
             first_request.query_filter,
-            "addr_practice.state:TX AND addr_practice.zip:75001",
+            "addr_practice.state:TX AND addr_practice.zip:75001*",
         )
         self.assertEqual(retry_request.query_filter, "addr_practice.state:TX")
         self.assertNotIn("Dallas, TX 75001", [request.search_terms for _, request in source.calls])
@@ -1469,7 +1469,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(session.get.call_args_list), 1)
         _, kwargs = session.get.call_args
         self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
-        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101")
+        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101*")
         self.assertEqual(
             kwargs["params"]["sf"],
             ",".join(
@@ -1557,7 +1557,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(session.get.call_args_list), 1)
         _, kwargs = session.get.call_args
         self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
-        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101")
+        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101*")
         self.assertEqual(
             kwargs["params"]["sf"],
             ",".join(
@@ -1670,7 +1670,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(session.get.call_args_list), 1)
         _, kwargs = session.get.call_args
         self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
-        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101")
+        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101*")
         self.assertEqual(
             kwargs["params"]["sf"],
             ",".join(
@@ -1768,7 +1768,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         for _, kwargs in mocked_get.call_args_list:
             self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
             self.assertNotIn("98101", kwargs["params"]["terms"])
-            self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101")
+            self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101*")
             self.assertEqual(
                 kwargs["params"]["sf"],
                 ",".join(
@@ -1819,7 +1819,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
                 self.calls.append((dataset, request))
                 if dataset == "npi_idv" and (
-                    request.query_filter == "addr_practice.zip:98101"
+                    request.query_filter == "addr_practice.zip:98101*"
                     and request.search_terms in {"OB/GYN", "Obstetrics & Gynecology"}
                 ):
                     return SourceSearchResult(
@@ -1831,7 +1831,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                             result_count=len(self.noisy_zip_providers),
                         ),
                     )
-                if request.query_filter == "addr_practice.zip:98101" and (
+                if request.query_filter == "addr_practice.zip:98101*" and (
                     request.search_terms == "Obstetrics & Gynecology 98101"
                 ):
                     return SourceSearchResult(
@@ -1928,7 +1928,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             def search_dataset(self, dataset: Any, request: Any) -> SourceSearchResult:
                 self.calls.append((dataset, request))
                 if dataset == "npi_idv" and (
-                    request.query_filter == "addr_practice.zip:98101"
+                    request.query_filter == "addr_practice.zip:98101*"
                     and request.search_terms == "OB/GYN"
                 ):
                     return SourceSearchResult(
@@ -1940,7 +1940,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                             result_count=1,
                         ),
                     )
-                if request.query_filter == "addr_practice.zip:98101" and (
+                if request.query_filter == "addr_practice.zip:98101*" and (
                     request.search_terms == "Obstetrics & Gynecology"
                 ):
                     return SourceSearchResult(
@@ -2177,7 +2177,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(source.calls), 1)
         _, first_request = source.calls[0]
         self.assertEqual(first_request.search_terms, "Dentistry")
-        self.assertEqual(first_request.query_filter, "addr_practice.zip:33012")
+        self.assertEqual(first_request.query_filter, "addr_practice.zip:33012*")
         self.assertIn("Florida Children&#x27;s Dentistry, P.A.", result)
         self.assertNotIn("Miami Lakes Dentistry Center", result)
 
@@ -2510,7 +2510,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(retry_request.search_terms, first_request.search_terms)
         self.assertEqual(
             first_request.query_filter,
-            "addr_practice.state:NY AND addr_practice.zip:10013",
+            "addr_practice.state:NY AND addr_practice.zip:10013*",
         )
         self.assertEqual(retry_request.query_filter, "addr_practice.state:NY")
         self.assertIn("Canal Pediatrics", result)
