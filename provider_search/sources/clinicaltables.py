@@ -127,7 +127,7 @@ class ClinicalTablesSource:
         config = self.dataset_configs[dataset]
         terms = request.search_terms
         if request.specialty_driven:
-            terms = self._specialty_terms_only(request) or request.search_terms
+            terms = self._specialty_search_terms(request) or request.search_terms
         params = {
             "terms": terms,
             "maxList": str(request.limit),
@@ -142,6 +142,19 @@ class ClinicalTablesSource:
             params["df"] = ",".join(field_names)
 
         return config.search_url, params
+
+    def _specialty_search_terms(self, request: SourceSearchRequest) -> str:
+        specialty_terms = self._specialty_terms_only(request)
+        normalized_terms = normalize_text(specialty_terms, lowercase=True)
+        if not normalized_terms:
+            return ""
+        if normalized_terms in {"ob/gyn", "ob-gyn", "ob gyn", "obgyn"}:
+            return "obstetrics gynecology"
+
+        punctuation_light = re.sub(r"[^a-z0-9]+", " ", normalized_terms).strip()
+        if punctuation_light == "obstetrics gynecology":
+            return punctuation_light
+        return punctuation_light or normalized_terms
 
     def _specialty_terms_only(self, request: SourceSearchRequest) -> str:
         normalized_terms = normalize_text(request.search_terms)

@@ -854,7 +854,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
 
         self.assertEqual(len(session.get.call_args_list), 1)
         _, kwargs = session.get.call_args
-        self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+        self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
         self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
         self.assertEqual(len(response_payload.provider_results), 1)
         provider = response_payload.provider_results[0].provider

@@ -1468,7 +1468,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
 
         self.assertEqual(len(session.get.call_args_list), 1)
         _, kwargs = session.get.call_args
-        self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+        self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
         self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
         self.assertEqual(
             kwargs["params"]["sf"],
@@ -1556,7 +1556,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
 
         self.assertEqual(len(session.get.call_args_list), 1)
         _, kwargs = session.get.call_args
-        self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+        self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
         self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
         self.assertEqual(
             kwargs["params"]["sf"],
@@ -1669,7 +1669,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
 
         self.assertEqual(len(session.get.call_args_list), 1)
         _, kwargs = session.get.call_args
-        self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+        self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
         self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
         self.assertEqual(
             kwargs["params"]["sf"],
@@ -1766,7 +1766,7 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
 
         self.assertGreaterEqual(mocked_get.call_count, 1)
         for _, kwargs in mocked_get.call_args_list:
-            self.assertIn(kwargs["params"]["terms"], {"OB/GYN", "Obstetrics & Gynecology"})
+            self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
             self.assertNotIn("95051", kwargs["params"]["terms"])
             self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
             self.assertEqual(
