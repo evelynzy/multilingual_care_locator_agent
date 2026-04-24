@@ -866,6 +866,196 @@ class ProviderSearchServiceTests(unittest.TestCase):
             ("OB/GYN",),
         )
 
+    def test_search_emits_scoped_clinicaltables_request_log_when_fingerprint_matches(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+            ],
+            [[
+                "Cupertino OB/GYN Associates",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "Santa Clara",
+                "CA",
+                "98101",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+        request = ProviderSearchRequest(
+            specialties=("OB/GYN",),
+            location="98101",
+        )
+        request_fingerprint = build_request_fingerprint(request)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "PROVIDER_SEARCH_DEBUG": "1",
+                "CARE_LOCATOR_LOCAL_DEBUG": "1",
+                "PROVIDER_SEARCH_DEBUG_FINGERPRINT": request_fingerprint,
+            },
+            clear=False,
+        ):
+            with self.assertLogs(level="INFO") as captured:
+                service.search(request, limit=5)
+
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("provider_search_debug_request", joined_logs)
+        self.assertIn(f"request_fingerprint={request_fingerprint}", joined_logs)
+        self.assertIn("dataset=npi_idv", joined_logs)
+        self.assertIn("terms=obstetrics gynecology", joined_logs)
+        self.assertIn("q=addr_practice.zip:98101", joined_logs)
+        self.assertIn(
+            "sf=provider_type,licenses.medicare.type,licenses.taxonomy.classification,licenses.taxonomy.specialization,licenses.taxonomy.code",
+            joined_logs,
+        )
+
+    def test_search_does_not_emit_scoped_clinicaltables_request_log_when_fingerprint_does_not_match(
+        self,
+    ) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+            ],
+            [[
+                "Cupertino OB/GYN Associates",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "Santa Clara",
+                "CA",
+                "98101",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+
+        with patch.dict(
+            "os.environ",
+            {
+                "PROVIDER_SEARCH_DEBUG": "1",
+                "CARE_LOCATOR_LOCAL_DEBUG": "1",
+                "PROVIDER_SEARCH_DEBUG_FINGERPRINT": "not-the-request-fingerprint",
+            },
+            clear=False,
+        ):
+            with self.assertLogs(level="INFO") as captured:
+                service.search(
+                    ProviderSearchRequest(
+                        specialties=("OB/GYN",),
+                        location="98101",
+                    ),
+                    limit=5,
+                )
+
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("provider_search_debug request_fingerprint=", joined_logs)
+        self.assertNotIn("provider_search_debug_request", joined_logs)
+
+    def test_search_does_not_emit_scoped_clinicaltables_request_log_without_selector(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+            ],
+            [[
+                "Cupertino OB/GYN Associates",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "Santa Clara",
+                "CA",
+                "98101",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+
+        with patch.dict(
+            "os.environ",
+            {
+                "PROVIDER_SEARCH_DEBUG": "1",
+                "CARE_LOCATOR_LOCAL_DEBUG": "1",
+            },
+            clear=False,
+        ):
+            with self.assertLogs(level="INFO") as captured:
+                service.search(
+                    ProviderSearchRequest(
+                        specialties=("OB/GYN",),
+                        location="98101",
+                    ),
+                    limit=5,
+                )
+
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("provider_search_debug request_fingerprint=", joined_logs)
+        self.assertNotIn("provider_search_debug_request", joined_logs)
+
     def test_search_orchestrates_live_sources_and_updates_cache(self) -> None:
         primary_care_provider = build_canonical_provider(
             provider_id="provider-1",

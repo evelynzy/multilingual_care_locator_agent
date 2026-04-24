@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
+import os
 import re
 from typing import Any, Iterable, Optional
 
@@ -92,6 +94,8 @@ _LOCATION_ALIASES = {
     "greater los angeles": "Los Angeles CA",
     "dallas fort worth": "Dallas TX",
 }
+
+logger = logging.getLogger(__name__)
 
 
 class ClinicalTablesSource:
@@ -215,6 +219,7 @@ class ClinicalTablesSource:
             )
 
         url, params = self.build_search_request(dataset, request)
+        self._log_scoped_request_params(dataset=dataset, request=request, params=params)
 
         try:
             response = self.session.get(url, params=params, timeout=self.timeout)
@@ -259,6 +264,40 @@ class ClinicalTablesSource:
                 result_count=len(providers),
             ),
         )
+
+    def _log_scoped_request_params(
+        self,
+        *,
+        dataset: str,
+        request: SourceSearchRequest,
+        params: dict[str, str],
+    ) -> None:
+        if not self._scoped_request_debug_enabled(request.request_fingerprint):
+            return
+
+        logger.info(
+            "provider_search_debug_request request_fingerprint=%s dataset=%s specialty_driven=%s limit=%s terms=%s q=%s sf=%s city_hint_present=%s state_hint_present=%s zip_hint_present=%s",
+            request.request_fingerprint,
+            dataset,
+            request.specialty_driven,
+            request.limit,
+            params.get("terms", ""),
+            params.get("q", ""),
+            params.get("sf", ""),
+            bool(request.city_hint),
+            bool(request.state_hint),
+            bool(request.zip_hint),
+        )
+
+    @staticmethod
+    def _scoped_request_debug_enabled(request_fingerprint: Optional[str]) -> bool:
+        if (
+            os.getenv("PROVIDER_SEARCH_DEBUG", "").strip() != "1"
+            or os.getenv("CARE_LOCATOR_LOCAL_DEBUG", "").strip() != "1"
+        ):
+            return False
+        selector = os.getenv("PROVIDER_SEARCH_DEBUG_FINGERPRINT", "").strip()
+        return bool(request_fingerprint) and bool(selector) and selector == request_fingerprint
 
     def suggest_specialty_terms(self, specialties: Iterable[str]) -> tuple[str, ...]:
         suggested_terms: list[str] = []

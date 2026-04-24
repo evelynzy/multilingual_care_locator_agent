@@ -31,6 +31,7 @@ class SourceSearchRequest:
     search_terms: str
     limit: int
     specialty_driven: bool = False
+    request_fingerprint: Optional[str] = None
     query_filter: Optional[str] = None
     city_hint: Optional[str] = None
     zip_hint: Optional[str] = None
