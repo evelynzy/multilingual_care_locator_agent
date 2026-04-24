@@ -403,9 +403,13 @@ class ClinicalTablesSource:
             if city_value != request.city_hint.strip().lower():
                 return None
 
-        taxonomy = self._first_match(
+        specialty_evidence = self._collect_specialty_evidence(
             data,
             ["provider_type", "taxonomies[0].desc", "taxonomies[0].code"],
+        )
+        taxonomy = self._first_match(
+            data,
+            ["taxonomies[0].desc", "taxonomies[0].code", "provider_type"],
         )
         full_address = self._first_match(data, ["addr_practice.full"])
         address_value = full_address or self._first_match(data, ["addr_practice.address_1"])
@@ -420,7 +424,7 @@ class ClinicalTablesSource:
             country=None if full_address else self._first_match(data, ["addr_practice.country_name"]),
             phone=self._first_match(data, ["addr_practice.phone"]),
             taxonomy=taxonomy,
-            specialties=[taxonomy] if taxonomy else None,
+            specialties=specialty_evidence,
             languages=ensure_string_list(data.get("languages")),
             raw=data,
             retrieval_metadata={
@@ -690,6 +694,27 @@ class ClinicalTablesSource:
             if isinstance(value, str) and value.strip():
                 return value.strip()
         return default
+
+    @staticmethod
+    def _collect_specialty_evidence(
+        data: dict[str, Any],
+        field_names: list[str],
+    ) -> list[str]:
+        values: list[str] = []
+        seen: set[str] = set()
+        for field_name in field_names:
+            value = data.get(field_name)
+            if not isinstance(value, str):
+                continue
+            cleaned = value.strip()
+            if not cleaned:
+                continue
+            dedupe_key = cleaned.casefold()
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            values.append(cleaned)
+        return values
 
     @staticmethod
     def _build_location_text(data: dict[str, Any]) -> str:

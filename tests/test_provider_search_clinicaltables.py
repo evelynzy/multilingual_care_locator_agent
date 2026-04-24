@@ -5,7 +5,12 @@ from provider_search.models import SourceSearchRequest
 from provider_search.sources.clinicaltables import ClinicalTablesSource, DEFAULT_DATASET_CONFIGS
 
 
-def _live_v3_obgyn_row():
+def _live_v3_obgyn_row(
+    *,
+    provider_type: str = "",
+    taxonomy_desc: str = "Obstetrics & Gynecology",
+    taxonomy_code: str = "207V00000X",
+):
     return [
         "Cupertino OB/GYN Associates",
         "",
@@ -14,9 +19,9 @@ def _live_v3_obgyn_row():
         "",
         "",
         "1619271780",
-        "",
-        "Obstetrics & Gynecology",
-        "207V00000X",
+        provider_type,
+        taxonomy_desc,
+        taxonomy_code,
         "",
         "",
         "",
@@ -315,6 +320,55 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertIn("98101", provider.location_summary or "")
         self.assertEqual(provider.phone, "408-555-0100")
         self.assertIn("English", provider.languages)
+        self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
+
+    def test_search_dataset_prefers_specific_taxonomy_and_preserves_all_specialty_evidence(
+        self,
+    ) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["display row"],
+            [
+                "name.full",
+                "NPI",
+                "provider_type",
+                "taxonomies[0].desc",
+                "taxonomies[0].code",
+                "addr_practice.city",
+                "addr_practice.state",
+                "addr_practice.zip",
+            ],
+            [[
+                "Cupertino OB/GYN Associates",
+                "1619271780",
+                "Clinic/Center",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "Santa Clara",
+                "CA",
+                "98101",
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+
+        result = source.search_dataset(
+            "npi_idv",
+            SourceSearchRequest(search_terms="ob gyn", limit=1, zip_hint="98101"),
+        )
+
+        self.assertEqual(result.trace.result_count, 1)
+        provider = result.providers[0]
+        self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
+        self.assertEqual(
+            provider.specialties,
+            ("Clinic/Center", "Obstetrics & Gynecology", "207V00000X"),
+        )
         self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
 
     def test_build_search_request_uses_punctuation_light_specialty_terms_and_puts_location_in_q_with_sf(self) -> None:
