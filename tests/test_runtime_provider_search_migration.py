@@ -1293,11 +1293,10 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             dataset="npi_idv",
             city="Santa Clara",
             state="CA",
-            taxonomy="Physician/Internal Medicine, Cardiovascular Disease",
+            taxonomy="Physician/Cardiovascular Disease (Cardiology)",
             specialties=(
                 "Clinic/Center",
-                "Physician/Internal Medicine, Cardiovascular Disease",
-                "207RC0000X",
+                "Physician/Cardiovascular Disease (Cardiology)",
             ),
         )
         service = ProviderSearchService(

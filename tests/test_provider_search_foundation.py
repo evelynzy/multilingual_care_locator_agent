@@ -350,30 +350,55 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
     def test_derive_provider_specialty_family_ids_recognizes_physician_prefixed_live_obgyn_taxonomy(
         self,
     ) -> None:
-        family_ids = derive_provider_specialty_family_ids(
-            specialties=("Clinic/Center", "Physician/Obstetrics & Gynecology"),
-            taxonomy="Physician/Obstetrics & Gynecology",
+        live_taxonomy_variants = (
+            (
+                ("Clinic/Center", "Physician/Obstetrics & Gynecology"),
+                "Physician/Obstetrics & Gynecology",
+                ("obstetrics-gynecology",),
+            ),
+            (
+                ("Clinic/Center", "Physician/Cardiovascular Disease (Cardiology)"),
+                "Physician/Cardiovascular Disease (Cardiology)",
+                ("cardiology",),
+            ),
+            (
+                ("Clinic/Center", "Physician/Interventional Cardiology"),
+                "Physician/Interventional Cardiology",
+                ("cardiology",),
+            ),
+            (
+                ("Clinic/Center", "Physician/Internal Medicine"),
+                "Physician/Internal Medicine",
+                ("primary-care",),
+            ),
         )
 
-        self.assertEqual(family_ids, ("obstetrics-gynecology",))
+        for specialties, taxonomy, expected_family_ids in live_taxonomy_variants:
+            with self.subTest(taxonomy=taxonomy):
+                family_ids = derive_provider_specialty_family_ids(
+                    specialties=specialties,
+                    taxonomy=taxonomy,
+                )
 
-    def test_derive_provider_specialty_family_ids_recognizes_live_cardiology_taxonomy_variants(
+                self.assertEqual(family_ids, expected_family_ids)
+
+    def test_derive_provider_specialty_family_ids_rejects_unmatched_wrapped_taxonomy_variants(
         self,
     ) -> None:
-        live_cardiology_evidence = (
-            "Cardiovascular Disease",
-            "Physician/Internal Medicine, Cardiovascular Disease",
-            "207RC0000X",
+        negative_taxonomy_variants = (
+            "Physician/Interventional Pain Medicine",
+            "Physician/Cardiovascular Surgery",
+            "Physician/Clinic/Center",
         )
 
-        for evidence in live_cardiology_evidence:
+        for evidence in negative_taxonomy_variants:
             with self.subTest(evidence=evidence):
                 family_ids = derive_provider_specialty_family_ids(
                     specialties=("Clinic/Center", evidence),
                     taxonomy=evidence,
                 )
 
-                self.assertEqual(family_ids, ("cardiology",))
+                self.assertEqual(family_ids, ())
 
     def test_derive_provider_specialty_family_ids_covers_live_descendants_and_rejects_unrelated_specialties(self) -> None:
         self.assertEqual(

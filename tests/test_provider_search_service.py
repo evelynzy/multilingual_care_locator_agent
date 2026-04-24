@@ -1205,11 +1205,10 @@ class ProviderSearchServiceTests(unittest.TestCase):
             dataset="npi_idv",
             city="Santa Clara",
             state="CA",
-            taxonomy="Physician/Internal Medicine, Cardiovascular Disease",
+            taxonomy="Physician/Interventional Cardiology",
             specialties=(
                 "Clinic/Center",
-                "Physician/Internal Medicine, Cardiovascular Disease",
-                "207RC0000X",
+                "Physician/Interventional Cardiology",
             ),
         )
         source = FakeClinicalTablesSource(
