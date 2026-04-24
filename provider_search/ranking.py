@@ -8,8 +8,11 @@ import re
 from typing import Iterable, Optional, Sequence
 
 from provider_search.models import CanonicalProvider, ProviderSearchRequest, ProviderSearchResult
-from provider_search.normalization import normalize_provider, normalize_search_request
-from provider_search.specialty_families import derive_request_specialty_family_ids
+from provider_search.normalization import normalize_provider, normalize_search_request, normalize_text
+from provider_search.specialty_families import (
+    SPECIALTY_FAMILY_BY_ID,
+    derive_request_specialty_family_ids,
+)
 
 
 RANKING_VERSION = "deterministic-v1"
@@ -17,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _ACCEPTING_STATUSES = {"accepting", "accepting new patients", "open"}
 _TELEHEALTH_TERMS = {"telehealth", "virtual", "video", "remote", "online"}
+_GENERIC_SPECIALTY_EVIDENCE_PREFIXES = ("clinic center",)
 
 
 @dataclass(frozen=True)
@@ -152,9 +156,11 @@ def _build_score_breakdown(
         provider.freshness.created_epoch is not None
         or provider.freshness.last_updated_epoch is not None
     )
+    specialty_specificity_bonus = _specialty_specificity_bonus(request, provider)
 
     return {
         "specialty_alignment": 4.0 * specialty_matches,
+        "specialty_specificity": specialty_specificity_bonus,
         "keyword_alignment": 1.75 * keyword_matches,
         "language_alignment": 1.5 * language_matches,
         "insurance_alignment": 1.5 * insurance_matches,
@@ -247,6 +253,72 @@ def _match_specialties(
             seen_labels.add(requested_lookup_key)
             matched_labels.append(requested_specialty)
     return tuple(matched_labels)
+
+
+def _specialty_specificity_bonus(
+    request: ProviderSearchRequest,
+    provider: CanonicalProvider,
+) -> float:
+    requested_aliases = _requested_specialty_aliases(request)
+    if not requested_aliases:
+        return 0.0
+
+    for evidence in _iter_normalized_specialty_evidence(provider):
+        if evidence in requested_aliases and not _is_generic_specialty_evidence(evidence):
+            return 0.75
+    return 0.0
+
+
+def _requested_specialty_aliases(request: ProviderSearchRequest) -> set[str]:
+    aliases: set[str] = set()
+    for requested_specialty in request.specialties:
+        normalized_specialty = _normalize_specialty_match_value(requested_specialty)
+        if normalized_specialty:
+            aliases.add(normalized_specialty)
+
+    family_ids = request.specialty_family_ids or derive_request_specialty_family_ids(
+        request.specialties,
+    )
+    for family_id in family_ids:
+        family = SPECIALTY_FAMILY_BY_ID.get(family_id)
+        if family is None:
+            continue
+        for value in (family.family_id, family.label, *family.aliases):
+            normalized_value = _normalize_specialty_match_value(value)
+            if normalized_value:
+                aliases.add(normalized_value)
+    return aliases
+
+
+def _iter_normalized_specialty_evidence(provider: CanonicalProvider) -> tuple[str, ...]:
+    evidence_values: list[str] = []
+    seen: set[str] = set()
+    for value in (*provider.specialties, provider.taxonomy):
+        normalized_value = _normalize_specialty_match_value(value)
+        if normalized_value is None or normalized_value in seen:
+            continue
+        seen.add(normalized_value)
+        evidence_values.append(normalized_value)
+    return tuple(evidence_values)
+
+
+def _normalize_specialty_match_value(value: object) -> Optional[str]:
+    normalized_value = normalize_text(value, lowercase=True)
+    if normalized_value is None:
+        return None
+    normalized_value = normalized_value.replace("&", " and ")
+    normalized_value = normalized_value.replace("/", " ")
+    normalized_value = re.sub(r"[^a-z0-9]+", " ", normalized_value).strip()
+    if not normalized_value:
+        return None
+    return normalized_value
+
+
+def _is_generic_specialty_evidence(value: str) -> bool:
+    return any(
+        value == prefix or value.startswith(f"{prefix} ")
+        for prefix in _GENERIC_SPECIALTY_EVIDENCE_PREFIXES
+    )
 
 
 def _match_keywords(

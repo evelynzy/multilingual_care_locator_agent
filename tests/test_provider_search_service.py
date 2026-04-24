@@ -593,6 +593,65 @@ class ProviderSearchRankingTests(unittest.TestCase):
             ("Pediatrics",),
         )
 
+    def test_rank_provider_results_prefers_direct_specialty_evidence_over_generic_family_match(
+        self,
+    ) -> None:
+        request = ProviderSearchRequest(
+            specialties=("Cardiology",),
+            location="98101",
+        )
+        generic_family_match = build_canonical_provider(
+            provider_id="provider-cardiology-generic",
+            name="Apex Specialty Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Clinic/Center",
+            specialties=("Clinic/Center",),
+            specialty_family_ids=("cardiology",),
+        )
+        direct_specialty_match = build_canonical_provider(
+            provider_id="provider-cardiology-direct",
+            name="Zen Cardiology",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Cardiology",
+            specialties=("Cardiology",),
+        )
+
+        ranked = rank_provider_results(
+            request,
+            [generic_family_match, direct_specialty_match],
+            limit=5,
+        )
+
+        self.assertEqual(
+            [result.provider.provider_id for result in ranked],
+            [
+                direct_specialty_match.provider_id,
+                generic_family_match.provider_id,
+            ],
+        )
+        self.assertEqual(
+            ranked[0].provider.ranking_metadata.get("matched_specialties"),
+            ("Cardiology",),
+        )
+        self.assertEqual(
+            ranked[1].provider.ranking_metadata.get("matched_specialties"),
+            ("Cardiology",),
+        )
+        self.assertEqual(
+            ranked[0].provider.ranking_metadata["score_breakdown"]["specialty_specificity"],
+            0.75,
+        )
+        self.assertEqual(
+            ranked[1].provider.ranking_metadata["score_breakdown"]["specialty_specificity"],
+            0.0,
+        )
+
     def test_rank_provider_results_accepts_code_only_obgyn_structured_evidence(self) -> None:
         request = ProviderSearchRequest(
             specialties=("OB/GYN",),
@@ -1055,6 +1114,85 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(
             result.provider.ranking_metadata.get("matched_specialties"),
             ("OB/GYN",),
+        )
+
+    def test_search_zip_only_obgyn_98101_prefers_direct_specialty_evidence_over_generic_family_match(
+        self,
+    ) -> None:
+        generic_family_match = build_canonical_provider(
+            provider_id="provider-obgyn-generic",
+            name="Apex Specialty Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Clinic/Center",
+            specialties=("Clinic/Center",),
+            specialty_family_ids=("obstetrics-gynecology",),
+        )
+        direct_specialty_match = build_canonical_provider(
+            provider_id="provider-obgyn-direct",
+            name="Zen Women's Health",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Physician/Obstetrics & Gynecology",
+            specialties=("Physician/Obstetrics & Gynecology",),
+        )
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[generic_family_match, direct_specialty_match],
+                    trace=SourceTrace(
+                        source_name="clinicaltables",
+                        dataset="npi_idv",
+                        result_count=2,
+                    ),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        response_payload = service.search(
+            ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="98101",
+            ),
+            limit=5,
+        )
+
+        self.assertEqual(
+            [result.provider.provider_id for result in response_payload.provider_results],
+            [
+                direct_specialty_match.provider_id,
+                generic_family_match.provider_id,
+            ],
+        )
+        self.assertEqual(
+            response_payload.provider_results[0].provider.ranking_metadata.get("matched_specialties"),
+            ("OB/GYN",),
+        )
+        self.assertEqual(
+            response_payload.provider_results[1].provider.ranking_metadata.get("matched_specialties"),
+            ("OB/GYN",),
+        )
+        self.assertEqual(
+            response_payload.provider_results[0].provider.ranking_metadata["score_breakdown"][
+                "specialty_specificity"
+            ],
+            0.75,
+        )
+        self.assertEqual(
+            response_payload.provider_results[1].provider.ranking_metadata["score_breakdown"][
+                "specialty_specificity"
+            ],
+            0.0,
         )
 
     def test_search_emits_scoped_clinicaltables_request_log_when_fingerprint_matches(self) -> None:

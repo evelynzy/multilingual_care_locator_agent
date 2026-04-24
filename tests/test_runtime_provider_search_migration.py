@@ -270,6 +270,24 @@ class _KeywordOnlyClinicalTablesSource:
         )
 
 
+class _StaticClinicalTablesSource:
+    def __init__(self, providers: List[Any]) -> None:
+        self.providers = list(providers)
+        self.calls = []
+
+    def search_dataset(self, dataset: str, request: Any) -> SourceSearchResult:
+        self.calls.append((dataset, request))
+        return SourceSearchResult(
+            providers=list(self.providers),
+            trace=SourceTrace(
+                source_name="clinicaltables",
+                dataset=dataset,
+                status_code=200,
+                result_count=len(self.providers),
+            ),
+        )
+
+
 class _PrimaryCareRetryClinicalTablesSource:
     def __init__(
         self,
@@ -1201,6 +1219,69 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(provider_request.location, None)
         self.assertEqual(provider_request.specialties, ("OB/GYN",))
         self.assertIn("Important safety and trust notes:", result)
+
+    def test_handle_request_cardiology_98101_prefers_direct_specialty_result_over_generic_family_match(
+        self,
+    ) -> None:
+        generic_family_match = build_canonical_provider(
+            provider_id="provider-cardiology-generic",
+            name="Apex Specialty Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_org",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Clinic/Center",
+            specialties=("Clinic/Center",),
+            specialty_family_ids=("cardiology",),
+        )
+        direct_specialty_match = build_canonical_provider(
+            provider_id="provider-cardiology-direct",
+            name="Zen Cardiology",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Cardiology",
+            specialties=("Cardiology",),
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=_StaticClinicalTablesSource(
+                [generic_family_match, direct_specialty_match]
+            ),
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"cardiology 98101","medical_need":true,"location":"98101",'
+                        '"specialties":["Cardiology"],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null,"care_setting":"specialist",'
+                        '"urgency":null,"needs_clarification":false,"follow_up_focus":[]}'
+                    )
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "cardiology 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(result.count("provider-card__title"), 2)
+        self.assertIn('<div class="provider-card__title">1. Zen Cardiology</div>', result)
+        self.assertIn(
+            '<div class="provider-card__title">2. Apex Specialty Clinic</div>',
+            result,
+        )
 
     def test_handle_request_rescues_primary_care_zip_from_malformed_interpret_json(self) -> None:
         primary_care_provider = build_canonical_provider(
