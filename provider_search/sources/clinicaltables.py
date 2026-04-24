@@ -75,6 +75,13 @@ DEFAULT_DATASET_CONFIGS: dict[str, ClinicalTablesDatasetConfig] = {
 }
 
 _TAXONOMY_CANDIDATE_FIELDS = ("provider_type", "taxonomies[0].desc")
+_SPECIALTY_SEARCH_FIELDS = (
+    "provider_type",
+    "licenses.medicare.type",
+    "licenses.taxonomy.classification",
+    "licenses.taxonomy.specialization",
+    "licenses.taxonomy.code",
+)
 _LOCATION_ALIASES = {
     "bay area": "San Francisco CA",
     "sf bay area": "San Francisco CA",
@@ -118,18 +125,66 @@ class ClinicalTablesSource:
         request: SourceSearchRequest,
     ) -> tuple[str, dict[str, str]]:
         config = self.dataset_configs[dataset]
+        terms = request.search_terms
+        if request.specialty_driven:
+            terms = self._specialty_terms_only(request) or request.search_terms
         params = {
-            "terms": request.search_terms,
+            "terms": terms,
             "maxList": str(request.limit),
         }
         if request.query_filter:
             params["q"] = request.query_filter
+        if request.specialty_driven:
+            params["sf"] = ",".join(_SPECIALTY_SEARCH_FIELDS)
 
         field_names = self.result_field_order.get(dataset)
         if field_names:
             params["df"] = ",".join(field_names)
 
         return config.search_url, params
+
+    def _specialty_terms_only(self, request: SourceSearchRequest) -> str:
+        normalized_terms = normalize_text(request.search_terms)
+        if not normalized_terms:
+            return ""
+
+        stripped_terms = normalized_terms
+        for suffix in self._specialty_location_suffixes(request):
+            if not suffix:
+                continue
+            suffix_pattern = rf"(?:\s+|^){re.escape(suffix)}$"
+            candidate = re.sub(suffix_pattern, "", stripped_terms, flags=re.IGNORECASE).strip()
+            if candidate and candidate != stripped_terms:
+                stripped_terms = candidate
+                break
+        return stripped_terms
+
+    def _specialty_location_suffixes(self, request: SourceSearchRequest) -> list[str]:
+        normalized_city = normalize_text(request.city_hint)
+        normalized_state = normalize_text(request.state_hint)
+        normalized_zip = normalize_text(request.zip_hint)
+
+        ordered_suffixes: list[str] = []
+        seen: set[str] = set()
+        suffix_parts = (
+            (normalized_city, normalized_state, normalized_zip),
+            (normalized_zip, normalized_city, normalized_state),
+            (normalized_city, normalized_state),
+            (normalized_state, normalized_zip),
+            (normalized_city,),
+            (normalized_state,),
+            (normalized_zip,),
+        )
+        for parts in suffix_parts:
+            suffix = " ".join(part for part in parts if part).strip()
+            if not suffix:
+                continue
+            lookup_key = suffix.casefold()
+            if lookup_key in seen:
+                continue
+            seen.add(lookup_key)
+            ordered_suffixes.append(suffix)
+        return ordered_suffixes
 
     def search_dataset(
         self,

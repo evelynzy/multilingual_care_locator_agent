@@ -1470,6 +1470,18 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         _, kwargs = session.get.call_args
         self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
         self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
+        self.assertEqual(
+            kwargs["params"]["sf"],
+            ",".join(
+                [
+                    "provider_type",
+                    "licenses.medicare.type",
+                    "licenses.taxonomy.classification",
+                    "licenses.taxonomy.specialization",
+                    "licenses.taxonomy.code",
+                ]
+            ),
+        )
         self.assertIn("Cupertino OB/GYN Associates", result)
         self.assertIn("Obstetrics &amp; Gynecology", result)
         self.assertNotIn("Medicare Care Compare", result)
@@ -1546,6 +1558,18 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         _, kwargs = session.get.call_args
         self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
         self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
+        self.assertEqual(
+            kwargs["params"]["sf"],
+            ",".join(
+                [
+                    "provider_type",
+                    "licenses.medicare.type",
+                    "licenses.taxonomy.classification",
+                    "licenses.taxonomy.specialization",
+                    "licenses.taxonomy.code",
+                ]
+            ),
+        )
         self.assertIn("Cupertino OB/GYN Associates", result)
         self.assertNotIn("Medicare Care Compare", result)
         trusted_fallback.assert_not_called()
@@ -1647,6 +1671,18 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         _, kwargs = session.get.call_args
         self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
         self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
+        self.assertEqual(
+            kwargs["params"]["sf"],
+            ",".join(
+                [
+                    "provider_type",
+                    "licenses.medicare.type",
+                    "licenses.taxonomy.classification",
+                    "licenses.taxonomy.specialization",
+                    "licenses.taxonomy.code",
+                ]
+            ),
+        )
         self.assertIn("Cupertino Gynecology Group", result)
         self.assertIn("South Bay Maternal Fetal Medicine", result)
         self.assertNotIn("Downtown Imaging Associates", result)
@@ -1730,8 +1766,21 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
 
         self.assertGreaterEqual(mocked_get.call_count, 1)
         for _, kwargs in mocked_get.call_args_list:
-            self.assertEqual(kwargs["params"]["terms"], "OB/GYN")
+            self.assertIn(kwargs["params"]["terms"], {"OB/GYN", "Obstetrics & Gynecology"})
+            self.assertNotIn("95051", kwargs["params"]["terms"])
             self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:95051")
+            self.assertEqual(
+                kwargs["params"]["sf"],
+                ",".join(
+                    [
+                        "provider_type",
+                        "licenses.medicare.type",
+                        "licenses.taxonomy.classification",
+                        "licenses.taxonomy.specialization",
+                        "licenses.taxonomy.code",
+                    ]
+                ),
+            )
             self.assertIn("taxonomies[0].desc", kwargs["params"]["df"])
             self.assertIn("taxonomies[0].code", kwargs["params"]["df"])
         self.assertIn("Cupertino OB/GYN Associates", result)
