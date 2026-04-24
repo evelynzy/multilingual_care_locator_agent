@@ -347,6 +347,16 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
                 self.assertEqual(family_ids, ("obstetrics-gynecology",))
 
+    def test_derive_provider_specialty_family_ids_recognizes_physician_prefixed_live_obgyn_taxonomy(
+        self,
+    ) -> None:
+        family_ids = derive_provider_specialty_family_ids(
+            specialties=("Clinic/Center", "Physician/Obstetrics & Gynecology"),
+            taxonomy="Physician/Obstetrics & Gynecology",
+        )
+
+        self.assertEqual(family_ids, ("obstetrics-gynecology",))
+
     def test_derive_provider_specialty_family_ids_covers_live_descendants_and_rejects_unrelated_specialties(self) -> None:
         self.assertEqual(
             derive_provider_specialty_family_ids(
