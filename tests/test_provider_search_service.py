@@ -866,6 +866,69 @@ class ProviderSearchServiceTests(unittest.TestCase):
             ("OB/GYN",),
         )
 
+    def test_search_zip_only_obgyn_98101_accepts_live_v3_rows_payload_without_broad_retry(
+        self,
+    ) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["1619271780"],
+            None,
+            [[
+                "Cupertino OB/GYN Associates",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "",
+                "",
+                "",
+                "Santa Clara",
+                "CA",
+                "98101",
+                "",
+                "408-555-0100",
+                ["English"],
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+
+        response_payload = service.search(
+            ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="98101",
+            ),
+            limit=5,
+        )
+
+        self.assertEqual(len(session.get.call_args_list), 1)
+        _, kwargs = session.get.call_args
+        self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
+        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101*")
+        self.assertEqual(len(response_payload.provider_results), 1)
+        self.assertEqual(response_payload.search_trace.total_candidates, 1)
+        provider = response_payload.provider_results[0].provider
+        self.assertEqual(provider.name, "Cupertino OB/GYN Associates")
+        self.assertEqual(provider.provider_id, "1619271780")
+        self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
+        self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
+
     def test_search_emits_scoped_clinicaltables_request_log_when_fingerprint_matches(self) -> None:
         response = Mock()
         response.status_code = 200
