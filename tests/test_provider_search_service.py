@@ -1195,6 +1195,59 @@ class ProviderSearchServiceTests(unittest.TestCase):
             0.0,
         )
 
+    def test_search_cardiology_98101_admits_live_cardiology_taxonomy_variant(
+        self,
+    ) -> None:
+        live_cardiology_provider = build_canonical_provider(
+            provider_id="provider-cardiology-live",
+            name="Zen Cardiology",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Physician/Internal Medicine, Cardiovascular Disease",
+            specialties=(
+                "Clinic/Center",
+                "Physician/Internal Medicine, Cardiovascular Disease",
+                "207RC0000X",
+            ),
+        )
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[live_cardiology_provider],
+                    trace=SourceTrace(
+                        source_name="clinicaltables",
+                        dataset="npi_idv",
+                        result_count=1,
+                    ),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+
+        response_payload = service.search(
+            ProviderSearchRequest(
+                specialties=("Cardiology",),
+                location="98101",
+            ),
+            limit=5,
+        )
+
+        self.assertEqual(len(response_payload.provider_results), 1)
+        result = response_payload.provider_results[0]
+        self.assertEqual(result.provider.name, "Zen Cardiology")
+        self.assertEqual(result.provider.specialty_family_ids, ("cardiology",))
+        self.assertEqual(
+            result.provider.ranking_metadata.get("matched_specialties"),
+            ("Cardiology",),
+        )
+
     def test_search_emits_scoped_clinicaltables_request_log_when_fingerprint_matches(self) -> None:
         response = Mock()
         response.status_code = 200
