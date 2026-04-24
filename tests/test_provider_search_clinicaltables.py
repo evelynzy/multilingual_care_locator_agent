@@ -5,6 +5,30 @@ from provider_search.models import SourceSearchRequest
 from provider_search.sources.clinicaltables import ClinicalTablesSource, DEFAULT_DATASET_CONFIGS
 
 
+def _live_v3_obgyn_row():
+    return [
+        "Cupertino OB/GYN Associates",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "1619271780",
+        "",
+        "Obstetrics & Gynecology",
+        "207V00000X",
+        "",
+        "",
+        "",
+        "Santa Clara",
+        "CA",
+        "98101",
+        "",
+        "408-555-0100",
+        ["English"],
+    ]
+
+
 class ClinicalTablesSourceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.source = ClinicalTablesSource()
@@ -107,27 +131,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
             1,
             ["1619271780"],
             None,
-            [[
-                "Cupertino OB/GYN Associates",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "1619271780",
-                "",
-                "Obstetrics & Gynecology",
-                "207V00000X",
-                "",
-                "",
-                "",
-                "Santa Clara",
-                "CA",
-                "98101",
-                "",
-                "408-555-0100",
-                ["English"],
-            ]],
+            [_live_v3_obgyn_row()],
         ]
 
         fields, entries = self.source.parse_search_payload("npi_idv", payload)
@@ -143,27 +147,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
             ["1619271780", "1619271781"],
             None,
             [
-                [
-                    "Cupertino OB/GYN Associates",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "1619271780",
-                    "",
-                    "Obstetrics & Gynecology",
-                    "207V00000X",
-                    "",
-                    "",
-                    "",
-                    "Santa Clara",
-                    "CA",
-                    "98101",
-                    "",
-                    "408-555-0100",
-                    ["English"],
-                ],
+                _live_v3_obgyn_row(),
                 "skip-me",
             ],
         ]
@@ -175,6 +159,21 @@ class ClinicalTablesSourceTests(unittest.TestCase):
             entries,
             [payload[3][0]],
         )
+
+    def test_parse_search_payload_does_not_fallback_when_descriptors_are_present_but_unresolvable(
+        self,
+    ) -> None:
+        payload = [
+            1,
+            ["1619271780"],
+            [{"unexpected": "descriptor"}],
+            [_live_v3_obgyn_row()],
+        ]
+
+        fields, entries = self.source.parse_search_payload("npi_idv", payload)
+
+        self.assertEqual(fields, [])
+        self.assertEqual(entries, [])
 
     def test_search_dataset_builds_request_and_normalizes_provider(self) -> None:
         response = Mock()
@@ -279,27 +278,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
             1,
             ["1619271780"],
             None,
-            [[
-                "Cupertino OB/GYN Associates",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "1619271780",
-                "",
-                "Obstetrics & Gynecology",
-                "207V00000X",
-                "",
-                "",
-                "",
-                "Santa Clara",
-                "CA",
-                "98101",
-                "",
-                "408-555-0100",
-                ["English"],
-            ]],
+            [_live_v3_obgyn_row()],
         ]
         response.raise_for_status.return_value = None
 

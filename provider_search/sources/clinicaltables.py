@@ -491,14 +491,18 @@ class ClinicalTablesSource:
 
         if len(payload_items) >= 4 and isinstance(payload_items[3], (list, tuple)):
             potential_entries = list(payload_items[3])
-            if isinstance(payload_items[2], (list, tuple)):
+            if payload_items[2] is None:
+                fallback_fields = self.result_field_order.get(dataset, [])
+                if fallback_fields:
+                    return list(fallback_fields), [
+                        list(row) for row in potential_entries if isinstance(row, (list, tuple))
+                    ]
+            elif isinstance(payload_items[2], (list, tuple)):
                 potential_fields = list(payload_items[2])
         elif len(payload_items) >= 3 and isinstance(payload_items[2], (list, tuple)):
             potential_entries = list(payload_items[2])
             if isinstance(payload_items[1], (list, tuple)):
                 potential_fields = list(payload_items[1])
-        elif len(payload_items) > 3 and isinstance(payload_items[3], (list, tuple)):
-            potential_entries = list(payload_items[3])
 
         reverse_map = {
             index: name
@@ -522,15 +526,8 @@ class ClinicalTablesSource:
                 resolved_positions.append(index)
                 fields.append(resolved_field)
 
-        if not fields and potential_entries:
-            # ClinicalTables v3 can return `[total, ids, null, rows]`; when
-            # descriptors are omitted, preserve the raw row ordering so
-            # normalization can map against the requested dataset fields.
-            fallback_fields = self.result_field_order.get(dataset, [])
-            if fallback_fields:
-                return list(fallback_fields), [
-                    list(row) for row in potential_entries if isinstance(row, (list, tuple))
-                ]
+        if not fields:
+            return fields, entries
 
         max_resolved_position = max(resolved_positions, default=-1)
         for row in potential_entries:

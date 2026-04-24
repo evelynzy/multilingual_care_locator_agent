@@ -1487,6 +1487,94 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertNotIn("Medicare Care Compare", result)
         trusted_fallback.assert_not_called()
 
+    def test_handle_request_obgyn_98101_accepts_live_v3_rows_payload_without_fallback(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["1619271780"],
+            None,
+            [[
+                "Cupertino OB/GYN Associates",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "",
+                "",
+                "",
+                "Santa Clara",
+                "CA",
+                "98101",
+                "",
+                "408-555-0100",
+                ["English"],
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn 98101",
+            medical_need=True,
+            location="98101",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+        ) as trusted_fallback:
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "ob gyn 98101",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(len(session.get.call_args_list), 1)
+        _, kwargs = session.get.call_args
+        self.assertEqual(kwargs["params"]["terms"], "obstetrics gynecology")
+        self.assertEqual(kwargs["params"]["q"], "addr_practice.zip:98101*")
+        self.assertEqual(
+            kwargs["params"]["sf"],
+            ",".join(
+                [
+                    "provider_type",
+                    "licenses.medicare.type",
+                    "licenses.taxonomy.classification",
+                    "licenses.taxonomy.specialization",
+                    "licenses.taxonomy.code",
+                ]
+            ),
+        )
+        self.assertIn("Cupertino OB/GYN Associates", result)
+        self.assertIn("Obstetrics &amp; Gynecology", result)
+        self.assertNotIn("Medicare Care Compare", result)
+        trusted_fallback.assert_not_called()
+
     def test_handle_request_obgyn_98101_accepts_code_only_obgyn_payload_without_fallback(self) -> None:
         response = Mock()
         response.status_code = 200
