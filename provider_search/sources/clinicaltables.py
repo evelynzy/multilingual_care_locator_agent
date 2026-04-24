@@ -481,23 +481,22 @@ class ClinicalTablesSource:
     ) -> tuple[list[str], list[list[Any]]]:
         fields: list[str] = []
         entries: list[list[Any]] = []
+        potential_fields: list[Any] | None = None
+        potential_entries: list[Any] = []
 
         if not isinstance(payload, list):
             return fields, entries
 
-        if len(payload) >= 4 and isinstance(payload[2], list) and isinstance(payload[3], list):
-            potential_fields = payload[2]
+        if len(payload) >= 4 and isinstance(payload[3], list):
             potential_entries = payload[3]
-        elif len(payload) >= 3 and isinstance(payload[1], list) and isinstance(payload[2], list):
-            potential_fields = payload[1]
+            if isinstance(payload[2], list):
+                potential_fields = payload[2]
+        elif len(payload) >= 3 and isinstance(payload[2], list):
             potential_entries = payload[2]
-        else:
-            potential_fields = (
-                payload[2] if len(payload) > 2 and isinstance(payload[2], list) else []
-            )
-            potential_entries = (
-                payload[3] if len(payload) > 3 and isinstance(payload[3], list) else []
-            )
+            if isinstance(payload[1], list):
+                potential_fields = payload[1]
+        elif len(payload) > 3 and isinstance(payload[3], list):
+            potential_entries = payload[3]
 
         reverse_map = {
             index: name
@@ -505,20 +504,28 @@ class ClinicalTablesSource:
         }
         resolved_positions: list[int] = []
         fields = []
-        for index, descriptor in enumerate(potential_fields):
-            resolved_field: Optional[str] = None
-            if isinstance(descriptor, str):
-                candidate = descriptor.strip()
-                if candidate:
-                    resolved_field = candidate
-            elif isinstance(descriptor, int):
-                resolved_field = reverse_map.get(int(descriptor))
+        if potential_fields is not None:
+            for index, descriptor in enumerate(potential_fields):
+                resolved_field: Optional[str] = None
+                if isinstance(descriptor, str):
+                    candidate = descriptor.strip()
+                    if candidate:
+                        resolved_field = candidate
+                elif isinstance(descriptor, int):
+                    resolved_field = reverse_map.get(int(descriptor))
 
-            if not resolved_field:
-                continue
+                if not resolved_field:
+                    continue
 
-            resolved_positions.append(index)
-            fields.append(resolved_field)
+                resolved_positions.append(index)
+                fields.append(resolved_field)
+
+        if not fields and potential_entries:
+            fallback_fields = self.result_field_order.get(dataset, [])
+            if fallback_fields:
+                return list(fallback_fields), [
+                    list(row) for row in potential_entries if isinstance(row, (list, tuple))
+                ]
 
         max_resolved_position = max(resolved_positions, default=-1)
         for row in potential_entries:
