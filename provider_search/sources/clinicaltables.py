@@ -484,19 +484,21 @@ class ClinicalTablesSource:
         potential_fields: list[Any] | None = None
         potential_entries: list[Any] = []
 
-        if not isinstance(payload, list):
+        if not isinstance(payload, (list, tuple)):
             return fields, entries
 
-        if len(payload) >= 4 and isinstance(payload[3], list):
-            potential_entries = payload[3]
-            if isinstance(payload[2], list):
-                potential_fields = payload[2]
-        elif len(payload) >= 3 and isinstance(payload[2], list):
-            potential_entries = payload[2]
-            if isinstance(payload[1], list):
-                potential_fields = payload[1]
-        elif len(payload) > 3 and isinstance(payload[3], list):
-            potential_entries = payload[3]
+        payload_items = list(payload)
+
+        if len(payload_items) >= 4 and isinstance(payload_items[3], (list, tuple)):
+            potential_entries = list(payload_items[3])
+            if isinstance(payload_items[2], (list, tuple)):
+                potential_fields = list(payload_items[2])
+        elif len(payload_items) >= 3 and isinstance(payload_items[2], (list, tuple)):
+            potential_entries = list(payload_items[2])
+            if isinstance(payload_items[1], (list, tuple)):
+                potential_fields = list(payload_items[1])
+        elif len(payload_items) > 3 and isinstance(payload_items[3], (list, tuple)):
+            potential_entries = list(payload_items[3])
 
         reverse_map = {
             index: name
@@ -521,6 +523,9 @@ class ClinicalTablesSource:
                 fields.append(resolved_field)
 
         if not fields and potential_entries:
+            # ClinicalTables v3 can return `[total, ids, null, rows]`; when
+            # descriptors are omitted, preserve the raw row ordering so
+            # normalization can map against the requested dataset fields.
             fallback_fields = self.result_field_order.get(dataset, [])
             if fallback_fields:
                 return list(fallback_fields), [

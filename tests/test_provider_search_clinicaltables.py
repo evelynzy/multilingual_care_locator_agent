@@ -135,6 +135,47 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(fields, DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields)
         self.assertEqual(entries, payload[3])
 
+    def test_parse_search_payload_skips_non_row_entries_when_live_v3_payload_omits_descriptors(
+        self,
+    ) -> None:
+        payload = [
+            2,
+            ["1619271780", "1619271781"],
+            None,
+            [
+                [
+                    "Cupertino OB/GYN Associates",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "1619271780",
+                    "",
+                    "Obstetrics & Gynecology",
+                    "207V00000X",
+                    "",
+                    "",
+                    "",
+                    "Santa Clara",
+                    "CA",
+                    "95051",
+                    "",
+                    "408-555-0100",
+                    ["English"],
+                ],
+                "skip-me",
+            ],
+        ]
+
+        fields, entries = self.source.parse_search_payload("npi_idv", payload)
+
+        self.assertEqual(fields, DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields)
+        self.assertEqual(
+            entries,
+            [payload[3][0]],
+        )
+
     def test_search_dataset_builds_request_and_normalizes_provider(self) -> None:
         response = Mock()
         response.status_code = 200
