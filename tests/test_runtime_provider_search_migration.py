@@ -34,7 +34,7 @@ from provider_search.models import (
     SearchTrace,
     SourceTrace,
 )
-from provider_search.normalization import build_canonical_provider
+from provider_search.normalization import build_canonical_provider, build_request_fingerprint
 from provider_search.service import ProviderSearchService
 from provider_search.sources.clinicaltables import ClinicalTablesSource, DEFAULT_DATASET_CONFIGS
 
@@ -646,9 +646,93 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn("provider_search_debug_candidate", dual_gate_logs)
         self.assertIn("provider_search_debug_gate_drop", dual_gate_logs)
         self.assertIn("care_agent_result_debug", dual_gate_logs)
+        self.assertNotIn("provider_search_debug_candidate_detail", dual_gate_logs)
         self.assertNotIn("Cupertino OB/GYN Associates", dual_gate_logs)
         self.assertNotIn("1619271780", dual_gate_logs)
         self.assertNotIn("408-555-0100", dual_gate_logs)
+
+    def test_handle_request_emits_scoped_candidate_dump_when_fingerprint_matches(self) -> None:
+        noisy_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+            phone="408-555-0102",
+        )
+        canonical_provider = build_canonical_provider(
+            provider_id="1619271780",
+            name="Cupertino OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="408-555-0100",
+        )
+        request_fingerprint = build_request_fingerprint(
+            ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="98101",
+            )
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=_ObgynZipClinicalTablesSource(
+                noisy_zip_providers=[noisy_provider],
+                canonical_term_providers=[canonical_provider],
+            ),
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"ob gyn 98101","medical_need":true,"location":"98101",'
+                        '"specialties":["OB/GYN"],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null}'
+                    )
+                },
+                {"include_choice": False},
+            ]
+        )
+
+        with patch.object(agent, "_trusted_resource_fallback", return_value=[]):
+            with patch.dict(
+                "os.environ",
+                {
+                    "PROVIDER_SEARCH_DEBUG": "1",
+                    "CARE_LOCATOR_LOCAL_DEBUG": "1",
+                    "PROVIDER_SEARCH_DEBUG_FINGERPRINT": request_fingerprint,
+                },
+                clear=False,
+            ):
+                with self.assertLogs(level="INFO") as captured:
+                    agent.handle_request(
+                        client,
+                        "ob gyn 98101",
+                        [],
+                        max_tokens=256,
+                        temperature=0.2,
+                        top_p=0.9,
+                    )
+
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("provider_search_debug_candidate_detail", joined_logs)
+        self.assertIn("gate_outcome=admitted", joined_logs)
+        self.assertIn("gate_outcome=dropped", joined_logs)
+        self.assertIn("drop_reason=specialty_mismatch", joined_logs)
+        self.assertNotIn("Cupertino OB/GYN Associates", joined_logs)
+        self.assertNotIn("1619271780", joined_logs)
+        self.assertNotIn("408-555-0100", joined_logs)
+        self.assertNotIn("98101", joined_logs)
 
     def test_default_init_works_without_cache_path_or_legacy_repository_dependency(self) -> None:
         with patch("provider_search.cache.resolve_provider_cache_path", return_value=None):
