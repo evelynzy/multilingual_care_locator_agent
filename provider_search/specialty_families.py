@@ -120,7 +120,6 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "cardiology",
             "cardiologist",
             "cardiovascular disease",
-            "physician/internal medicine, cardiovascular disease",
             "physician internal medicine cardiovascular disease",
             "207rc0000x",
         ),
@@ -210,11 +209,32 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     ),
 )
 
+_PROFESSION_WRAPPER_PREFIXES = frozenset(
+    {
+        "physician",
+        "nurse practitioner",
+        "physician assistant",
+        "physician assistants",
+        "clinical nurse specialist",
+        "advanced practice registered nurse",
+        "registered nurse",
+    }
+)
+
 def normalize_specialty_family_id(value: object) -> Optional[str]:
     normalized_value = _normalize_lookup_value(value)
     if normalized_value is None:
         return None
-    return _SPECIALTY_FAMILY_LOOKUP.get(normalized_value)
+
+    exact_match = _SPECIALTY_FAMILY_LOOKUP.get(normalized_value)
+    if exact_match is not None:
+        return exact_match
+
+    for candidate in _canonical_lookup_candidates(value):
+        family_id = _SPECIALTY_FAMILY_LOOKUP.get(candidate)
+        if family_id is not None:
+            return family_id
+    return None
 
 
 def derive_specialty_family_ids(
@@ -283,6 +303,105 @@ def _normalize_lookup_value(value: object) -> Optional[str]:
     if not normalized:
         return None
     return normalized
+
+
+def _canonical_lookup_candidates(value: object) -> tuple[str, ...]:
+    raw_value = unicodedata.normalize("NFKC", str(value)).strip()
+    if not raw_value:
+        return ()
+
+    normalized_candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add_candidate(candidate_value: Optional[str]) -> None:
+        normalized_candidate = _normalize_lookup_value(candidate_value)
+        if normalized_candidate is None or normalized_candidate in seen:
+            return
+        seen.add(normalized_candidate)
+        normalized_candidates.append(normalized_candidate)
+
+    raw_phrases = [raw_value]
+    stripped_wrapper = _strip_profession_wrapper(raw_value)
+    if stripped_wrapper is not None:
+        raw_phrases.append(stripped_wrapper)
+
+    for phrase in raw_phrases:
+        for extracted_phrase in _extract_canonicalization_phrases(phrase):
+            add_candidate(extracted_phrase)
+
+    if stripped_wrapper is not None:
+        stripped_wrapper_candidate = _normalize_lookup_value(stripped_wrapper)
+        if stripped_wrapper_candidate is not None:
+            for suffix_candidate in _matching_suffix_candidates(stripped_wrapper_candidate):
+                if suffix_candidate in seen:
+                    continue
+                seen.add(suffix_candidate)
+                normalized_candidates.append(suffix_candidate)
+
+    return tuple(normalized_candidates)
+
+
+def _strip_profession_wrapper(value: str) -> Optional[str]:
+    if "/" not in value:
+        return None
+
+    prefix, remainder = value.split("/", 1)
+    if _normalize_lookup_value(prefix) not in _PROFESSION_WRAPPER_PREFIXES:
+        return None
+
+    cleaned_remainder = remainder.strip()
+    if not cleaned_remainder:
+        return None
+    return cleaned_remainder
+
+
+def _extract_canonicalization_phrases(value: str) -> tuple[str, ...]:
+    phrases: list[str] = []
+    seen: set[str] = set()
+
+    def add_phrase(candidate: Optional[str]) -> None:
+        if candidate is None:
+            return
+        cleaned_candidate = candidate.strip(" ,-/")
+        if not cleaned_candidate:
+            return
+        normalized_candidate = _normalize_lookup_value(cleaned_candidate)
+        if normalized_candidate is None or normalized_candidate in seen:
+            return
+        seen.add(normalized_candidate)
+        phrases.append(cleaned_candidate)
+
+    add_phrase(value)
+
+    parenthetical_matches = re.findall(r"\(([^()]*)\)", value)
+    without_parentheticals = re.sub(r"\([^()]*\)", " ", value)
+    add_phrase(without_parentheticals)
+    for parenthetical_phrase in parenthetical_matches:
+        add_phrase(parenthetical_phrase)
+
+    for candidate in tuple(phrases):
+        comma_parts = [part.strip() for part in candidate.split(",")]
+        if len(comma_parts) > 1:
+            for comma_phrase in comma_parts[1:]:
+                add_phrase(comma_phrase)
+
+    return tuple(phrases)
+
+
+def _matching_suffix_candidates(normalized_value: str) -> tuple[str, ...]:
+    tokens = normalized_value.split()
+    if len(tokens) <= 1:
+        return ()
+
+    suffix_candidates: list[str] = []
+    seen: set[str] = set()
+    for start_index in range(1, len(tokens)):
+        suffix = " ".join(tokens[start_index:])
+        if suffix in seen or suffix not in _SPECIALTY_FAMILY_LOOKUP:
+            continue
+        seen.add(suffix)
+        suffix_candidates.append(suffix)
+    return tuple(suffix_candidates)
 
 
 SPECIALTY_FAMILY_BY_ID = {
