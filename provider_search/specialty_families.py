@@ -116,7 +116,14 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="cardiology",
         label="Cardiology",
-        aliases=("cardiology", "cardiologist"),
+        aliases=(
+            "cardiology",
+            "cardiologist",
+            "cardiovascular disease",
+            "physician/internal medicine, cardiovascular disease",
+            "physician internal medicine cardiovascular disease",
+            "207rc0000x",
+        ),
     ),
     SpecialtyFamily(
         family_id="gastroenterology",

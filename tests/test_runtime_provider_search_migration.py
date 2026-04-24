@@ -1283,6 +1283,56 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             result,
         )
 
+    def test_handle_request_cardiology_95051_admits_live_cardiology_taxonomy_variant(
+        self,
+    ) -> None:
+        live_cardiology_provider = build_canonical_provider(
+            provider_id="provider-cardiology-live",
+            name="Zen Cardiology",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Physician/Internal Medicine, Cardiovascular Disease",
+            specialties=(
+                "Clinic/Center",
+                "Physician/Internal Medicine, Cardiovascular Disease",
+                "207RC0000X",
+            ),
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=_StaticClinicalTablesSource([live_cardiology_provider]),
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=5,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"cardiology 95051","medical_need":true,"location":"95051",'
+                        '"specialties":["Cardiology"],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null,"care_setting":"specialist",'
+                        '"urgency":null,"needs_clarification":false,"follow_up_focus":[]}'
+                    )
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "cardiology 95051",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(result.count("provider-card__title"), 1)
+        self.assertIn('<div class="provider-card__title">1. Zen Cardiology</div>', result)
+
     def test_handle_request_rescues_primary_care_zip_from_malformed_interpret_json(self) -> None:
         primary_care_provider = build_canonical_provider(
             provider_id="provider-primary-care",

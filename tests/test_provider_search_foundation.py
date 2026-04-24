@@ -357,6 +357,24 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
         self.assertEqual(family_ids, ("obstetrics-gynecology",))
 
+    def test_derive_provider_specialty_family_ids_recognizes_live_cardiology_taxonomy_variants(
+        self,
+    ) -> None:
+        live_cardiology_evidence = (
+            "Cardiovascular Disease",
+            "Physician/Internal Medicine, Cardiovascular Disease",
+            "207RC0000X",
+        )
+
+        for evidence in live_cardiology_evidence:
+            with self.subTest(evidence=evidence):
+                family_ids = derive_provider_specialty_family_ids(
+                    specialties=("Clinic/Center", evidence),
+                    taxonomy=evidence,
+                )
+
+                self.assertEqual(family_ids, ("cardiology",))
+
     def test_derive_provider_specialty_family_ids_covers_live_descendants_and_rejects_unrelated_specialties(self) -> None:
         self.assertEqual(
             derive_provider_specialty_family_ids(
