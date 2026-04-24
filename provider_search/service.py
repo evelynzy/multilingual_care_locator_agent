@@ -647,6 +647,13 @@ class ProviderSearchService:
 
             for raw_provider in source_result.providers:
                 provider = normalize_provider(raw_provider)
+                if self._should_require_broad_variant_locality(request) and not (
+                    self._provider_matches_broad_variant_locality(
+                        provider=provider,
+                        zip_hint=request.zip_hint,
+                    )
+                ):
+                    continue
                 self._log_debug_candidate(provider=provider, dataset=dataset)
                 existing_provider = deduped_providers.get(provider.provider_id)
                 if existing_provider is None:
@@ -861,6 +868,55 @@ class ProviderSearchService:
             return False
         city_hint, _, zip_hint = self._extract_location_hints(request.location)
         return bool(zip_hint and not city_hint)
+
+    @staticmethod
+    def _should_require_broad_variant_locality(
+        request: SourceSearchRequest,
+    ) -> bool:
+        return bool(
+            request.zip_hint
+            and not request.city_hint
+            and not request.query_filter
+            and not request.specialty_driven
+        )
+
+    @staticmethod
+    def _provider_matches_broad_variant_locality(
+        *,
+        provider: CanonicalProvider,
+        zip_hint: Optional[str],
+    ) -> bool:
+        normalized_zip_hint = normalize_text(zip_hint)
+        if not normalized_zip_hint:
+            return False
+
+        return any(
+            postal_code.startswith(normalized_zip_hint)
+            for postal_code in ProviderSearchService._extract_provider_postal_codes(provider)
+        )
+
+    @staticmethod
+    def _extract_provider_postal_codes(
+        provider: CanonicalProvider,
+    ) -> set[str]:
+        postal_codes: set[str] = set()
+        candidate_values: list[object] = [
+            provider.raw.get("addr_practice.zip"),
+            provider.raw.get("addr_practice.full"),
+            provider.retrieval_metadata.get("postal_code"),
+            provider.retrieval_metadata.get("zip"),
+            provider.address,
+            provider.location_summary,
+        ]
+
+        for value in candidate_values:
+            normalized_value = normalize_text(value)
+            if not normalized_value:
+                continue
+            for match in re.findall(r"\b\d{5}(?:-\d{4})?\b", normalized_value):
+                postal_codes.add(match[:5])
+
+        return postal_codes
 
     def _build_demo_broad_recall_terms(
         self,
