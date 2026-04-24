@@ -196,7 +196,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
         self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
 
-    def test_build_search_request_keeps_specialty_terms_and_puts_location_in_q_with_sf(self) -> None:
+    def test_build_search_request_uses_punctuation_light_specialty_terms_and_puts_location_in_q_with_sf(self) -> None:
         _, params = self.source.build_search_request(
             "npi_idv",
             SourceSearchRequest(
@@ -208,7 +208,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(params["terms"], "Obstetrics & Gynecology")
+        self.assertEqual(params["terms"], "obstetrics gynecology")
         self.assertEqual(params["q"], "addr_practice.zip:98101")
         self.assertEqual(
             params["sf"],
@@ -222,6 +222,20 @@ class ClinicalTablesSourceTests(unittest.TestCase):
                 ]
             ),
         )
+
+    def test_build_search_request_expands_obgyn_abbreviation_to_punctuation_light_terms(self) -> None:
+        _, params = self.source.build_search_request(
+            "npi_idv",
+            SourceSearchRequest(
+                search_terms="OB/GYN",
+                limit=5,
+                specialty_driven=True,
+                query_filter="addr_practice.zip:98101",
+                zip_hint="98101",
+            ),
+        )
+
+        self.assertEqual(params["terms"], "obstetrics gynecology")
 
     def test_search_dataset_does_not_treat_name_fragment_as_taxonomy_in_mixed_descriptor_payload(
         self,
