@@ -1865,6 +1865,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             state="CA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),
+            raw={"addr_practice.zip": "95051"},
         )
 
         class DemoBroadRecallObgynSource(ObgynZipClinicalTablesSource):
@@ -1936,6 +1937,85 @@ class ProviderSearchServiceTests(unittest.TestCase):
             response.provider_results[0].provider.ranking_metadata.get("matched_specialties"),
             ("OB/GYN",),
         )
+
+    def test_search_zip_only_obgyn_95051_ignores_out_of_area_broad_recall_hits(
+        self,
+    ) -> None:
+        out_of_area_provider = build_canonical_provider(
+            provider_id="provider-obgyn-sf",
+            name="San Francisco OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="San Francisco",
+            state="CA",
+            taxonomy="Obstetrics & Gynecology",
+            specialties=("Obstetrics & Gynecology",),
+            raw={"addr_practice.zip": "94105"},
+        )
+
+        class OutOfAreaBroadRecallObgynSource(ObgynZipClinicalTablesSource):
+            def search_dataset(self, dataset: str, request: object) -> SourceSearchResult:
+                self.calls.append((dataset, request))
+                if dataset != "npi_idv":
+                    return SourceSearchResult(
+                        providers=[],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=0,
+                        ),
+                    )
+                if request.search_terms in {
+                    "OB/GYN",
+                    "Obstetrics & Gynecology",
+                    "Obstetrics & Gynecology 95051",
+                }:
+                    return SourceSearchResult(
+                        providers=[],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=0,
+                        ),
+                    )
+                if request.search_terms == "ob gyn 95051":
+                    return SourceSearchResult(
+                        providers=[out_of_area_provider],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=1,
+                        ),
+                    )
+                raise AssertionError(f"Unexpected search request: {request.search_terms!r}")
+
+        source = OutOfAreaBroadRecallObgynSource([], [])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+
+        response = service.search(
+            ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="95051",
+            ),
+            limit=5,
+        )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertEqual(
+            searched_terms[:4],
+            ["OB/GYN", "Obstetrics & Gynecology", "Obstetrics & Gynecology 95051", "ob gyn 95051"],
+        )
+        self.assertGreaterEqual(len(searched_terms), 4)
+        self.assertEqual(response.provider_results, ())
+        self.assertEqual(response.search_trace.total_candidates, 0)
 
     def test_search_zip_only_obgyn_95051_does_not_stop_on_unrelated_specialty_bearing_first_hit(
         self,

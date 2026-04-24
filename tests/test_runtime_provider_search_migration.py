@@ -1785,6 +1785,115 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertIn("Cupertino OB/GYN Associates", result)
         trusted_fallback.assert_not_called()
 
+    def test_handle_request_obgyn_95051_does_not_accept_out_of_area_broad_recall_hit(
+        self,
+    ) -> None:
+        out_of_area_provider = build_canonical_provider(
+            provider_id="provider-obgyn-sf",
+            name="San Francisco OB/GYN Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="San Francisco",
+            state="CA",
+            taxonomy="Obstetrics & Gynecology",
+            specialties=("Obstetrics & Gynecology",),
+            raw={"addr_practice.zip": "94105"},
+        )
+
+        class _OutOfAreaBroadRecallObgynSource(_ObgynZipClinicalTablesSource):
+            def search_dataset(self, dataset: Any, request: Any) -> SourceSearchResult:
+                self.calls.append((dataset, request))
+                if dataset != "npi_idv":
+                    return SourceSearchResult(
+                        providers=[],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=0,
+                        ),
+                    )
+                if request.search_terms in {
+                    "OB/GYN",
+                    "Obstetrics & Gynecology",
+                    "Obstetrics & Gynecology 95051",
+                }:
+                    return SourceSearchResult(
+                        providers=[],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=0,
+                        ),
+                    )
+                if request.search_terms == "ob gyn 95051":
+                    return SourceSearchResult(
+                        providers=[out_of_area_provider],
+                        trace=SourceTrace(
+                            source_name="clinicaltables",
+                            dataset=dataset,
+                            status_code=200,
+                            result_count=1,
+                        ),
+                    )
+                raise AssertionError(f"Unexpected search request: {request.search_terms!r}")
+
+        source = _OutOfAreaBroadRecallObgynSource([], [])
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            datasets=("npi_idv",),
+            per_dataset_limit=20,
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn 95051",
+            medical_need=True,
+            location="95051",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+        captured: Dict[str, Any] = {}
+
+        def _capture(payload: Dict[str, Any]) -> str:
+            captured["payload"] = payload
+            return "fallback-cards"
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_trusted_resource_fallback",
+            return_value=[{"name": "Trusted fallback", "url": "https://example.com"}],
+        ), patch.object(
+            agent,
+            "_compose_result_card_response",
+            side_effect=_capture,
+        ):
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "ob gyn 95051",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        searched_terms = [request.search_terms for _, request in source.calls]
+        self.assertEqual(
+            searched_terms[:4],
+            ["OB/GYN", "Obstetrics & Gynecology", "Obstetrics & Gynecology 95051", "ob gyn 95051"],
+        )
+        self.assertGreaterEqual(len(searched_terms), 4)
+        self.assertEqual(result, "fallback-cards")
+        self.assertEqual(captured["payload"]["local_results"], [])
+        self.assertEqual(len(captured["payload"]["fallback_results"]), 1)
+        self.assertEqual(captured["payload"]["fallback_results"][0]["name"], "Trusted fallback")
+
     def test_default_carelocatoragent_path_uses_shared_clinicaltables_defaults_for_obgyn_95051(
         self,
     ) -> None:
