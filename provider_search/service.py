@@ -1018,7 +1018,7 @@ class ProviderSearchService:
                 return " AND ".join(filters)
 
         if zip_hint:
-            filters.append(f"addr_practice.zip:{zip_hint}")
+            filters.append(f"addr_practice.zip:{zip_hint}*")
         elif city_hint and state_hint:
             escaped_city = city_hint.replace('"', '\\"')
             filters.append(f'addr_practice.city:"{escaped_city}"')
