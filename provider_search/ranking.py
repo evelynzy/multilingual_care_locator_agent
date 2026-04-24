@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import logging
 import os
@@ -18,6 +19,14 @@ _ACCEPTING_STATUSES = {"accepting", "accepting new patients", "open"}
 _TELEHEALTH_TERMS = {"telehealth", "virtual", "video", "remote", "online"}
 
 
+@dataclass(frozen=True)
+class ProviderGateEvaluation:
+    admitted: bool
+    drop_reason: Optional[str]
+    matched_specialties: tuple[str, ...]
+    matched_keywords: tuple[str, ...]
+
+
 def rank_provider_results(
     request: ProviderSearchRequest,
     providers: Sequence[CanonicalProvider | dict[str, object]],
@@ -33,18 +42,10 @@ def rank_provider_results(
     ranked_results: list[ProviderSearchResult] = []
     for raw_provider in providers:
         provider = normalize_provider(raw_provider)
-        matched_specialties = _match_specialties(normalized_request, provider)
-        matched_keywords = _match_keywords(normalized_request.keywords, provider)
-        if normalized_request.specialties and not matched_specialties:
+        gate_evaluation = evaluate_provider_gate(normalized_request, provider)
+        if not gate_evaluation.admitted:
             _log_gate_drop(
-                reason="specialty_mismatch",
-                request=normalized_request,
-                provider=provider,
-            )
-            continue
-        if normalized_request.keywords and not normalized_request.specialties and not matched_keywords:
-            _log_gate_drop(
-                reason="keyword_mismatch",
+                reason=gate_evaluation.drop_reason or "filtered",
                 request=normalized_request,
                 provider=provider,
             )
@@ -52,8 +53,8 @@ def rank_provider_results(
         breakdown = _build_score_breakdown(
             normalized_request,
             provider,
-            matched_specialties=matched_specialties,
-            matched_keywords=matched_keywords,
+            matched_specialties=gate_evaluation.matched_specialties,
+            matched_keywords=gate_evaluation.matched_keywords,
         )
         score = round(sum(breakdown.values()), 6)
         ranking_metadata = dict(provider.ranking_metadata)
@@ -62,8 +63,8 @@ def rank_provider_results(
                 "ranking_version": RANKING_VERSION,
                 "score_breakdown": breakdown,
                 "cached_identity_match": provider.provider_id in cached_ids,
-                "matched_specialties": matched_specialties,
-                "matched_keywords": matched_keywords,
+                "matched_specialties": gate_evaluation.matched_specialties,
+                "matched_keywords": gate_evaluation.matched_keywords,
                 "matched_languages": _match_values(
                     normalized_request.preferred_languages,
                     provider.languages,
@@ -94,6 +95,36 @@ def rank_provider_results(
     if limit is None:
         return ranked_results
     return ranked_results[: max(limit, 0)]
+
+
+def evaluate_provider_gate(
+    request: ProviderSearchRequest,
+    provider: CanonicalProvider | dict[str, object],
+) -> ProviderGateEvaluation:
+    normalized_request = normalize_search_request(request)
+    normalized_provider = normalize_provider(provider)
+    matched_specialties = _match_specialties(normalized_request, normalized_provider)
+    matched_keywords = _match_keywords(normalized_request.keywords, normalized_provider)
+    if normalized_request.specialties and not matched_specialties:
+        return ProviderGateEvaluation(
+            admitted=False,
+            drop_reason="specialty_mismatch",
+            matched_specialties=matched_specialties,
+            matched_keywords=matched_keywords,
+        )
+    if normalized_request.keywords and not normalized_request.specialties and not matched_keywords:
+        return ProviderGateEvaluation(
+            admitted=False,
+            drop_reason="keyword_mismatch",
+            matched_specialties=matched_specialties,
+            matched_keywords=matched_keywords,
+        )
+    return ProviderGateEvaluation(
+        admitted=True,
+        drop_reason=None,
+        matched_specialties=matched_specialties,
+        matched_keywords=matched_keywords,
+    )
 
 
 def _build_score_breakdown(

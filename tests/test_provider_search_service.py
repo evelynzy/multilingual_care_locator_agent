@@ -11,7 +11,7 @@ from provider_search.models import (
     SourceTrace,
     VerificationStatus,
 )
-from provider_search.normalization import build_canonical_provider
+from provider_search.normalization import build_canonical_provider, build_request_fingerprint
 from provider_search.ranking import RANKING_VERSION, rank_provider_results
 from provider_search.service import ProviderSearchService
 from provider_search.sources.clinicaltables import ClinicalTablesSource
@@ -1257,7 +1257,122 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertIn("provider_search_debug_source dataset=npi_org result_count=1 error=none", joined_logs)
         self.assertIn("provider_search_debug_display", joined_logs)
         self.assertIn("display_dedupe_count=2", joined_logs)
-        self.assertIn("display_dedupe_provider_ids=['1111111111', '2222222222']", joined_logs)
+        self.assertIn("display_dedupe_provider_keys=", joined_logs)
+        self.assertNotIn("provider_search_debug_candidate_detail", joined_logs)
+        self.assertNotIn("1111111111", joined_logs)
+        self.assertNotIn("2222222222", joined_logs)
+
+    def test_search_emits_scoped_candidate_dump_when_fingerprint_matches(self) -> None:
+        request = ProviderSearchRequest(
+            specialties=("Primary Care",),
+            location="Dallas, TX 75001",
+        )
+        admitted_provider = build_canonical_provider(
+            provider_id="provider-primary-care",
+            name="Dallas Family Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+        )
+        dropped_provider = build_canonical_provider(
+            provider_id="provider-radiology",
+            name="Downtown Imaging Associates",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Diagnostic Radiology",
+            specialties=("Diagnostic Radiology",),
+        )
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[admitted_provider, dropped_provider],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=2),
+                ),
+                "npi_org": SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_org", result_count=0),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            per_dataset_limit=5,
+        )
+        request_fingerprint = build_request_fingerprint(request)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "PROVIDER_SEARCH_DEBUG": "1",
+                "CARE_LOCATOR_LOCAL_DEBUG": "1",
+                "PROVIDER_SEARCH_DEBUG_FINGERPRINT": request_fingerprint,
+            },
+        ):
+            with self.assertLogs("provider_search.service", level="INFO") as captured:
+                service.search(request, limit=5)
+
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("provider_search_debug_candidate_detail", joined_logs)
+        self.assertIn("gate_outcome=admitted", joined_logs)
+        self.assertIn("gate_outcome=dropped", joined_logs)
+        self.assertIn("drop_reason=specialty_mismatch", joined_logs)
+        self.assertNotIn("Dallas Family Clinic", joined_logs)
+        self.assertNotIn("Downtown Imaging Associates", joined_logs)
+        self.assertNotIn("75001", joined_logs)
+
+    def test_search_does_not_emit_scoped_candidate_dump_when_fingerprint_does_not_match(self) -> None:
+        request = ProviderSearchRequest(
+            specialties=("Primary Care",),
+            location="Dallas, TX 75001",
+        )
+        provider = build_canonical_provider(
+            provider_id="provider-primary-care",
+            name="Dallas Family Clinic",
+            source_name="ClinicalTables",
+            dataset="npi_idv",
+            city="Dallas",
+            state="TX",
+            taxonomy="Primary Care",
+            specialties=("Primary Care",),
+        )
+        source = FakeClinicalTablesSource(
+            {
+                "npi_idv": SourceSearchResult(
+                    providers=[provider],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=1),
+                ),
+                "npi_org": SourceSearchResult(
+                    providers=[],
+                    trace=SourceTrace(source_name="clinicaltables", dataset="npi_org", result_count=0),
+                ),
+            }
+        )
+        service = ProviderSearchService(
+            clinicaltables_source=source,
+            cache=None,
+            per_dataset_limit=5,
+        )
+
+        with patch.dict(
+            "os.environ",
+            {
+                "PROVIDER_SEARCH_DEBUG": "1",
+                "CARE_LOCATOR_LOCAL_DEBUG": "1",
+                "PROVIDER_SEARCH_DEBUG_FINGERPRINT": "not-the-request-fingerprint",
+            },
+        ):
+            with self.assertLogs("provider_search.service", level="INFO") as captured:
+                service.search(request, limit=5)
+
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("provider_search_debug_plan", joined_logs)
+        self.assertNotIn("provider_search_debug_candidate_detail", joined_logs)
 
     def test_search_degrades_when_cache_backend_fails(self) -> None:
         provider = build_canonical_provider(

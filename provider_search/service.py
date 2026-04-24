@@ -25,7 +25,7 @@ from provider_search.normalization import (
     normalize_search_result,
     normalize_text,
 )
-from provider_search.ranking import rank_provider_results
+from provider_search.ranking import evaluate_provider_gate, rank_provider_results
 from provider_search.specialty_families import (
     SPECIALTY_FAMILY_BY_ID,
     derive_request_specialty_family_ids,
@@ -157,6 +157,11 @@ class ProviderSearchService:
                 limit=None,
                 cache_entry=cache_entry,
             )
+        self._log_scoped_candidate_details(
+            request_fingerprint=request_fingerprint,
+            request=normalized_request,
+            providers=deduped_providers.values(),
+        )
         display_results = self._dedupe_display_results(ranked_results)
         if limit is not None:
             display_results = display_results[: max(limit, 0)]
@@ -253,11 +258,16 @@ class ProviderSearchService:
             display_dedupe_count = result.retriever_metadata.get("display_dedupe_count")
             display_dedupe_ids = result.retriever_metadata.get("display_dedupe_provider_ids")
             if display_dedupe_count or display_dedupe_ids:
+                display_dedupe_keys = tuple(
+                    self._provider_debug_key(str(provider_id))
+                    for provider_id in display_dedupe_ids or ()
+                    if provider_id
+                )
                 logger.info(
-                    "provider_search_debug_display provider_id=%s display_dedupe_count=%s display_dedupe_provider_ids=%s",
-                    result.provider.provider_id,
+                    "provider_search_debug_display provider_key=%s display_dedupe_count=%s display_dedupe_provider_keys=%s",
+                    self._provider_debug_key(result.provider.provider_id),
                     display_dedupe_count or 0,
-                    display_dedupe_ids or [],
+                    display_dedupe_keys,
                 )
 
     def _log_debug_plan(
@@ -271,16 +281,13 @@ class ProviderSearchService:
             return
 
         logger.info(
-            "provider_search_debug_plan request_fingerprint=%s specialties=%s requested_family_ids=%s location_present=%s keywords=%s variants=%s",
+            "provider_search_debug_plan request_fingerprint=%s specialties=%s requested_family_ids=%s location_present=%s keyword_count=%s variants=%s",
             request_fingerprint,
             tuple(request.specialties),
             tuple(request.specialty_family_ids),
             bool(request.location),
-            tuple(request.keywords),
-            tuple(
-                (source_request.search_terms, source_request.query_filter or "")
-                for source_request in planned_requests
-            ),
+            len(request.keywords),
+            tuple(self._debug_variant_signature(source_request) for source_request in planned_requests),
         )
 
     def _log_debug_variant_result(
@@ -294,9 +301,9 @@ class ProviderSearchService:
             return
 
         logger.info(
-            "provider_search_debug_variant terms=%s filter=%s traces=%s candidates=%s",
-            source_request.search_terms,
-            source_request.query_filter or "",
+            "provider_search_debug_variant terms_key=%s filter_shape=%s traces=%s candidates=%s",
+            self._debug_text_key(source_request.search_terms),
+            self._debug_query_filter_shape(source_request.query_filter),
             tuple(
                 (trace.dataset or "unknown", trace.result_count, bool(trace.error))
                 for trace in source_traces
@@ -315,10 +322,10 @@ class ProviderSearchService:
             return
 
         logger.info(
-            "provider_search_debug_variant_stop reason=%s terms=%s filter=%s candidate_count=%s",
+            "provider_search_debug_variant_stop reason=%s terms_key=%s filter_shape=%s candidate_count=%s",
             reason,
-            source_request.search_terms,
-            source_request.query_filter or "",
+            self._debug_text_key(source_request.search_terms),
+            self._debug_query_filter_shape(source_request.query_filter),
             candidate_count,
         )
 
@@ -346,6 +353,31 @@ class ProviderSearchService:
                 )
             ),
         )
+
+    def _log_scoped_candidate_details(
+        self,
+        *,
+        request_fingerprint: str,
+        request: ProviderSearchRequest,
+        providers: Sequence[CanonicalProvider],
+    ) -> None:
+        if not self._scoped_debug_enabled(request_fingerprint):
+            return
+
+        for provider in sorted(providers, key=lambda candidate: candidate.provider_id):
+            gate_evaluation = evaluate_provider_gate(request, provider)
+            logger.info(
+                "provider_search_debug_candidate_detail request_fingerprint=%s provider_key=%s source=%s dataset=%s taxonomy=%s specialties=%s family_ids=%s gate_outcome=%s drop_reason=%s",
+                request_fingerprint,
+                self._provider_debug_key(provider.provider_id),
+                provider.source or "",
+                self._debug_provider_dataset(provider),
+                provider.taxonomy or "",
+                tuple(provider.specialties[:8]),
+                tuple(provider.specialty_family_ids),
+                "admitted" if gate_evaluation.admitted else "dropped",
+                gate_evaluation.drop_reason or "none",
+            )
 
     def _dedupe_display_results(
         self,
@@ -1153,8 +1185,69 @@ class ProviderSearchService:
             and os.getenv("CARE_LOCATOR_LOCAL_DEBUG", "").strip() == "1"
         )
 
+    def _scoped_debug_enabled(self, request_fingerprint: str) -> bool:
+        if not self._debug_enabled():
+            return False
+        selector = os.getenv("PROVIDER_SEARCH_DEBUG_FINGERPRINT", "").strip()
+        return bool(selector) and selector == request_fingerprint
+
     @staticmethod
     def _provider_debug_key(provider_id: str) -> str:
         if not provider_id:
             return "missing"
         return hashlib.sha1(str(provider_id).encode("utf-8")).hexdigest()[:8]
+
+    @staticmethod
+    def _debug_text_key(value: Optional[str]) -> str:
+        normalized_value = normalize_text(value)
+        if not normalized_value:
+            return "missing"
+        return hashlib.sha1(normalized_value.encode("utf-8")).hexdigest()[:8]
+
+    def _debug_variant_signature(
+        self,
+        source_request: SourceSearchRequest,
+    ) -> tuple[str, str]:
+        return (
+            self._debug_text_key(source_request.search_terms),
+            self._debug_query_filter_shape(source_request.query_filter),
+        )
+
+    @staticmethod
+    def _debug_query_filter_shape(query_filter: Optional[str]) -> str:
+        normalized_filter = normalize_text(query_filter)
+        if not normalized_filter:
+            return "none"
+
+        fragments: list[str] = []
+        if "addr_practice.city" in normalized_filter:
+            fragments.append("city")
+        if "addr_practice.state" in normalized_filter:
+            fragments.append("state")
+        if "addr_practice.zip" in normalized_filter:
+            fragments.append("zip")
+        if not fragments:
+            return "other"
+        if " AND " in normalized_filter:
+            return "+".join(fragments)
+        return fragments[0]
+
+    @staticmethod
+    def _debug_dataset_from_mapping(mapping: object) -> str:
+        if not isinstance(mapping, dict):
+            return ""
+        dataset = mapping.get("dataset")
+        if isinstance(dataset, str):
+            return dataset
+        return ""
+
+    def _debug_provider_dataset(self, provider: CanonicalProvider) -> str:
+        freshness_dataset = provider.freshness.dataset if provider.freshness is not None else None
+        for candidate in (
+            freshness_dataset,
+            self._debug_dataset_from_mapping(provider.provenance),
+            self._debug_dataset_from_mapping(provider.retrieval_metadata),
+        ):
+            if candidate:
+                return candidate
+        return ""
