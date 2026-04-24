@@ -329,7 +329,7 @@ def _canonical_lookup_candidates(value: object) -> tuple[str, ...]:
         for extracted_phrase in _extract_canonicalization_phrases(phrase):
             add_candidate(extracted_phrase)
 
-    if stripped_wrapper is not None:
+    if stripped_wrapper is not None and "," not in stripped_wrapper:
         stripped_wrapper_candidate = _normalize_lookup_value(stripped_wrapper)
         if stripped_wrapper_candidate is not None:
             for suffix_candidate in _matching_suffix_candidates(stripped_wrapper_candidate):
@@ -381,9 +381,25 @@ def _extract_canonicalization_phrases(value: str) -> tuple[str, ...]:
 
     for candidate in tuple(phrases):
         comma_parts = [part.strip() for part in candidate.split(",")]
-        if len(comma_parts) > 1:
-            for comma_phrase in comma_parts[1:]:
-                add_phrase(comma_phrase)
+        if len(comma_parts) <= 1:
+            continue
+
+        head_phrase = comma_parts[0]
+        add_phrase(head_phrase)
+
+        normalized_head_candidates = [_normalize_lookup_value(head_phrase)]
+        stripped_head_phrase = _strip_profession_wrapper(head_phrase)
+        if stripped_head_phrase is not None:
+            normalized_head_candidates.append(_normalize_lookup_value(stripped_head_phrase))
+
+        if any(
+            normalized_head_candidate and normalized_head_candidate in _SPECIALTY_FAMILY_LOOKUP
+            for normalized_head_candidate in normalized_head_candidates
+        ):
+            continue
+
+        for comma_phrase in comma_parts[1:]:
+            add_phrase(comma_phrase)
 
     return tuple(phrases)
 

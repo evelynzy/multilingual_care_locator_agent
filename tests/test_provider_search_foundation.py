@@ -347,7 +347,7 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
                 self.assertEqual(family_ids, ("obstetrics-gynecology",))
 
-    def test_derive_provider_specialty_family_ids_recognizes_physician_prefixed_live_obgyn_taxonomy(
+    def test_derive_provider_specialty_family_ids_recognizes_wrapped_live_taxonomy_variants(
         self,
     ) -> None:
         live_taxonomy_variants = (
@@ -381,6 +381,17 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
                 )
 
                 self.assertEqual(family_ids, expected_family_ids)
+
+    def test_derive_provider_specialty_family_ids_does_not_overmatch_wrapped_compound_taxonomy_tails(
+        self,
+    ) -> None:
+        family_ids = derive_provider_specialty_family_ids(
+            specialties=("Clinic/Center", "Physician/Family Medicine, Sports Medicine"),
+            taxonomy="Physician/Family Medicine, Sports Medicine",
+        )
+
+        self.assertEqual(family_ids, ("primary-care",))
+        self.assertNotIn("orthopedics", family_ids)
 
     def test_derive_provider_specialty_family_ids_rejects_unmatched_wrapped_taxonomy_variants(
         self,
