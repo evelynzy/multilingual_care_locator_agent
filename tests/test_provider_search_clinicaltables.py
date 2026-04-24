@@ -100,6 +100,41 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(fields, ["name.full", "NPI", "provider_type"])
         self.assertEqual(entries, [])
 
+    def test_parse_search_payload_uses_dataset_field_order_when_live_v3_payload_omits_descriptors(
+        self,
+    ) -> None:
+        payload = [
+            1,
+            ["1619271780"],
+            None,
+            [[
+                "Cupertino OB/GYN Associates",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "",
+                "",
+                "",
+                "Santa Clara",
+                "CA",
+                "95051",
+                "",
+                "408-555-0100",
+                ["English"],
+            ]],
+        ]
+
+        fields, entries = self.source.parse_search_payload("npi_idv", payload)
+
+        self.assertEqual(fields, DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields)
+        self.assertEqual(entries, payload[3])
+
     def test_search_dataset_builds_request_and_normalizes_provider(self) -> None:
         response = Mock()
         response.status_code = 200
@@ -194,6 +229,57 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         provider = result.providers[0]
         self.assertEqual(provider.name, "Cupertino OB/GYN Associates")
         self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
+        self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
+
+    def test_search_dataset_accepts_live_v3_payload_shape_without_field_descriptors(self) -> None:
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [
+            1,
+            ["1619271780"],
+            None,
+            [[
+                "Cupertino OB/GYN Associates",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "1619271780",
+                "",
+                "Obstetrics & Gynecology",
+                "207V00000X",
+                "",
+                "",
+                "",
+                "Santa Clara",
+                "CA",
+                "95051",
+                "",
+                "408-555-0100",
+                ["English"],
+            ]],
+        ]
+        response.raise_for_status.return_value = None
+
+        session = Mock()
+        session.get.return_value = response
+        source = ClinicalTablesSource(session=session)
+
+        result = source.search_dataset(
+            "npi_idv",
+            SourceSearchRequest(search_terms="ob gyn", limit=1, zip_hint="95051"),
+        )
+
+        self.assertEqual(result.trace.result_count, 1)
+        provider = result.providers[0]
+        self.assertEqual(provider.provider_id, "1619271780")
+        self.assertEqual(provider.name, "Cupertino OB/GYN Associates")
+        self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
+        self.assertIn("Santa Clara", provider.location_summary or "")
+        self.assertIn("95051", provider.location_summary or "")
+        self.assertEqual(provider.phone, "408-555-0100")
+        self.assertIn("English", provider.languages)
         self.assertEqual(provider.specialty_family_ids, ("obstetrics-gynecology",))
 
     def test_build_search_request_uses_punctuation_light_specialty_terms_and_puts_location_in_q_with_sf(self) -> None:
