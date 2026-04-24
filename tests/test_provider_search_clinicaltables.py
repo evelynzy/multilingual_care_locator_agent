@@ -139,6 +139,21 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(fields, DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields)
         self.assertEqual(entries, payload[3])
 
+    def test_parse_search_payload_accepts_tuple_container_for_live_v3_null_descriptor_shape(
+        self,
+    ) -> None:
+        payload = (
+            1,
+            ("1619271780",),
+            None,
+            (_live_v3_obgyn_row(),),
+        )
+
+        fields, entries = self.source.parse_search_payload("npi_idv", payload)
+
+        self.assertEqual(fields, DEFAULT_DATASET_CONFIGS["npi_idv"].result_fields)
+        self.assertEqual(entries, [list(payload[3][0])])
+
     def test_parse_search_payload_skips_non_row_entries_when_live_v3_payload_omits_descriptors(
         self,
     ) -> None:
