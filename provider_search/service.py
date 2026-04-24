@@ -483,6 +483,27 @@ class ProviderSearchService:
                 )
             )
 
+        broad_recall_terms = self._build_demo_broad_recall_terms(
+            request,
+            location_only=location_only,
+            relax_location_filter=relax_location_filter,
+            city_hint=city_hint,
+            zip_hint=zip_hint,
+        )
+        if broad_recall_terms and broad_recall_terms not in seen_terms:
+            planned_requests.append(
+                SourceSearchRequest(
+                    search_terms=broad_recall_terms,
+                    limit=max(limit, self.per_dataset_limit),
+                    specialty_driven=False,
+                    request_fingerprint=build_request_fingerprint(request),
+                    query_filter=None,
+                    city_hint=city_hint,
+                    state_hint=state_hint,
+                    zip_hint=zip_hint,
+                )
+            )
+
         if planned_requests:
             return planned_requests
         return [
@@ -840,6 +861,43 @@ class ProviderSearchService:
             return False
         city_hint, _, zip_hint = self._extract_location_hints(request.location)
         return bool(zip_hint and not city_hint)
+
+    def _build_demo_broad_recall_terms(
+        self,
+        request: ProviderSearchRequest,
+        *,
+        location_only: bool,
+        relax_location_filter: bool,
+        city_hint: Optional[str],
+        zip_hint: Optional[str],
+    ) -> Optional[str]:
+        if location_only or relax_location_filter:
+            return None
+        if not request.specialties or not zip_hint or city_hint:
+            return None
+
+        specialty_seed = self._build_demo_specialty_seed(request.specialties)
+        if not specialty_seed:
+            return None
+        return f"{specialty_seed} {zip_hint}".strip()
+
+    @staticmethod
+    def _build_demo_specialty_seed(specialties: Sequence[str]) -> str:
+        cleaned_specialties = tuple(
+            term.strip() for term in specialties if isinstance(term, str) and term.strip()
+        )
+        if not cleaned_specialties:
+            return ""
+
+        joined_specialties = " ".join(cleaned_specialties)
+        normalized_specialties = normalize_text(joined_specialties, lowercase=True)
+        if not normalized_specialties:
+            return ""
+        if normalized_specialties in {"ob/gyn", "ob-gyn", "ob gyn", "obgyn"}:
+            return "ob gyn"
+
+        punctuation_light = re.sub(r"[^a-z0-9]+", " ", normalized_specialties).strip()
+        return punctuation_light or normalized_specialties
 
     @staticmethod
     def _canonical_specialty_search_term(specialty: str) -> str:
