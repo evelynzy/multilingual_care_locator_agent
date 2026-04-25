@@ -508,9 +508,9 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("**Trusted resources and fallback options:**", response)
         self.assertIn("1. **Medicare Care Compare**: Region: Pittsburgh, PA", response)
         self.assertIn("; Source: Trusted public directories", response)
-        self.assertIn("; Website: https://www.medicare.gov/care-compare/", response)
+        self.assertIn(r"; Website: https://www\.medicare\.gov/care\-compare/", response)
         self.assertIn(
-            "; Details: Compare clinicians and facilities using Medicare's public directory.",
+            r"; Details: Compare clinicians and facilities using Medicare's public directory\.",
             response,
         )
         self.assertNotIn('provider-card__title">2. Medicare Care Compare</div>', response)
@@ -531,6 +531,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
                     "source": "Trusted public directories",
                 }
             ],
+            "verification_guidance": "Call the provider and insurer to confirm network status.",
         }
 
         response = self.agent._compose_result_card_response(payload)
@@ -541,6 +542,36 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertNotIn("Why matched</span>", response)
         self.assertNotIn("Appointment availability</span>", response)
         self.assertNotIn("Listed insurance</span>", response)
+        self.assertNotIn("**Before you contact a provider:**", response)
+        self.assertNotIn("Call the provider and insurer to confirm network status.", response)
+
+    def test_compose_result_card_response_escapes_fallback_resource_fields(self) -> None:
+        payload = {
+            "query": {
+                "response_language": "English",
+                "summary": "primary care in Pittsburgh",
+            },
+            "local_results": [],
+            "fallback_results": [
+                {
+                    "name": "Medicare **Care** Compare [Official]",
+                    "location": "Pittsburgh, PA (Metro)",
+                    "website": "https://example.com/care(compare)",
+                    "description": "Use *trusted* public data > call first.",
+                    "source": "Trusted [public] directories",
+                }
+            ],
+        }
+
+        response = self.agent._compose_result_card_response(payload)
+
+        self.assertIn(r"1. **Medicare \*\*Care\*\* Compare \[Official\]**", response)
+        self.assertIn(r"Region: Pittsburgh, PA \(Metro\)", response)
+        self.assertIn(r"Source: Trusted \[public\] directories", response)
+        self.assertIn(r"Website: https://example\.com/care\(compare\)", response)
+        self.assertIn(r"Details: Use \*trusted\* public data \> call first\.", response)
+        self.assertNotIn("Medicare **Care** Compare [Official]", response)
+        self.assertNotIn("Use *trusted* public data > call first.", response)
 
     def test_compose_response_appends_required_trust_guidance(self) -> None:
         client = self._client_with_response("Model-rendered answer.")

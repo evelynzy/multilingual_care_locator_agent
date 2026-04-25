@@ -1079,7 +1079,7 @@ class CareLocatorAgent:
             payload.get("verification_guidance") or "",
             language_key,
         )
-        if verification_guidance:
+        if verification_guidance and local_results:
             lines.extend(
                 [
                     "",
@@ -1099,16 +1099,18 @@ class CareLocatorAgent:
         index: int,
         language_key: str = "english",
     ) -> str:
-        name = self._clean_card_value(result.get("name")) or self._render_copy(
-            language_key,
-            "result_title_fallback",
-            index=index,
+        name = self._escape_markdown_text(
+            self._clean_card_value(result.get("name")) or self._render_copy(
+                language_key,
+                "result_title_fallback",
+                index=index,
+            )
         )
-        location = self._clean_card_value(result.get("location"))
-        website = self._clean_card_value(result.get("website"))
-        description = self._clean_card_value(result.get("description"))
+        location = self._escape_markdown_text(self._clean_card_value(result.get("location")))
+        website = self._escape_markdown_text(self._clean_card_value(result.get("website")))
+        description = self._escape_markdown_text(self._clean_card_value(result.get("description")))
         provenance = result.get("provenance") if isinstance(result.get("provenance"), dict) else {}
-        source = (
+        source = self._escape_markdown_text(
             self._clean_card_value(provenance.get("source"))
             or self._clean_card_value(result.get("source"))
             or self._render_copy(language_key, "unknown_source")
@@ -1497,6 +1499,14 @@ class CareLocatorAgent:
         if isinstance(value, list):
             return ", ".join(str(item).strip() for item in value if str(item).strip())
         return str(value).strip()
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _escape_markdown_text(value: str) -> str:
+        if not value:
+            return ""
+        escaped = value.replace("\\", "\\\\")
+        return re.sub(r"([`*_{}\[\]()#+.!|>~-])", r"\\\1", escaped)
 
     # ------------------------------------------------------------------
     def _interpret_user_need(
