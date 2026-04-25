@@ -142,6 +142,9 @@ _DETERMINISTIC_RENDER_COPY = {
         "result_title_fallback": "Result {index}",
         "care_route_label": "Care route",
         "referral_note_label": "Referral note",
+        "fallback_resources_label": "Trusted resources and fallback options",
+        "resource_region_label": "Region",
+        "resource_description_label": "Details",
         "note_label": "Note",
         "before_contact_label": "Before you contact a provider",
         "specialty_type_label": "Specialty/type",
@@ -184,6 +187,9 @@ _DETERMINISTIC_RENDER_COPY = {
         "result_title_fallback": "Resultado {index}",
         "care_route_label": "Ruta de atención",
         "referral_note_label": "Nota sobre remisión",
+        "fallback_resources_label": "Recursos confiables y opciones de respaldo",
+        "resource_region_label": "Región",
+        "resource_description_label": "Detalles",
         "note_label": "Nota",
         "before_contact_label": "Antes de contactar a un proveedor",
         "specialty_type_label": "Especialidad/tipo",
@@ -226,6 +232,9 @@ _DETERMINISTIC_RENDER_COPY = {
         "result_title_fallback": "结果{index}",
         "care_route_label": "就医路线",
         "referral_note_label": "转诊提示",
+        "fallback_resources_label": "可信资源与备用选项",
+        "resource_region_label": "适用地区",
+        "resource_description_label": "说明",
         "note_label": "说明",
         "before_contact_label": "联系机构前",
         "specialty_type_label": "专科/类型",
@@ -995,9 +1004,8 @@ class CareLocatorAgent:
         )
         language_key = _resolved_supported_language_key(response_language)
         summary = self._clean_card_value(query.get("summary")) or "your care search"
-        results = list(payload.get("local_results") or []) + list(
-            payload.get("fallback_results") or []
-        )
+        local_results = list(payload.get("local_results") or [])
+        fallback_results = list(payload.get("fallback_results") or [])
 
         lines = [self._render_copy(language_key, "results_intro", summary=summary)]
 
@@ -1033,7 +1041,7 @@ class CareLocatorAgent:
                 ["", f"**{self._render_copy(language_key, 'note_label')}:** {notes}"]
             )
 
-        for index, result in enumerate(results, start=1):
+        for index, result in enumerate(local_results, start=1):
             if isinstance(result, dict):
                 lines.extend(
                     [
@@ -1046,6 +1054,26 @@ class CareLocatorAgent:
                         ),
                     ]
                 )
+
+        if fallback_results:
+            lines.extend(
+                [
+                    "",
+                    f"**{self._render_copy(language_key, 'fallback_resources_label')}:**",
+                ]
+            )
+            for index, result in enumerate(fallback_results, start=1):
+                if isinstance(result, dict):
+                    lines.extend(
+                        [
+                            "",
+                            self._format_fallback_resource_entry(
+                                result,
+                                index,
+                                language_key=language_key,
+                            ),
+                        ]
+                    )
 
         verification_guidance = self._translate_deterministic_text(
             payload.get("verification_guidance") or "",
@@ -1063,6 +1091,46 @@ class CareLocatorAgent:
             "\n".join(lines).strip(),
             response_language,
         )
+
+    # ------------------------------------------------------------------
+    def _format_fallback_resource_entry(
+        self,
+        result: Dict[str, Any],
+        index: int,
+        language_key: str = "english",
+    ) -> str:
+        name = self._clean_card_value(result.get("name")) or self._render_copy(
+            language_key,
+            "result_title_fallback",
+            index=index,
+        )
+        location = self._clean_card_value(result.get("location"))
+        website = self._clean_card_value(result.get("website"))
+        description = self._clean_card_value(result.get("description"))
+        provenance = result.get("provenance") if isinstance(result.get("provenance"), dict) else {}
+        source = (
+            self._clean_card_value(provenance.get("source"))
+            or self._clean_card_value(result.get("source"))
+            or self._render_copy(language_key, "unknown_source")
+        )
+
+        details = []
+        if location:
+            details.append(
+                f"{self._render_copy(language_key, 'resource_region_label')}: {location}"
+            )
+        details.append(f"{self._render_copy(language_key, 'source_label')}: {source}")
+        if website:
+            details.append(f"{self._render_copy(language_key, 'website_label')}: {website}")
+        if description:
+            details.append(
+                f"{self._render_copy(language_key, 'resource_description_label')}: {description}"
+            )
+
+        resource_entry = f"{index}. **{name}**"
+        if details:
+            resource_entry = f"{resource_entry}: {'; '.join(details)}"
+        return resource_entry
 
     # ------------------------------------------------------------------
     def _format_provider_result_card(
