@@ -1623,7 +1623,7 @@ class CareLocatorAgent:
     def _rescue_interpret_payload_from_message(self, message: str) -> Dict[str, Any]:
         rescued_payload = self._default_interpret_payload(message)
         rescued_location = self._rescue_location_from_message(message)
-        rescued_specialties = self._rescue_specialties_from_message(message)
+        rescued_specialties = self._specialties_from_message(message)
 
         if rescued_location:
             rescued_payload["location"] = rescued_location
@@ -1683,7 +1683,7 @@ class CareLocatorAgent:
         if self._has_explicit_procedure_code_intent(parsed_payload, message):
             return parsed_payload
 
-        rescued_specialties = self._reconcile_specialties_from_message(message)
+        rescued_specialties = self._specialties_from_message(message)
         if not rescued_specialties:
             return parsed_payload
 
@@ -1695,39 +1695,40 @@ class CareLocatorAgent:
         )
         return reconciled_payload
 
-    def _reconcile_specialties_from_message(self, message: str) -> List[str]:
-        family_id = self._best_specialty_family_id_from_message(message)
-        if family_id is None:
+    def _specialties_from_message(self, message: str) -> List[str]:
+        family_ids = self._specialty_family_ids_from_message(message)
+        if len(family_ids) == 1:
+            family = SPECIALTY_FAMILY_BY_ID.get(family_ids[0])
+            if family is not None:
+                display_label = _INTERPRET_SPECIALTY_LABEL_OVERRIDES.get(
+                    family.family_id,
+                    family.label,
+                )
+                return [display_label]
+        if len(family_ids) > 1:
             return []
 
-        family = SPECIALTY_FAMILY_BY_ID.get(family_id)
-        if family is None:
-            return []
+        return self._fallback_specialties_from_message(message)
 
-        display_label = _INTERPRET_SPECIALTY_LABEL_OVERRIDES.get(
-            family_id,
-            family.label,
-        )
-        return [display_label]
-
-    def _best_specialty_family_id_from_message(self, message: str) -> Optional[str]:
-        tokens = self._specialty_reconciliation_tokens(message)
+    def _specialty_family_ids_from_message(self, message: str) -> tuple[str, ...]:
+        tokens = self._specialty_message_tokens(message)
         if not tokens:
-            return None
+            return ()
 
         max_alias_tokens = max(
             (
-                len(self._specialty_reconciliation_tokens(candidate))
+                len(self._specialty_message_tokens(candidate))
                 for family in SPECIALTY_FAMILY_BY_ID.values()
                 for candidate in (family.label, *family.aliases)
-                if self._specialty_reconciliation_tokens(candidate)
+                if self._specialty_message_tokens(candidate)
             ),
             default=0,
         )
         if max_alias_tokens <= 0:
-            return None
+            return ()
 
-        matches: list[tuple[int, int, str]] = []
+        family_ids: List[str] = []
+        seen_family_ids: set[str] = set()
         for start_index in range(len(tokens)):
             max_length = min(max_alias_tokens, len(tokens) - start_index)
             for length in range(max_length, 0, -1):
@@ -1735,26 +1736,28 @@ class CareLocatorAgent:
                 family_id = normalize_specialty_family_id(phrase)
                 if family_id is None:
                     continue
-                matches.append((length, start_index, family_id))
+                if family_id in seen_family_ids:
+                    break
+                seen_family_ids.add(family_id)
+                family_ids.append(family_id)
+                break
 
-        if not matches:
-            return None
+        return tuple(family_ids)
 
-        best_length = max(length for length, _, _ in matches)
-        best_matches = [
-            (start_index, family_id)
-            for length, start_index, family_id in matches
-            if length == best_length
-        ]
-        best_family_ids = {family_id for _, family_id in best_matches}
-        if len(best_family_ids) != 1:
-            return None
+    def _fallback_specialties_from_message(self, message: str) -> List[str]:
+        rescued_specialties: List[str] = []
+        normalized_message = message.lower()
+        for alias, specialty in _INTERPRET_RESCUE_SPECIALTY_ALIASES:
+            if self._contains_phrase(normalized_message, alias):
+                rescued_specialties.append(specialty)
 
-        best_matches.sort()
-        return best_matches[0][1]
+        deduped_specialties = self._dedupe_preserve_order(rescued_specialties)
+        if len(deduped_specialties) > 1:
+            return []
+        return deduped_specialties
 
     @staticmethod
-    def _specialty_reconciliation_tokens(value: object) -> List[str]:
+    def _specialty_message_tokens(value: object) -> List[str]:
         normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
         normalized = normalized.replace("&", " and ")
         tokens = [
@@ -1862,12 +1865,7 @@ class CareLocatorAgent:
 
     # ------------------------------------------------------------------
     def _rescue_specialties_from_message(self, message: str) -> List[str]:
-        rescued_specialties: List[str] = []
-        normalized_message = message.lower()
-        for alias, specialty in _INTERPRET_RESCUE_SPECIALTY_ALIASES:
-            if self._contains_phrase(normalized_message, alias):
-                rescued_specialties.append(specialty)
-        return self._dedupe_preserve_order(rescued_specialties)
+        return self._specialties_from_message(message)
 
     # ------------------------------------------------------------------
     def _has_explicit_procedure_code_intent(
@@ -2188,6 +2186,8 @@ class CareLocatorAgent:
     def _has_clear_care_need(self, query: ParsedCareQuery, text: str) -> bool:
         if query.specialties:
             return True
+        if self._has_ambiguous_specialty_intent(text):
+            return False
         if self._contains_any(
             text, _SPECIALIST_PATTERNS + _ROUTINE_PATTERNS + _URGENT_PATTERNS
         ):
@@ -2198,6 +2198,8 @@ class CareLocatorAgent:
     def _classify_care_setting(self, query: ParsedCareQuery, text: str) -> str:
         if self._contains_emergency_signal(text):
             return "emergency"
+        if not query.specialties and self._has_ambiguous_specialty_intent(text):
+            return "unclear"
         if self._contains_any(text, _URGENT_PATTERNS):
             return "urgent_care"
         if self._contains_any(text, _ROUTINE_PATTERNS):
@@ -2205,6 +2207,9 @@ class CareLocatorAgent:
         if query.specialties or self._contains_any(text, _SPECIALIST_PATTERNS):
             return "specialist"
         return "unclear"
+
+    def _has_ambiguous_specialty_intent(self, text: str) -> bool:
+        return len(self._specialty_family_ids_from_message(text)) > 1
 
     # ------------------------------------------------------------------
     @staticmethod
