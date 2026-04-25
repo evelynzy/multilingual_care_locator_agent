@@ -110,6 +110,8 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertEqual(normalize_specialty_family_id("ob gyn"), "obstetrics-gynecology")
         self.assertEqual(normalize_specialty_family_id("primary care"), "primary-care")
         self.assertIsNone(normalize_specialty_family_id("cardiovascular symptoms"))
+        self.assertIsNone(normalize_specialty_family_id("primary care or cardiology"))
+        self.assertIsNone(normalize_specialty_family_id("ob gyn and cardiology"))
         self.assertIsNone(normalize_specialty_family_id("doctor near me"))
 
     def test_build_canonical_provider_generates_stable_source_aware_id_when_missing(self) -> None:

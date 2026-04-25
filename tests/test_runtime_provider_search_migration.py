@@ -1408,6 +1408,92 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         )
         service.search.assert_not_called()
 
+    def test_handle_request_abstains_for_primary_care_or_cardiology_with_empty_valid_json_specialties(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"primary care or cardiology 98101","medical_need":true,'
+                        '"location":"98101","specialties":[],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null,"care_setting":null,"urgency":null,'
+                        '"needs_clarification":false,"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "primary care or cardiology 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        service.search.assert_not_called()
+
+    def test_handle_request_abstains_for_obgyn_and_cardiology_with_empty_valid_json_specialties(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"ob gyn and cardiology 98101","medical_need":true,'
+                        '"location":"98101","specialties":[],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null,"care_setting":null,"urgency":null,'
+                        '"needs_clarification":false,"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "ob gyn and cardiology 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        service.search.assert_not_called()
+
     def test_handle_request_keeps_explicit_cpt_intent_when_valid_interpret_json_omits_location(self) -> None:
         service = Mock()
         service.search.return_value = ProviderSearchResponse(
