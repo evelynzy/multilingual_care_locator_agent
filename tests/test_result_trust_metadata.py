@@ -474,6 +474,74 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("匹配原因</span><span class=\"provider-card__value\">与您搜索的儿童保健相关。</span>", response)
         self.assertNotIn("Pediatrics, pediatric, child health", response)
 
+    def test_compose_result_card_response_renders_fallback_resources_in_separate_section(self) -> None:
+        payload = {
+            "query": {
+                "response_language": "English",
+                "summary": "primary care in Pittsburgh",
+            },
+            "local_results": [
+                self.agent._normalize_result_trust_metadata(
+                    {
+                        "name": "Riverside Family Medicine",
+                        "specialties": ["Primary Care"],
+                        "location": "Pittsburgh, PA",
+                        "phone": "412-555-0100",
+                        "source": "Local provider dataset",
+                    }
+                )
+            ],
+            "fallback_results": [
+                {
+                    "name": "Medicare Care Compare",
+                    "location": "Pittsburgh, PA",
+                    "website": "https://www.medicare.gov/care-compare/",
+                    "description": "Compare clinicians and facilities using Medicare's public directory.",
+                    "source": "Trusted public directories",
+                }
+            ],
+        }
+
+        response = self.agent._compose_result_card_response(payload)
+
+        self.assertIn('provider-card__title">1. Riverside Family Medicine</div>', response)
+        self.assertIn("**Trusted resources and fallback options:**", response)
+        self.assertIn("1. **Medicare Care Compare**: Region: Pittsburgh, PA", response)
+        self.assertIn("; Source: Trusted public directories", response)
+        self.assertIn("; Website: https://www.medicare.gov/care-compare/", response)
+        self.assertIn(
+            "; Details: Compare clinicians and facilities using Medicare's public directory.",
+            response,
+        )
+        self.assertNotIn('provider-card__title">2. Medicare Care Compare</div>', response)
+
+    def test_compose_result_card_response_does_not_apply_provider_defaults_to_fallback_only_resources(self) -> None:
+        payload = {
+            "query": {
+                "response_language": "English",
+                "summary": "primary care in Pittsburgh",
+            },
+            "local_results": [],
+            "fallback_results": [
+                {
+                    "name": "Medicare Care Compare",
+                    "location": "Pittsburgh, PA",
+                    "website": "https://www.medicare.gov/care-compare/",
+                    "description": "Compare clinicians and facilities using Medicare's public directory.",
+                    "source": "Trusted public directories",
+                }
+            ],
+        }
+
+        response = self.agent._compose_result_card_response(payload)
+
+        self.assertIn("**Trusted resources and fallback options:**", response)
+        self.assertIn("Medicare Care Compare", response)
+        self.assertNotIn("provider-card__", response)
+        self.assertNotIn("Why matched</span>", response)
+        self.assertNotIn("Appointment availability</span>", response)
+        self.assertNotIn("Listed insurance</span>", response)
+
     def test_compose_response_appends_required_trust_guidance(self) -> None:
         client = self._client_with_response("Model-rendered answer.")
         payload = {
