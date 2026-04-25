@@ -25,6 +25,10 @@ from provider_search.sources import (
     NPPESSource,
 )
 from provider_search.sources.clinicaltables import DEFAULT_DATASET_CONFIGS
+from provider_search.specialty_families import (
+    SPECIALTY_FAMILY_BY_ID,
+    normalize_specialty_family_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -684,6 +688,10 @@ _INTERPRET_RESCUE_SPECIALTY_ALIASES: Tuple[Tuple[str, str], ...] = (
     ("dentista", "Dentistry"),
     ("dentistry", "Dentistry"),
 )
+
+_INTERPRET_SPECIALTY_LABEL_OVERRIDES = {
+    "obstetrics-gynecology": "OB/GYN",
+}
 
 
 @dataclass
@@ -1572,6 +1580,10 @@ class CareLocatorAgent:
         if not parsed_payload:
             parsed_payload = self._rescue_interpret_payload_from_message(message)
         else:
+            parsed_payload = self._reconcile_interpret_payload_specialties(
+                parsed_payload,
+                message,
+            )
             parsed_payload = self._reconcile_interpret_payload_location(
                 parsed_payload,
                 message,
@@ -1656,6 +1668,101 @@ class CareLocatorAgent:
             len(specialties),
         )
         return reconciled_payload
+
+    def _reconcile_interpret_payload_specialties(
+        self,
+        parsed_payload: Dict[str, Any],
+        message: str,
+    ) -> Dict[str, Any]:
+        if not isinstance(parsed_payload, dict):
+            return parsed_payload
+
+        if self._ensure_list(parsed_payload.get("specialties")):
+            return parsed_payload
+
+        if self._has_explicit_procedure_code_intent(parsed_payload, message):
+            return parsed_payload
+
+        rescued_specialties = self._reconcile_specialties_from_message(message)
+        if not rescued_specialties:
+            return parsed_payload
+
+        reconciled_payload = dict(parsed_payload)
+        reconciled_payload["specialties"] = rescued_specialties
+        logger.info(
+            "Interpret payload accepted JSON but restored raw-message specialty evidence. specialties=%s",
+            tuple(rescued_specialties),
+        )
+        return reconciled_payload
+
+    def _reconcile_specialties_from_message(self, message: str) -> List[str]:
+        family_id = self._best_specialty_family_id_from_message(message)
+        if family_id is None:
+            return []
+
+        family = SPECIALTY_FAMILY_BY_ID.get(family_id)
+        if family is None:
+            return []
+
+        display_label = _INTERPRET_SPECIALTY_LABEL_OVERRIDES.get(
+            family_id,
+            family.label,
+        )
+        return [display_label]
+
+    def _best_specialty_family_id_from_message(self, message: str) -> Optional[str]:
+        tokens = self._specialty_reconciliation_tokens(message)
+        if not tokens:
+            return None
+
+        max_alias_tokens = max(
+            (
+                len(self._specialty_reconciliation_tokens(candidate))
+                for family in SPECIALTY_FAMILY_BY_ID.values()
+                for candidate in (family.label, *family.aliases)
+                if self._specialty_reconciliation_tokens(candidate)
+            ),
+            default=0,
+        )
+        if max_alias_tokens <= 0:
+            return None
+
+        matches: list[tuple[int, int, str]] = []
+        for start_index in range(len(tokens)):
+            max_length = min(max_alias_tokens, len(tokens) - start_index)
+            for length in range(max_length, 0, -1):
+                phrase = " ".join(tokens[start_index : start_index + length])
+                family_id = normalize_specialty_family_id(phrase)
+                if family_id is None:
+                    continue
+                matches.append((length, start_index, family_id))
+
+        if not matches:
+            return None
+
+        best_length = max(length for length, _, _ in matches)
+        best_matches = [
+            (start_index, family_id)
+            for length, start_index, family_id in matches
+            if length == best_length
+        ]
+        best_family_ids = {family_id for _, family_id in best_matches}
+        if len(best_family_ids) != 1:
+            return None
+
+        best_matches.sort()
+        return best_matches[0][1]
+
+    @staticmethod
+    def _specialty_reconciliation_tokens(value: object) -> List[str]:
+        normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        normalized = normalized.replace("&", " and ")
+        tokens = [
+            token
+            for token in re.split(r"[^a-z0-9]+", normalized)
+            if token and not token.isdigit()
+        ]
+        return tokens
 
     def _log_local_debug_interpret(self, parsed_query: ParsedCareQuery) -> None:
         if not self._local_debug_enabled():

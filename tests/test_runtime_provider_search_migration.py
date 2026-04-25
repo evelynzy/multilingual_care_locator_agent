@@ -1182,6 +1182,232 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(provider_request.location, "98101")
         self.assertIn("Cupertino OB/GYN Associates", result)
 
+    def test_handle_request_restores_cardiovascular_disease_from_valid_interpret_json_with_empty_specialties(
+        self,
+    ) -> None:
+        cardiology_provider = build_canonical_provider(
+            provider_id="provider-cardiology-reconciled",
+            name="South Bay Cardiology",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Santa Clara",
+            state="CA",
+            taxonomy="Cardiology",
+            specialties=("Cardiology",),
+            phone="408-555-0110",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("Cardiology",),
+                location="98101",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=cardiology_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"cardiovascular disease 98101","medical_need":true,"location":null,'
+                        '"specialties":[],"insurance":[],"preferred_languages":[],"keywords":[],'
+                        '"patient_context":null,"care_setting":null,"urgency":null,'
+                        '"needs_clarification":false,"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "cardiovascular disease 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 1)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("Cardiology",))
+        self.assertEqual(provider_request.location, "98101")
+        self.assertIn("South Bay Cardiology", result)
+
+    def test_handle_request_restores_obgyn_from_valid_interpret_json_with_empty_specialties(
+        self,
+    ) -> None:
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn-reconciled",
+            name="Cupertino OB/GYN Associates",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Cupertino",
+            state="CA",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="408-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="98101",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=obgyn_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"ob gyn 98101",'
+                        '"medical_need":true,"location":null,"specialties":[],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":null,"urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "ob gyn 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 1)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("OB/GYN",))
+        self.assertEqual(provider_request.location, "98101")
+        self.assertIn("Cupertino OB/GYN Associates", result)
+
+    def test_handle_request_restores_primary_care_from_valid_interpret_json_with_empty_specialties(
+        self,
+    ) -> None:
+        primary_care_provider = build_canonical_provider(
+            provider_id="provider-primary-care-reconciled",
+            name="Harmony Family Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Pittsburgh",
+            state="PA",
+            taxonomy="Family Medicine",
+            specialties=("Primary Care",),
+            phone="412-555-0111",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("Primary Care",),
+                location="80202",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=primary_care_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"primary care 80202",'
+                        '"medical_need":true,"location":null,"specialties":[],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":null,"urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "primary care 80202",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 1)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("Primary Care",))
+        self.assertEqual(provider_request.location, "80202")
+        self.assertIn("Harmony Family Clinic", result)
+
+    def test_handle_request_does_not_overmap_unrelated_phrase_when_valid_interpret_json_has_empty_specialties(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"cardiovascular symptoms 98101","medical_need":true,"location":null,'
+                        '"specialties":[],"insurance":[],"preferred_languages":[],"keywords":[],'
+                        '"patient_context":null,"care_setting":null,"urgency":null,'
+                        '"needs_clarification":false,"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "cardiovascular symptoms 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        service.search.assert_not_called()
+
     def test_handle_request_keeps_explicit_cpt_intent_when_valid_interpret_json_omits_location(self) -> None:
         service = Mock()
         service.search.return_value = ProviderSearchResponse(

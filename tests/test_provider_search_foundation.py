@@ -28,6 +28,7 @@ from provider_search.specialty_families import (
     SPECIALTY_FAMILY_BY_ID,
     derive_provider_specialty_family_ids,
     derive_request_specialty_family_ids,
+    normalize_specialty_family_id,
 )
 
 
@@ -101,6 +102,15 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             derive_request_specialty_family_ids(("Primary Care", "Pediatrics", "Dentistry")),
             ("primary-care", "pediatrics", "dentistry"),
         )
+
+    def test_normalize_specialty_family_id_covers_common_user_phrases_and_negative_controls(
+        self,
+    ) -> None:
+        self.assertEqual(normalize_specialty_family_id("cardiovascular disease"), "cardiology")
+        self.assertEqual(normalize_specialty_family_id("ob gyn"), "obstetrics-gynecology")
+        self.assertEqual(normalize_specialty_family_id("primary care"), "primary-care")
+        self.assertIsNone(normalize_specialty_family_id("cardiovascular symptoms"))
+        self.assertIsNone(normalize_specialty_family_id("doctor near me"))
 
     def test_build_canonical_provider_generates_stable_source_aware_id_when_missing(self) -> None:
         left = build_canonical_provider(
