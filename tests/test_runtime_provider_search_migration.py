@@ -2990,6 +2990,60 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             result,
         )
 
+    def test_handle_request_rescues_otolaryngology_as_ent_from_malformed_interpret_json(
+        self,
+    ) -> None:
+        ent_provider = build_canonical_provider(
+            provider_id="provider-ent-otolaryngology",
+            name="Austin ENT Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Austin",
+            state="TX",
+            taxonomy="ENT",
+            specialties=("ENT",),
+            phone="512-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("ENT",),
+                location="Austin, TX",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=ent_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {"content": "not valid json", "finish_reason": "stop"},
+                {"content": '{"invalid_json":', "finish_reason": "stop"},
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "need otolaryngology near Austin TX",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 2)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("ENT",))
+        self.assertEqual(provider_request.location, "Austin, TX")
+        self.assertIn("Austin ENT Clinic", result)
+        self.assertNotIn("ENT / Otolaryngology", result)
+
     def test_handle_request_rescues_dentista_zip_from_malformed_interpret_json(self) -> None:
         local_zip_providers = [
             build_canonical_provider(

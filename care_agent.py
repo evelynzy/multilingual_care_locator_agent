@@ -690,6 +690,7 @@ _INTERPRET_RESCUE_SPECIALTY_ALIASES: Tuple[Tuple[str, str], ...] = (
 )
 
 _INTERPRET_SPECIALTY_LABEL_OVERRIDES = {
+    "ent": "ENT",
     "obstetrics-gynecology": "OB/GYN",
 }
 
