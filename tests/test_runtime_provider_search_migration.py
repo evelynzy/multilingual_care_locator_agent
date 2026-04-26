@@ -1409,6 +1409,49 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         )
         service.search.assert_not_called()
 
+    def test_handle_request_abstains_for_broad_therapy_alias_when_valid_json_has_empty_specialties(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"therapy 95051","medical_need":true,"location":"95051",'
+                        '"specialties":[],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null,"care_setting":null,"urgency":null,'
+                        '"needs_clarification":false,"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "therapy 95051",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        service.search.assert_not_called()
+
     def test_handle_request_abstains_for_primary_care_or_cardiology_with_empty_valid_json_specialties(
         self,
     ) -> None:
@@ -1599,6 +1642,91 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             result,
         )
         service.search.assert_not_called()
+
+    def test_handle_request_history_merge_clears_specialty_clarification_after_latest_resolution(
+        self,
+    ) -> None:
+        ent_provider = build_canonical_provider(
+            provider_id="provider-ent-resolved",
+            name="Austin ENT Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Austin",
+            state="TX",
+            taxonomy="ENT",
+            specialties=("ENT",),
+            phone="512-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("ENT",),
+                location="Austin, TX",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=ent_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        full_history_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ENT or cardiology near Austin TX",
+            medical_need=True,
+            location="Austin, TX",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=True,
+            follow_up_focus=["specialty clarification"],
+        )
+        latest_turn_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ENT near Austin TX",
+            medical_need=True,
+            location="Austin, TX",
+            specialties=["ENT"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=False,
+            follow_up_focus=[],
+        )
+
+        with patch.object(
+            agent,
+            "_interpret_user_need",
+            side_effect=[full_history_query, latest_turn_query],
+        ), patch.object(
+            agent,
+            "_compose_result_card_response",
+            side_effect=lambda payload: json.dumps(payload["query"]),
+        ):
+            result = agent.handle_request(
+                _ScriptedChatClient([{"content": "ok"}]),
+                "ENT near Austin TX",
+                [{"role": "user", "content": "ENT or cardiology near Austin TX"}],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        merged_query = json.loads(result)
+        self.assertEqual(merged_query["specialties"], ["ENT"])
+        self.assertEqual(merged_query["follow_up_focus"], [])
+        self.assertFalse(merged_query["needs_clarification"])
+        service.search.assert_called_once()
 
     def test_handle_request_keeps_explicit_cpt_intent_when_valid_interpret_json_omits_location(self) -> None:
         service = Mock()
@@ -3149,6 +3277,70 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(provider_request.location, "Austin, TX")
         self.assertIn("Austin ENT Clinic", result)
         self.assertNotIn("ENT / Otolaryngology", result)
+
+    def test_handle_request_keeps_ent_rescue_when_urgent_care_context_is_present(
+        self,
+    ) -> None:
+        ent_provider = build_canonical_provider(
+            provider_id="provider-ent-urgent-context",
+            name="Austin ENT Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Austin",
+            state="TX",
+            taxonomy="ENT",
+            specialties=("ENT",),
+            phone="512-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("ENT",),
+                location="Austin, TX",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=ent_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"ENT near Austin TX urgent care open now","medical_need":true,'
+                        '"location":null,"specialties":[],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null,"care_setting":null,"urgency":null,'
+                        '"needs_clarification":false,"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "ENT near Austin TX urgent care open now",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("ENT",))
+        self.assertEqual(provider_request.location, "Austin, TX")
+        self.assertIn("Austin ENT Clinic", result)
+        self.assertNotIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
 
     def test_handle_request_rescues_dentista_zip_from_malformed_interpret_json(self) -> None:
         local_zip_providers = [

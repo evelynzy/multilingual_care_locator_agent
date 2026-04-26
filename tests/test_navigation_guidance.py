@@ -429,6 +429,33 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         self.assertIsNone(guidance["care_setting_guidance"])
         self.assertFalse(guidance["location_only"])
 
+    def test_build_navigation_guidance_treats_urgent_care_as_route_context_not_competing_specialty(
+        self,
+    ) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ENT near Austin urgent care open now",
+            medical_need=True,
+            location="Austin, TX",
+            specialties=["ENT"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            needs_clarification=False,
+            follow_up_focus=[],
+        )
+
+        guidance = self.agent._build_navigation_guidance(
+            query,
+            "ENT near Austin urgent care open now",
+        )
+
+        self.assertEqual(guidance["mode"], "search")
+        self.assertEqual(guidance["follow_up_questions"], [])
+        self.assertIn("urgent care is usually the best fit", guidance["care_setting_guidance"])
+
     def test_specialized_prompt_templates_are_composed_not_fallbacked(self) -> None:
         payload = {
             "query": {

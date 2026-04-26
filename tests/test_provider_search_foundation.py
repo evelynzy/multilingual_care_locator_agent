@@ -27,7 +27,9 @@ from provider_search.normalization import (
 from provider_search.specialty_families import (
     SPECIALTY_FAMILY_BY_ID,
     derive_provider_specialty_family_ids,
+    derive_query_specialty_family_ids,
     derive_request_specialty_family_ids,
+    normalize_query_specialty_family_id,
     normalize_specialty_family_id,
 )
 
@@ -123,6 +125,21 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         )
         self.assertEqual(normalize_specialty_family_id("oncologist"), "oncology-hematology")
         self.assertEqual(normalize_specialty_family_id("dentista"), "dentistry")
+
+    def test_query_specialty_family_matching_is_narrower_than_provider_alias_catalog(
+        self,
+    ) -> None:
+        self.assertEqual(normalize_query_specialty_family_id("otolaryngology"), "ent")
+        self.assertEqual(normalize_query_specialty_family_id("cardiologist"), "cardiology")
+        self.assertIsNone(normalize_query_specialty_family_id("therapy"))
+        self.assertIsNone(normalize_query_specialty_family_id("allergy"))
+        self.assertIsNone(normalize_query_specialty_family_id("imaging"))
+        self.assertIsNone(normalize_query_specialty_family_id("sports medicine"))
+        self.assertIsNone(normalize_query_specialty_family_id("urgent care"))
+        self.assertEqual(
+            derive_query_specialty_family_ids(("urgent care", "ENT", "therapy")),
+            ("ent",),
+        )
 
     def test_build_canonical_provider_generates_stable_source_aware_id_when_missing(self) -> None:
         left = build_canonical_provider(

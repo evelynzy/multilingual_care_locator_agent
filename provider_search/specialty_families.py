@@ -274,6 +274,30 @@ def derive_request_specialty_family_ids(
     )
 
 
+def normalize_query_specialty_family_id(value: object) -> Optional[str]:
+    normalized_value = _normalize_lookup_value(value)
+    if normalized_value is None:
+        return None
+    return _QUERY_SPECIALTY_FAMILY_LOOKUP.get(normalized_value)
+
+
+def derive_query_specialty_family_ids(
+    values: Optional[Iterable[object]],
+) -> tuple[str, ...]:
+    if values is None:
+        return ()
+
+    family_ids: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        family_id = normalize_query_specialty_family_id(value)
+        if family_id is None or family_id in seen:
+            continue
+        seen.add(family_id)
+        family_ids.append(family_id)
+    return tuple(family_ids)
+
+
 def derive_provider_specialty_family_ids(
     specialties: Optional[Iterable[object]],
     taxonomy: object = None,
@@ -435,6 +459,59 @@ SPECIALTY_FAMILY_BY_ID = {
     for family in SPECIALTY_FAMILY_CATALOG
 }
 
+QUERY_SPECIALTY_FAMILY_ALIASES_BY_ID = {
+    "primary-care": (
+        "primary care",
+        "pcp",
+        "family medicine",
+        "family practice",
+        "internal medicine",
+    ),
+    "pediatrics": (
+        "pediatrics",
+        "pediatric",
+        "pediatrician",
+        "child health",
+    ),
+    "dentistry": ("dentistry", "dentist", "dentista"),
+    "obstetrics-gynecology": (
+        "ob gyn",
+        "obgyn",
+        "obstetrics and gynecology",
+        "obstetrics gynecology",
+        "gynecology",
+        "obstetrics",
+    ),
+    "dermatology": ("dermatology", "dermatologist"),
+    "cardiology": ("cardiology", "cardiologist", "cardiovascular disease"),
+    "gastroenterology": ("gastroenterology", "gastroenterologist"),
+    "neurology": ("neurology", "neurologist"),
+    "endocrinology": ("endocrinology", "endocrinologist"),
+    "ent": ("ent", "otolaryngology", "otorhinolaryngology", "ear nose throat"),
+    "psychiatry-behavioral-health": (
+        "psychiatry",
+        "psychiatrist",
+        "behavioral health",
+        "mental health",
+    ),
+    "orthopedics": (
+        "orthopedics",
+        "orthopaedics",
+        "orthopedic",
+        "orthopaedic",
+        "orthopedic surgery",
+    ),
+    "eye-care": ("ophthalmology", "optometry", "eye care"),
+    "urology": ("urology", "urologist"),
+    "nephrology": ("nephrology",),
+    "pulmonology": ("pulmonology", "pulmonary"),
+    "allergy-immunology": ("allergy immunology",),
+    "rheumatology": ("rheumatology", "rheumatologist"),
+    "oncology-hematology": ("oncology", "oncologist", "hematology"),
+    "physical-therapy-rehab": ("physical therapy", "physiatry", "pm and r"),
+    "radiology-imaging": ("radiology", "diagnostic radiology"),
+}
+
 _SPECIALTY_FAMILY_LOOKUP = {
     normalized_alias: family.family_id
     for family in SPECIALTY_FAMILY_CATALOG
@@ -443,5 +520,12 @@ _SPECIALTY_FAMILY_LOOKUP = {
         _normalize_lookup_value(family.label),
         *(_normalize_lookup_value(alias) for alias in family.aliases),
     )
+    if normalized_alias
+}
+
+_QUERY_SPECIALTY_FAMILY_LOOKUP = {
+    normalized_alias: family_id
+    for family_id, aliases in QUERY_SPECIALTY_FAMILY_ALIASES_BY_ID.items()
+    for normalized_alias in (_normalize_lookup_value(alias) for alias in aliases)
     if normalized_alias
 }

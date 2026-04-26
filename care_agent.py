@@ -26,8 +26,9 @@ from provider_search.sources import (
 )
 from provider_search.sources.clinicaltables import DEFAULT_DATASET_CONFIGS
 from provider_search.specialty_families import (
+    QUERY_SPECIALTY_FAMILY_ALIASES_BY_ID,
     SPECIALTY_FAMILY_BY_ID,
-    normalize_specialty_family_id,
+    normalize_query_specialty_family_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -1705,8 +1706,8 @@ class CareLocatorAgent:
         max_alias_tokens = max(
             (
                 len(self._specialty_message_tokens(candidate))
-                for family in SPECIALTY_FAMILY_BY_ID.values()
-                for candidate in (family.label, *family.aliases)
+                for aliases in QUERY_SPECIALTY_FAMILY_ALIASES_BY_ID.values()
+                for candidate in aliases
                 if self._specialty_message_tokens(candidate)
             ),
             default=0,
@@ -1720,7 +1721,7 @@ class CareLocatorAgent:
             max_length = min(max_alias_tokens, len(tokens) - start_index)
             for length in range(max_length, 0, -1):
                 phrase = " ".join(tokens[start_index : start_index + length])
-                family_id = normalize_specialty_family_id(phrase)
+                family_id = normalize_query_specialty_family_id(phrase)
                 if family_id is None:
                     continue
                 if family_id in seen_family_ids:
@@ -1992,11 +1993,20 @@ class CareLocatorAgent:
         if not medical_need and specialties:
             medical_need = True
 
-        needs_clarification = bool(
-            latest.needs_clarification
-            or full.needs_clarification
-            or specialty_clarification_needed
+        ambiguity_resolved_in_latest_turn = bool(
+            specialties
+            and not specialty_clarification_needed
+            and full_needs_specialty_clarification
+            and not latest_needs_specialty_clarification
         )
+        if ambiguity_resolved_in_latest_turn:
+            needs_clarification = bool(latest.needs_clarification or follow_up_focus)
+        else:
+            needs_clarification = bool(
+                latest.needs_clarification
+                or full.needs_clarification
+                or specialty_clarification_needed
+            )
 
         return ParsedCareQuery(
             detected_language=detected_language or full.detected_language,
