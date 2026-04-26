@@ -1472,6 +1472,92 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             [],
         )
 
+    def test_handle_request_abstains_for_mental_health_wording_with_empty_valid_json_specialties(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"mental health near Austin TX","medical_need":true,'
+                        '"location":"Austin, TX","specialties":[],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null,"care_setting":null,"urgency":null,'
+                        '"needs_clarification":false,"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "mental health near Austin TX",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        service.search.assert_not_called()
+
+    def test_handle_request_abstains_for_behavioral_health_wording_with_empty_valid_json_specialties(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"behavioral health near Austin TX","medical_need":true,'
+                        '"location":"Austin, TX","specialties":[],"insurance":[],"preferred_languages":[],'
+                        '"keywords":[],"patient_context":null,"care_setting":null,"urgency":null,'
+                        '"needs_clarification":false,"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "behavioral health near Austin TX",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        service.search.assert_not_called()
+
     def test_query_time_specialty_rescue_does_not_restore_psychiatry_for_physical_therapy(
         self,
     ) -> None:
