@@ -114,6 +114,16 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertIsNone(normalize_specialty_family_id("ob gyn and cardiology"))
         self.assertIsNone(normalize_specialty_family_id("doctor near me"))
 
+    def test_normalize_specialty_family_id_centralizes_common_query_aliases(self) -> None:
+        self.assertEqual(normalize_specialty_family_id("pediatrician"), "pediatrics")
+        self.assertEqual(normalize_specialty_family_id("ear nose throat"), "ent")
+        self.assertEqual(
+            normalize_specialty_family_id("psychiatrist"),
+            "psychiatry-behavioral-health",
+        )
+        self.assertEqual(normalize_specialty_family_id("oncologist"), "oncology-hematology")
+        self.assertEqual(normalize_specialty_family_id("dentista"), "dentistry")
+
     def test_build_canonical_provider_generates_stable_source_aware_id_when_missing(self) -> None:
         left = build_canonical_provider(
             provider_id="  ",
