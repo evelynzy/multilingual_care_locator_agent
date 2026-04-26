@@ -398,6 +398,37 @@ class CareNavigationGuidanceTests(unittest.TestCase):
             "specialist",
         )
 
+    def test_build_navigation_guidance_asks_specialty_follow_up_for_ambiguous_specialty_intent(
+        self,
+    ) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn and cardiology 95051",
+            medical_need=True,
+            location="95051",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            needs_clarification=True,
+            follow_up_focus=["specialty clarification"],
+        )
+
+        guidance = self.agent._build_navigation_guidance(
+            query,
+            "ob gyn and cardiology 95051",
+        )
+
+        self.assertEqual(guidance["mode"], "clarification")
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            guidance["follow_up_questions"],
+        )
+        self.assertIsNone(guidance["care_setting_guidance"])
+        self.assertFalse(guidance["location_only"])
+
     def test_specialized_prompt_templates_are_composed_not_fallbacked(self) -> None:
         payload = {
             "query": {

@@ -41,6 +41,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
         aliases=(
             "pediatrics",
             "pediatric",
+            "pediatrician",
             "child health",
             "adolescent medicine",
             "pediatric medicine",
@@ -75,6 +76,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "periodontics",
             "prosthodontics",
             "public health",
+            "dentista",
         ),
     ),
     SpecialtyFamily(
@@ -127,7 +129,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="gastroenterology",
         label="Gastroenterology",
-        aliases=("gastroenterology", "gi", "digestive health"),
+        aliases=("gastroenterology", "gastroenterologist", "gi", "digestive health"),
     ),
     SpecialtyFamily(
         family_id="neurology",
@@ -142,13 +144,14 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="ent",
         label="ENT / Otolaryngology",
-        aliases=("ent", "otolaryngology", "otorhinolaryngology"),
+        aliases=("ent", "otolaryngology", "otorhinolaryngology", "ear nose throat"),
     ),
     SpecialtyFamily(
         family_id="psychiatry-behavioral-health",
         label="Psychiatry / Behavioral Health",
         aliases=(
             "psychiatry",
+            "psychiatrist",
             "mental health",
             "behavioral health",
             "psychology",
@@ -160,7 +163,14 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="orthopedics",
         label="Orthopedics",
-        aliases=("orthopedics", "orthopaedics", "orthopedic surgery", "sports medicine"),
+        aliases=(
+            "orthopedics",
+            "orthopaedics",
+            "orthopedic",
+            "orthopaedic",
+            "orthopedic surgery",
+            "sports medicine",
+        ),
     ),
     SpecialtyFamily(
         family_id="eye-care",
@@ -195,7 +205,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="oncology-hematology",
         label="Oncology / Hematology",
-        aliases=("oncology", "hematology", "cancer care"),
+        aliases=("oncology", "oncologist", "hematology", "cancer care"),
     ),
     SpecialtyFamily(
         family_id="physical-therapy-rehab",

@@ -651,48 +651,14 @@ _PROCEDURE_CODE_INTENT_PATTERNS = (
     "billing code",
 )
 
-_INTERPRET_RESCUE_SPECIALTY_ALIASES: Tuple[Tuple[str, str], ...] = (
-    ("primary care", "Primary Care"),
-    ("pcp", "Primary Care"),
-    ("pediatrics", "Pediatrics"),
-    ("pediatrician", "Pediatrics"),
-    ("pediatric", "Pediatrics"),
-    ("dermatology", "Dermatology"),
-    ("dermatologist", "Dermatology"),
-    ("ent", "ENT"),
-    ("ear nose throat", "ENT"),
-    ("otolaryngology", "ENT"),
-    ("cardiology", "Cardiology"),
-    ("cardiologist", "Cardiology"),
-    ("neurology", "Neurology"),
-    ("neurologist", "Neurology"),
-    ("psychiatry", "Psychiatry"),
-    ("psychiatrist", "Psychiatry"),
-    ("urology", "Urology"),
-    ("urologist", "Urology"),
-    ("oncology", "Oncology"),
-    ("oncologist", "Oncology"),
-    ("endocrinology", "Endocrinology"),
-    ("endocrinologist", "Endocrinology"),
-    ("gastroenterology", "Gastroenterology"),
-    ("gastroenterologist", "Gastroenterology"),
-    ("orthopedic", "Orthopedic"),
-    ("orthopedics", "Orthopedic"),
-    ("orthopaedic", "Orthopedic"),
-    ("urgent care", "Urgent Care"),
-    ("ob gyn", "OB/GYN"),
-    ("obgyn", "OB/GYN"),
-    ("gynecology", "OB/GYN"),
-    ("obstetrics", "OB/GYN"),
-    ("obstetrics and gynecology", "OB/GYN"),
-    ("dentista", "Dentistry"),
-    ("dentistry", "Dentistry"),
-)
-
 _INTERPRET_SPECIALTY_LABEL_OVERRIDES = {
     "ent": "ENT",
     "obstetrics-gynecology": "OB/GYN",
+    "psychiatry-behavioral-health": "Psychiatry",
+    "oncology-hematology": "Oncology",
 }
+
+_SPECIALTY_CLARIFICATION_FOCUS = "specialty clarification"
 
 
 @dataclass
@@ -1580,15 +1546,15 @@ class CareLocatorAgent:
 
         if not parsed_payload:
             parsed_payload = self._rescue_interpret_payload_from_message(message)
-        else:
-            parsed_payload = self._reconcile_interpret_payload_specialties(
-                parsed_payload,
-                message,
-            )
-            parsed_payload = self._reconcile_interpret_payload_location(
-                parsed_payload,
-                message,
-            )
+
+        parsed_payload = self._reconcile_interpret_payload_specialties(
+            parsed_payload,
+            message,
+        )
+        parsed_payload = self._reconcile_interpret_payload_location(
+            parsed_payload,
+            message,
+        )
 
         detected_language = str(parsed_payload.get("detected_language", "unknown"))
         response_language = parsed_payload.get("response_language") or detected_language or "English"
@@ -1623,18 +1589,16 @@ class CareLocatorAgent:
     # ------------------------------------------------------------------
     def _rescue_interpret_payload_from_message(self, message: str) -> Dict[str, Any]:
         rescued_payload = self._default_interpret_payload(message)
-        rescued_location = self._rescue_location_from_message(message)
-        rescued_specialties = self._specialties_from_message(message)
-
-        if rescued_location:
-            rescued_payload["location"] = rescued_location
-        if rescued_specialties:
-            rescued_payload["specialties"] = rescued_specialties
+        rescued_location = None
+        if not self._has_explicit_procedure_code_intent(rescued_payload, message):
+            rescued_location = self._rescue_location_from_message(message)
+            if rescued_location:
+                rescued_payload["location"] = rescued_location
 
         logger.warning(
             "Interpret response remained invalid after retry; applied deterministic rescue. location_present=%s specialties=%s",
             bool(rescued_location),
-            len(rescued_specialties),
+            0,
         )
         return rescued_payload
 
@@ -1678,13 +1642,28 @@ class CareLocatorAgent:
         if not isinstance(parsed_payload, dict):
             return parsed_payload
 
-        if self._ensure_list(parsed_payload.get("specialties")):
-            return parsed_payload
-
         if self._has_explicit_procedure_code_intent(parsed_payload, message):
             return parsed_payload
 
-        rescued_specialties = self._specialties_from_message(message)
+        family_ids = self._specialty_family_ids_from_message(message)
+        if len(family_ids) > 1:
+            reconciled_payload = dict(parsed_payload)
+            reconciled_payload["specialties"] = []
+            reconciled_payload["needs_clarification"] = True
+            reconciled_payload["follow_up_focus"] = self._append_follow_up_focus(
+                parsed_payload.get("follow_up_focus"),
+                _SPECIALTY_CLARIFICATION_FOCUS,
+            )
+            logger.info(
+                "Interpret payload abstained from specialty resolution due to competing specialty families. families=%s",
+                family_ids,
+            )
+            return reconciled_payload
+
+        if self._ensure_list(parsed_payload.get("specialties")):
+            return parsed_payload
+
+        rescued_specialties = self._specialties_from_family_ids(family_ids)
         if not rescued_specialties:
             return parsed_payload
 
@@ -1697,19 +1676,26 @@ class CareLocatorAgent:
         return reconciled_payload
 
     def _specialties_from_message(self, message: str) -> List[str]:
-        family_ids = self._specialty_family_ids_from_message(message)
-        if len(family_ids) == 1:
-            family = SPECIALTY_FAMILY_BY_ID.get(family_ids[0])
-            if family is not None:
-                display_label = _INTERPRET_SPECIALTY_LABEL_OVERRIDES.get(
-                    family.family_id,
-                    family.label,
-                )
-                return [display_label]
-        if len(family_ids) > 1:
+        return self._specialties_from_family_ids(
+            self._specialty_family_ids_from_message(message)
+        )
+
+    def _specialties_from_family_ids(
+        self,
+        family_ids: tuple[str, ...],
+    ) -> List[str]:
+        if len(family_ids) != 1:
             return []
 
-        return self._fallback_specialties_from_message(message)
+        family = SPECIALTY_FAMILY_BY_ID.get(family_ids[0])
+        if family is None:
+            return []
+
+        display_label = _INTERPRET_SPECIALTY_LABEL_OVERRIDES.get(
+            family.family_id,
+            family.label,
+        )
+        return [display_label]
 
     def _specialty_family_ids_from_message(self, message: str) -> tuple[str, ...]:
         tokens = self._specialty_message_tokens(message)
@@ -1744,18 +1730,6 @@ class CareLocatorAgent:
                 break
 
         return tuple(family_ids)
-
-    def _fallback_specialties_from_message(self, message: str) -> List[str]:
-        rescued_specialties: List[str] = []
-        normalized_message = message.lower()
-        for alias, specialty in _INTERPRET_RESCUE_SPECIALTY_ALIASES:
-            if self._contains_phrase(normalized_message, alias):
-                rescued_specialties.append(specialty)
-
-        deduped_specialties = self._dedupe_preserve_order(rescued_specialties)
-        if len(deduped_specialties) > 1:
-            return []
-        return deduped_specialties
 
     @staticmethod
     def _specialty_message_tokens(value: object) -> List[str]:
@@ -1936,9 +1910,15 @@ class CareLocatorAgent:
             return False
 
         specialty_like_terms = {
-            alias.lower()
-            for alias, _ in _INTERPRET_RESCUE_SPECIALTY_ALIASES
-            if " " not in alias
+            normalized_candidate
+            for family in SPECIALTY_FAMILY_BY_ID.values()
+            for candidate in (family.label, *family.aliases)
+            for normalized_candidate in [
+                unicodedata.normalize("NFKC", candidate).casefold().strip()
+            ]
+            if normalized_candidate
+            and " " not in normalized_candidate
+            and "/" not in normalized_candidate
         }
         if normalized_city in specialty_like_terms:
             return False
@@ -1962,7 +1942,19 @@ class CareLocatorAgent:
         detected_language = _prefer(latest.detected_language, full.detected_language)
         response_language = _prefer(latest.response_language, full.response_language)
 
-        specialties = latest.specialties or full.specialties
+        latest_needs_specialty_clarification = self._requires_specialty_clarification(
+            latest.follow_up_focus
+        )
+        full_needs_specialty_clarification = self._requires_specialty_clarification(
+            full.follow_up_focus
+        )
+
+        if latest_needs_specialty_clarification:
+            specialties = []
+        elif latest.specialties:
+            specialties = latest.specialties
+        else:
+            specialties = full.specialties
         location = latest.location or full.location
         insurance = latest.insurance or full.insurance
         preferred_languages = _merge_lists(latest.preferred_languages, full.preferred_languages)
@@ -1972,6 +1964,19 @@ class CareLocatorAgent:
         care_setting = latest.care_setting or full.care_setting
         urgency = latest.urgency or full.urgency
         follow_up_focus = _merge_lists(latest.follow_up_focus, full.follow_up_focus)
+        specialty_clarification_needed = latest_needs_specialty_clarification or (
+            full_needs_specialty_clarification and not specialties
+        )
+        if specialty_clarification_needed:
+            follow_up_focus = self._append_follow_up_focus(
+                follow_up_focus,
+                _SPECIALTY_CLARIFICATION_FOCUS,
+            )
+        else:
+            follow_up_focus = self._remove_follow_up_focus(
+                follow_up_focus,
+                _SPECIALTY_CLARIFICATION_FOCUS,
+            )
 
         latest_need = latest.medical_need
         full_need = full.medical_need
@@ -1987,7 +1992,11 @@ class CareLocatorAgent:
         if not medical_need and specialties:
             medical_need = True
 
-        needs_clarification = bool(latest.needs_clarification or full.needs_clarification)
+        needs_clarification = bool(
+            latest.needs_clarification
+            or full.needs_clarification
+            or specialty_clarification_needed
+        )
 
         return ParsedCareQuery(
             detected_language=detected_language or full.detected_language,
@@ -2187,7 +2196,7 @@ class CareLocatorAgent:
     def _has_clear_care_need(self, query: ParsedCareQuery, text: str) -> bool:
         if query.specialties:
             return True
-        if self._has_ambiguous_specialty_intent(text):
+        if self._requires_specialty_clarification(query.follow_up_focus):
             return False
         if self._contains_any(
             text, _SPECIALIST_PATTERNS + _ROUTINE_PATTERNS + _URGENT_PATTERNS
@@ -2199,7 +2208,10 @@ class CareLocatorAgent:
     def _classify_care_setting(self, query: ParsedCareQuery, text: str) -> str:
         if self._contains_emergency_signal(text):
             return "emergency"
-        if not query.specialties and self._has_ambiguous_specialty_intent(text):
+        if (
+            not query.specialties
+            and self._requires_specialty_clarification(query.follow_up_focus)
+        ):
             return "unclear"
         if self._contains_any(text, _URGENT_PATTERNS):
             return "urgent_care"
@@ -2209,8 +2221,28 @@ class CareLocatorAgent:
             return "specialist"
         return "unclear"
 
-    def _has_ambiguous_specialty_intent(self, text: str) -> bool:
-        return len(self._specialty_family_ids_from_message(text)) > 1
+    @staticmethod
+    def _append_follow_up_focus(values: Any, focus: str) -> List[str]:
+        return CareLocatorAgent._dedupe_preserve_order(
+            CareLocatorAgent._ensure_list(values) + [focus]
+        )
+
+    @staticmethod
+    def _remove_follow_up_focus(values: Any, focus: str) -> List[str]:
+        normalized_focus = focus.strip().casefold()
+        return [
+            value
+            for value in CareLocatorAgent._ensure_list(values)
+            if value.strip().casefold() != normalized_focus
+        ]
+
+    @staticmethod
+    def _requires_specialty_clarification(values: Any) -> bool:
+        normalized_focus = _SPECIALTY_CLARIFICATION_FOCUS.casefold()
+        return any(
+            value.strip().casefold() == normalized_focus
+            for value in CareLocatorAgent._ensure_list(values)
+        )
 
     # ------------------------------------------------------------------
     @staticmethod

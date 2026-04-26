@@ -1,3 +1,4 @@
+import json
 import sys
 import types
 import unittest
@@ -1487,6 +1488,111 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             temperature=0.2,
             top_p=0.9,
         )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        service.search.assert_not_called()
+
+    def test_handle_request_abstains_for_obgyn_and_cardiology_when_model_picks_one_specialty(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"ob gyn and cardiology 95051","medical_need":true,'
+                        '"location":"95051","specialties":["Cardiology"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "ob gyn and cardiology 95051",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        service.search.assert_not_called()
+
+    def test_handle_request_history_merge_drops_stale_specialty_after_ambiguous_latest_turn(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        full_history_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="cardiology 95051",
+            medical_need=True,
+            location="95051",
+            specialties=["Cardiology"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+        latest_turn_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn and cardiology 95051",
+            medical_need=True,
+            location="95051",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=True,
+            follow_up_focus=["specialty clarification"],
+        )
+
+        with patch.object(
+            agent,
+            "_interpret_user_need",
+            side_effect=[full_history_query, latest_turn_query],
+        ), patch.object(
+            agent,
+            "_compose_response",
+            side_effect=lambda *_args, **_kwargs: json.dumps(_args[1]),
+        ):
+            result = agent.handle_request(
+                _ScriptedChatClient([{"content": "ok"}]),
+                "ob gyn and cardiology 95051",
+                [{"role": "user", "content": "cardiology 95051"}],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
 
         self.assertIn(
             "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
