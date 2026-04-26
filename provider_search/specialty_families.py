@@ -491,8 +491,6 @@ QUERY_SPECIALTY_FAMILY_ALIASES_BY_ID = {
     "psychiatry-behavioral-health": (
         "psychiatry",
         "psychiatrist",
-        "behavioral health",
-        "mental health",
     ),
     "orthopedics": (
         "orthopedics",

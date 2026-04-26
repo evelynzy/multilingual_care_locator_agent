@@ -138,6 +138,8 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertIsNone(normalize_query_specialty_family_id("occupational therapy"))
         self.assertIsNone(normalize_query_specialty_family_id("therapy"))
         self.assertIsNone(normalize_query_specialty_family_id("counseling"))
+        self.assertIsNone(normalize_query_specialty_family_id("mental health"))
+        self.assertIsNone(normalize_query_specialty_family_id("behavioral health"))
         self.assertIsNone(normalize_query_specialty_family_id("allergy"))
         self.assertIsNone(normalize_query_specialty_family_id("imaging"))
         self.assertIsNone(normalize_query_specialty_family_id("sports medicine"))
