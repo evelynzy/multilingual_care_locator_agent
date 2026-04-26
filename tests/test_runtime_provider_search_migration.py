@@ -1462,6 +1462,16 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             [],
         )
 
+    def test_query_time_specialty_rescue_does_not_restore_psychiatry_for_bare_therapy(
+        self,
+    ) -> None:
+        agent = CareLocatorAgent(provider_search_service=Mock())
+
+        self.assertEqual(
+            agent._specialties_from_message("therapy near Austin"),
+            [],
+        )
+
     def test_query_time_specialty_rescue_does_not_restore_psychiatry_for_physical_therapy(
         self,
     ) -> None:
