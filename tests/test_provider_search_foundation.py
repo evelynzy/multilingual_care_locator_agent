@@ -131,10 +131,17 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
     ) -> None:
         self.assertEqual(normalize_query_specialty_family_id("otolaryngology"), "ent")
         self.assertEqual(normalize_query_specialty_family_id("cardiologist"), "cardiology")
+        self.assertEqual(
+            normalize_query_specialty_family_id("physical therapy"),
+            "physical-therapy-rehab",
+        )
+        self.assertIsNone(normalize_query_specialty_family_id("occupational therapy"))
         self.assertIsNone(normalize_query_specialty_family_id("therapy"))
+        self.assertIsNone(normalize_query_specialty_family_id("counseling"))
         self.assertIsNone(normalize_query_specialty_family_id("allergy"))
         self.assertIsNone(normalize_query_specialty_family_id("imaging"))
         self.assertIsNone(normalize_query_specialty_family_id("sports medicine"))
+        self.assertIsNone(normalize_query_specialty_family_id("gi"))
         self.assertIsNone(normalize_query_specialty_family_id("urgent care"))
         self.assertEqual(
             derive_query_specialty_family_ids(("urgent care", "ENT", "therapy")),

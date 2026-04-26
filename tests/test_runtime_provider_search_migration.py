@@ -1452,6 +1452,30 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         )
         service.search.assert_not_called()
 
+    def test_query_time_specialty_rescue_does_not_restore_psychiatry_for_occupational_therapy(
+        self,
+    ) -> None:
+        agent = CareLocatorAgent(provider_search_service=Mock())
+
+        self.assertEqual(
+            agent._specialties_from_message("occupational therapy near me"),
+            [],
+        )
+
+    def test_query_time_specialty_rescue_does_not_restore_psychiatry_for_physical_therapy(
+        self,
+    ) -> None:
+        agent = CareLocatorAgent(provider_search_service=Mock())
+
+        self.assertEqual(
+            agent._specialties_from_message("physical therapy near me"),
+            ["Physical Therapy / Rehab"],
+        )
+        self.assertNotEqual(
+            agent._specialties_from_message("physical therapy near me"),
+            ["Psychiatry"],
+        )
+
     def test_handle_request_abstains_for_primary_care_or_cardiology_with_empty_valid_json_specialties(
         self,
     ) -> None:
