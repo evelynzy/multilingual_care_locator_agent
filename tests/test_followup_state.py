@@ -531,16 +531,13 @@ class CareLocatorAgentFollowUpStateTests(unittest.TestCase):
             ["US National Care Directory"],
         )
 
-        # NOTE / SUSPECTED BUG (care_agent.py:2690-2700, via
-        # _fallback_region_contexts at care_agent.py:2715-2723): when location
-        # extraction fails (query.location is None) the region context set is
-        # empty, so a "united states" region-filtered resource is dropped
-        # because "united states" is not in {"international", "global"}. A US
-        # user who simply did not provide a parseable location therefore loses
-        # nationwide trusted fallback resources. This assertion PINS the current
-        # (suspected-buggy) behavior to keep the suite green; see the report.
+        # Corrected behavior: when location is unknown (None), national/US-scoped
+        # resources must still be surfaced rather than dropped.
         without_location = agent._trusted_resource_fallback(_query(None))
-        self.assertEqual(without_location, [])
+        self.assertEqual(
+            [resource["name"] for resource in without_location],
+            ["US National Care Directory"],
+        )
 
 
 if __name__ == "__main__":
