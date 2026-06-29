@@ -6,3 +6,5 @@ __pycache__/
 ct-debug.log
 .ipynb_checkpoints/
 tests/*.ipynb
+.DS_Store
+specialty-scenario-report*.md
