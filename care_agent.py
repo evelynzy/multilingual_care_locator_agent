@@ -568,6 +568,14 @@ _EMERGENCY_PATTERNS = (
     "suicide",
 )
 
+_EMERGENCY_URGENCY_VALUES = {
+    "emergency",
+    "emergent",
+    "life-threatening",
+    "life threatening",
+    "critical",
+}
+
 _URGENT_PATTERNS = (
     "same-day",
     "same day",
@@ -2496,6 +2504,12 @@ class CareLocatorAgent:
         return CareLocatorAgent._contains_any(text, _EMERGENCY_PATTERNS)
 
     # ------------------------------------------------------------------
+    def _query_signals_emergency(self, query: ParsedCareQuery) -> bool:
+        if (query.care_setting or "").strip().lower() == "emergency":
+            return True
+        return (query.urgency or "").strip().lower() in _EMERGENCY_URGENCY_VALUES
+
+    # ------------------------------------------------------------------
     def _has_plan_type(self, query: ParsedCareQuery, text: str) -> bool:
         if self._contains_any(text, _PLAN_TYPE_PATTERNS):
             return True
@@ -2538,7 +2552,7 @@ class CareLocatorAgent:
 
     # ------------------------------------------------------------------
     def _classify_care_setting(self, query: ParsedCareQuery, text: str) -> str:
-        if self._contains_emergency_signal(text):
+        if self._contains_emergency_signal(text) or self._query_signals_emergency(query):
             return "emergency"
         if (
             not query.specialties
