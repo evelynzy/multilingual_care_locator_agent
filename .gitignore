@@ -12,3 +12,6 @@ FLIGHTDECK_HANDOFF.md
 .coverage
 coverage.xml
 htmlcov/
+
+# local scratch dir (never commit)
+
