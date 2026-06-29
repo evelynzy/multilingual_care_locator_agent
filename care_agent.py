@@ -609,6 +609,11 @@ _SPECIALIST_PATTERNS = (
     "urologist",
     "oncologist",
 )
+_GENERIC_SPECIALIST_PATTERNS = (
+    "specialist",
+    "specialty",
+    "referral",
+)
 
 _INSURANCE_PATTERNS = (
     "insurance",
@@ -660,6 +665,24 @@ _INTERPRET_SPECIALTY_LABEL_OVERRIDES = {
 }
 
 _SPECIALTY_CLARIFICATION_FOCUS = "specialty clarification"
+_CHILD_CARE_AMBIGUITY_PATTERNS = (
+    "child",
+    "children",
+    "kid",
+    "kids",
+    "pediatric",
+    "pediatrics",
+    "pediatrician",
+    "child health",
+)
+_GENERIC_ALLERGY_AMBIGUITY_PATTERNS = (
+    "allergy",
+    "allergies",
+)
+_EXPLICIT_ALLERGY_SPECIALTY_PATTERNS = (
+    "allergy immunology",
+    "immunology",
+)
 
 
 @dataclass
@@ -1083,7 +1106,7 @@ class CareLocatorAgent:
             )
         )
         location = self._escape_markdown_text(self._clean_card_value(result.get("location")))
-        website = self._escape_markdown_text(self._clean_card_value(result.get("website")))
+        website = self._format_visible_website_value(result.get("website"))
         description = self._escape_markdown_text(self._clean_card_value(result.get("description")))
         provenance = result.get("provenance") if isinstance(result.get("provenance"), dict) else {}
         source = self._escape_markdown_text(
@@ -1109,6 +1132,17 @@ class CareLocatorAgent:
         if details:
             resource_entry = f"{resource_entry}: {'; '.join(details)}"
         return resource_entry
+
+    # ------------------------------------------------------------------
+    def _format_visible_website_value(self, value: object) -> str:
+        cleaned_value = self._clean_card_value(value)
+        if not cleaned_value:
+            return ""
+
+        if re.match(r"^https?://\S+$", cleaned_value, re.IGNORECASE):
+            return cleaned_value
+
+        return self._escape_markdown_text(cleaned_value)
 
     # ------------------------------------------------------------------
     def _format_provider_result_card(
@@ -1556,6 +1590,10 @@ class CareLocatorAgent:
             parsed_payload,
             message,
         )
+        parsed_payload = self._sanitize_interpret_payload_trust_boundary(
+            parsed_payload,
+            message,
+        )
 
         detected_language = str(parsed_payload.get("detected_language", "unknown"))
         response_language = parsed_payload.get("response_language") or detected_language or "English"
@@ -1591,7 +1629,7 @@ class CareLocatorAgent:
     def _rescue_interpret_payload_from_message(self, message: str) -> Dict[str, Any]:
         rescued_payload = self._default_interpret_payload(message)
         rescued_location = None
-        if not self._has_explicit_procedure_code_intent(rescued_payload, message):
+        if not self._has_explicit_procedure_code_intent(message):
             rescued_location = self._rescue_location_from_message(message)
             if rescued_location:
                 rescued_payload["location"] = rescued_location
@@ -1612,14 +1650,26 @@ class CareLocatorAgent:
         if not isinstance(parsed_payload, dict):
             return parsed_payload
 
-        if self._clean_card_value(parsed_payload.get("location")):
+        parsed_location = self._clean_card_value(parsed_payload.get("location"))
+        if self._has_explicit_procedure_code_intent(message):
+            trusted_location = self._trusted_location_for_procedure_intent(message)
+            if trusted_location == parsed_location:
+                return parsed_payload
+
+            reconciled_payload = dict(parsed_payload)
+            reconciled_payload["location"] = trusted_location
+            logger.info(
+                "Interpret payload adjusted location trust boundary for procedure intent. location_present=%s trusted_location=%s",
+                bool(parsed_location),
+                trusted_location or "",
+            )
+            return reconciled_payload
+
+        if parsed_location:
             return parsed_payload
 
         specialties = self._ensure_list(parsed_payload.get("specialties"))
         if not specialties:
-            return parsed_payload
-
-        if self._has_explicit_procedure_code_intent(parsed_payload, message):
             return parsed_payload
 
         rescued_location = self._rescue_location_from_message(message)
@@ -1643,11 +1693,11 @@ class CareLocatorAgent:
         if not isinstance(parsed_payload, dict):
             return parsed_payload
 
-        if self._has_explicit_procedure_code_intent(parsed_payload, message):
+        if self._has_explicit_procedure_code_intent(message):
             return parsed_payload
 
         family_ids = self._specialty_family_ids_from_message(message)
-        if len(family_ids) > 1:
+        if len(family_ids) > 1 or self._has_child_allergy_ambiguity(message):
             reconciled_payload = dict(parsed_payload)
             reconciled_payload["specialties"] = []
             reconciled_payload["needs_clarification"] = True
@@ -1675,6 +1725,112 @@ class CareLocatorAgent:
             tuple(rescued_specialties),
         )
         return reconciled_payload
+
+    def _has_child_allergy_ambiguity(self, message: str) -> bool:
+        normalized_message = self._normalized_query_text(message)
+        if not normalized_message:
+            return False
+
+        return (
+            self._contains_any(normalized_message, _CHILD_CARE_AMBIGUITY_PATTERNS)
+            and self._contains_any(
+                normalized_message,
+                _GENERIC_ALLERGY_AMBIGUITY_PATTERNS,
+            )
+            and not self._contains_any(
+                normalized_message,
+                _EXPLICIT_ALLERGY_SPECIALTY_PATTERNS,
+            )
+        )
+
+    def _sanitize_interpret_payload_trust_boundary(
+        self,
+        parsed_payload: Dict[str, Any],
+        message: str,
+    ) -> Dict[str, Any]:
+        if not isinstance(parsed_payload, dict):
+            return parsed_payload
+
+        sanitized_payload = dict(parsed_payload)
+        payload_changed = False
+
+        if not self._has_explicit_procedure_code_intent(message):
+            sanitized_payload, payload_changed = self._remove_untrusted_procedure_gloss(
+                sanitized_payload,
+                message,
+            )
+
+        parsed_location = self._clean_card_value(sanitized_payload.get("location"))
+        parsed_zip_code = self._extract_zip_code(parsed_location)
+        if not parsed_zip_code or parsed_location != parsed_zip_code:
+            return sanitized_payload if payload_changed else parsed_payload
+
+        if self._message_contains_zip_code(message, parsed_zip_code):
+            return sanitized_payload if payload_changed else parsed_payload
+
+        rescued_location = self._rescue_location_from_message(message)
+        sanitized_payload["location"] = rescued_location
+        logger.info(
+            "Interpret payload rejected untrusted bare zip location. parsed_zip=%s trusted_location=%s",
+            parsed_zip_code,
+            rescued_location or "",
+        )
+        return sanitized_payload
+
+    def _remove_untrusted_procedure_gloss(
+        self,
+        parsed_payload: Dict[str, Any],
+        message: str,
+    ) -> Tuple[Dict[str, Any], bool]:
+        summary = self._clean_card_value(parsed_payload.get("summary"))
+        keywords = self._ensure_list(parsed_payload.get("keywords"))
+        follow_up_focus = self._ensure_list(parsed_payload.get("follow_up_focus"))
+
+        summary_has_procedure_gloss = self._contains_procedure_code_gloss(summary)
+        filtered_keywords = [
+            keyword
+            for keyword in keywords
+            if not self._contains_procedure_code_gloss(keyword)
+        ]
+        filtered_follow_up_focus = [
+            focus
+            for focus in follow_up_focus
+            if not self._contains_procedure_code_gloss(focus)
+        ]
+
+        if (
+            not summary_has_procedure_gloss
+            and len(filtered_keywords) == len(keywords)
+            and len(filtered_follow_up_focus) == len(follow_up_focus)
+        ):
+            return parsed_payload, False
+
+        sanitized_payload = dict(parsed_payload)
+        if summary_has_procedure_gloss:
+            sanitized_payload["summary"] = message
+        sanitized_payload["keywords"] = filtered_keywords
+        sanitized_payload["follow_up_focus"] = filtered_follow_up_focus
+        logger.info(
+            "Interpret payload removed untrusted procedure-code gloss. summary_changed=%s keywords_removed=%s focus_removed=%s",
+            summary_has_procedure_gloss,
+            len(keywords) - len(filtered_keywords),
+            len(follow_up_focus) - len(filtered_follow_up_focus),
+        )
+        return sanitized_payload, True
+
+    def _contains_procedure_code_gloss(self, value: object) -> bool:
+        normalized_value = self._normalized_query_text(value)
+        if not normalized_value:
+            return False
+        if self._contains_any(
+            normalized_value,
+            ("cpt", "procedure code", "billing code"),
+        ):
+            return True
+        return bool(
+            re.search(r"\bprocedure\b", normalized_value)
+            and re.search(r"\b\d{5}(?:\s+\d{4})?\b", normalized_value)
+        )
 
     def _specialties_from_message(self, message: str) -> List[str]:
         return self._specialties_from_family_ids(
@@ -1742,6 +1898,65 @@ class CareLocatorAgent:
             if token and not token.isdigit()
         ]
         return tokens
+
+    def _trusted_location_for_procedure_intent(self, message: str) -> Optional[str]:
+        best_candidate: Optional[Tuple[int, str]] = None
+        for pattern in (self._city_state_code_regex, self._city_state_name_regex):
+            for match in pattern.finditer(message):
+                city = match.group("city").strip().strip(",")
+                state_fragment = match.group("state").strip()
+
+                state_code = None
+                if pattern is self._city_state_code_regex:
+                    state_code = state_fragment.upper()
+                else:
+                    state_code = _US_STATE_NAMES.get(state_fragment.lower())
+
+                if not state_code or not self._rescue_city_token_is_valid(city):
+                    continue
+
+                location = f"{city} {state_code}"
+                if not self._location_has_city(location):
+                    continue
+
+                trailing_zip_code = self._trusted_zip_after_city_state(message, match.end())
+                trusted_location = (
+                    f"{city}, {state_code} {trailing_zip_code}"
+                    if trailing_zip_code
+                    else f"{city}, {state_code}"
+                )
+                candidate_score = len(city.replace(" ", "")) * 10 + int(
+                    bool(trailing_zip_code)
+                )
+                if best_candidate is None or candidate_score >= best_candidate[0]:
+                    best_candidate = (candidate_score, trusted_location)
+
+        if best_candidate is None:
+            return None
+        return best_candidate[1]
+
+    def _trusted_zip_after_city_state(
+        self,
+        message: str,
+        start_index: int,
+    ) -> Optional[str]:
+        trailing_text = message[start_index:]
+        zip_match = re.search(r"\b(\d{5})(?:-\d{4})?\b", trailing_text)
+        if not zip_match:
+            return None
+
+        leading_fragment = trailing_text[: zip_match.start()]
+        if re.search(r"[A-Za-z]", leading_fragment):
+            return None
+
+        return zip_match.group(1)
+
+    @staticmethod
+    def _message_contains_zip_code(message: str, zip_code: str) -> bool:
+        return re.search(
+            rf"\b{re.escape(zip_code)}(?:-\d{{4}})?\b",
+            message,
+        ) is not None
 
     def _log_local_debug_interpret(self, parsed_query: ParsedCareQuery) -> None:
         if not self._local_debug_enabled():
@@ -1844,30 +2059,12 @@ class CareLocatorAgent:
         return self._specialties_from_message(message)
 
     # ------------------------------------------------------------------
-    def _has_explicit_procedure_code_intent(
-        self,
-        parsed_payload: Dict[str, Any],
-        message: str,
-    ) -> bool:
+    def _has_explicit_procedure_code_intent(self, message: str) -> bool:
         normalized_message = str(message or "").lower()
-        if self._contains_any(normalized_message, _PROCEDURE_CODE_INTENT_PATTERNS):
-            return True
-
-        payload_text = " ".join(
-            str(value)
-            for value in (
-                parsed_payload.get("summary"),
-                " ".join(self._ensure_list(parsed_payload.get("keywords"))),
-                " ".join(self._ensure_list(parsed_payload.get("follow_up_focus"))),
-            )
-            if value
-        ).lower()
-        if payload_text and self._contains_any(
-            payload_text,
+        return self._contains_any(
+            normalized_message,
             _PROCEDURE_CODE_INTENT_PATTERNS,
-        ):
-            return True
-        return False
+        )
 
     # ------------------------------------------------------------------
     def _rescue_city_state_from_message(self, message: str) -> Optional[Tuple[str, str]]:
@@ -1949,11 +2146,17 @@ class CareLocatorAgent:
         full_needs_specialty_clarification = self._requires_specialty_clarification(
             full.follow_up_focus
         )
+        latest_is_location_only_follow_up = (
+            full_needs_specialty_clarification
+            and self._is_location_only_follow_up_turn(latest)
+        )
 
         if latest_needs_specialty_clarification:
             specialties = []
         elif latest.specialties:
             specialties = latest.specialties
+        elif full_needs_specialty_clarification:
+            specialties = []
         else:
             specialties = full.specialties
         location = latest.location or full.location
@@ -1961,7 +2164,11 @@ class CareLocatorAgent:
         preferred_languages = _merge_lists(latest.preferred_languages, full.preferred_languages)
         keywords = _merge_lists(latest.keywords, full.keywords)
         patient_context = latest.patient_context or full.patient_context
-        summary = latest.summary or full.summary
+        summary = (
+            full.summary
+            if full_needs_specialty_clarification and latest_is_location_only_follow_up
+            else (latest.summary or full.summary)
+        )
         care_setting = latest.care_setting or full.care_setting
         urgency = latest.urgency or full.urgency
         follow_up_focus = _merge_lists(latest.follow_up_focus, full.follow_up_focus)
@@ -2025,6 +2232,31 @@ class CareLocatorAgent:
             follow_up_focus=follow_up_focus,
         )
 
+    def _is_location_only_follow_up_turn(self, query: ParsedCareQuery) -> bool:
+        if not query.location or query.specialties:
+            return False
+        if (
+            query.insurance
+            or query.preferred_languages
+            or query.keywords
+            or query.patient_context
+            or query.urgency
+        ):
+            return False
+        if query.care_setting and str(query.care_setting).strip().casefold() != "specialist":
+            return False
+
+        normalized_summary = self._normalized_query_text(query.summary)
+        if not normalized_summary:
+            return True
+        return normalized_summary == self._normalized_query_text(query.location)
+
+    @staticmethod
+    def _normalized_query_text(value: object) -> str:
+        normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+        return re.sub(r"\s+", " ", normalized).strip()
+
     # ------------------------------------------------------------------
     def _build_navigation_guidance(
         self, query: ParsedCareQuery, message: str
@@ -2034,7 +2266,11 @@ class CareLocatorAgent:
 
         follow_up_questions: List[str] = []
 
-        if query.medical_need and not self._has_specific_location(query, request_text):
+        if query.medical_need and not self._has_specific_location(
+            query,
+            request_text,
+            raw_message=message,
+        ):
             follow_up_questions.append(
                 "What city and state or ZIP code should I search?"
             )
@@ -2197,10 +2433,27 @@ class CareLocatorAgent:
         return any(self._contains_any(item.lower(), _PLAN_TYPE_PATTERNS) for item in query.insurance)
 
     # ------------------------------------------------------------------
-    def _has_specific_location(self, query: ParsedCareQuery, text: str) -> bool:
+    def _has_specific_location(
+        self,
+        query: ParsedCareQuery,
+        text: str,
+        raw_message: Optional[str] = None,
+    ) -> bool:
+        evidence_text = raw_message if raw_message is not None else text
+        has_procedure_code_intent = self._has_explicit_procedure_code_intent(
+            evidence_text
+        )
+
+        if has_procedure_code_intent:
+            return bool(self._trusted_location_for_procedure_intent(evidence_text))
+
         if query.location and self._location_has_city(query.location):
             return True
-        return bool(self._match_city_state(text)) or bool(self._extract_zip_code(text))
+        if query.location and self._extract_zip_code(query.location):
+            return True
+        if self._match_city_state(text):
+            return True
+        return bool(self._extract_zip_code(text))
 
     # ------------------------------------------------------------------
     def _has_clear_care_need(self, query: ParsedCareQuery, text: str) -> bool:
@@ -2208,9 +2461,9 @@ class CareLocatorAgent:
             return True
         if self._requires_specialty_clarification(query.follow_up_focus):
             return False
-        if self._contains_any(
-            text, _SPECIALIST_PATTERNS + _ROUTINE_PATTERNS + _URGENT_PATTERNS
-        ):
+        if self._contains_any(text, _ROUTINE_PATTERNS + _URGENT_PATTERNS):
+            return True
+        if self._has_specific_specialist_intent(query, text):
             return True
         return False
 
@@ -2225,11 +2478,47 @@ class CareLocatorAgent:
             return "unclear"
         if self._contains_any(text, _URGENT_PATTERNS):
             return "urgent_care"
+        if self._has_specific_specialist_intent(query, text):
+            return "specialist"
+        if self._has_primary_care_specialty(query):
+            return "pcp"
         if self._contains_any(text, _ROUTINE_PATTERNS):
             return "pcp"
-        if query.specialties or self._contains_any(text, _SPECIALIST_PATTERNS):
-            return "specialist"
+        if self._contains_any(text, _GENERIC_SPECIALIST_PATTERNS):
+            return "unclear"
         return "unclear"
+
+    def _has_specific_specialist_intent(
+        self,
+        query: ParsedCareQuery,
+        text: str,
+    ) -> bool:
+        if self._has_non_primary_specialty(query):
+            return True
+
+        return self._contains_any(
+            text,
+            tuple(
+                pattern
+                for pattern in _SPECIALIST_PATTERNS
+                if pattern not in _GENERIC_SPECIALIST_PATTERNS
+            ),
+        )
+
+    def _has_primary_care_specialty(self, query: ParsedCareQuery) -> bool:
+        return "primary-care" in self._query_specialty_family_ids(query.specialties)
+
+    def _has_non_primary_specialty(self, query: ParsedCareQuery) -> bool:
+        family_ids = self._query_specialty_family_ids(query.specialties)
+        return any(family_id != "primary-care" for family_id in family_ids)
+
+    def _query_specialty_family_ids(self, specialties: List[str]) -> set[str]:
+        family_ids: set[str] = set()
+        for specialty in specialties:
+            family_id = normalize_query_specialty_family_id(specialty)
+            if family_id is not None:
+                family_ids.add(family_id)
+        return family_ids
 
     @staticmethod
     def _append_follow_up_focus(values: Any, focus: str) -> List[str]:
@@ -2358,11 +2647,17 @@ class CareLocatorAgent:
         if not self.fallback_resources:
             return []
 
+        care_setting = self._classify_care_setting(
+            query,
+            self._combined_request_text(query, query.summary),
+        )
         query_terms = {
             term.lower()
             for term in (query.specialties + query.keywords)
             if isinstance(term, str)
         }
+        if care_setting:
+            query_terms.add(care_setting)
         region_contexts = self._fallback_region_contexts(query)
 
         suggestions: List[dict] = []
@@ -2376,6 +2671,9 @@ class CareLocatorAgent:
             specialty_filters = [
                 str(item).lower() for item in resource.get("specialties", []) if item
             ]
+            care_setting_filters = [
+                str(item).lower() for item in resource.get("care_settings", []) if item
+            ]
             region_filters = [
                 str(item).lower() for item in resource.get("regions", []) if item
             ]
@@ -2385,6 +2683,9 @@ class CareLocatorAgent:
                     continue
                 if not any(filter_term in query_terms for filter_term in specialty_filters):
                     continue
+
+            if care_setting_filters and care_setting not in care_setting_filters:
+                continue
 
             if region_filters:
                 if region_contexts:
@@ -2624,6 +2925,19 @@ class CareLocatorAgent:
     ) -> str:
         query = payload.get("query", {})
         response_language = query.get("response_language") or query.get("detected_language") or "English"
+
+        if self._should_use_deterministic_numeric_clarification(payload, template_key):
+            logger.info(
+                "Using deterministic clarification response for numeric-token trust boundary. template_key=%s",
+                template_key,
+            )
+            return self._compose_safe_fallback_response(
+                payload,
+                response_language,
+                template_key,
+                finish_reason="numeric_trust_boundary",
+            )
+
         summary_prompt = self.prompts.get("response_system") or (
             "You are a care navigation assistant responding to users in their preferred language."
         )
@@ -2698,6 +3012,44 @@ class CareLocatorAgent:
         return self._append_required_trust_guidance(
             normalized_content,
             response_language,
+        )
+
+    def _should_use_deterministic_numeric_clarification(
+        self,
+        payload: Dict[str, Any],
+        template_key: str,
+    ) -> bool:
+        if template_key != "response_template_clarification_needed":
+            return False
+
+        query = payload.get("query") if isinstance(payload.get("query"), dict) else {}
+        follow_up_questions = self._ensure_list(payload.get("follow_up_questions"))
+        if not follow_up_questions:
+            return False
+
+        follow_up_focus = self._ensure_list(query.get("follow_up_focus"))
+        trust_boundary_values: List[Any] = [query.get("summary")]
+        trust_boundary_values.extend(self._ensure_list(query.get("keywords")))
+        trust_boundary_values.extend(follow_up_focus)
+        if any(
+            self._contains_procedure_code_gloss(value)
+            for value in trust_boundary_values
+        ):
+            return False
+
+        summary = self._clean_card_value(query.get("summary"))
+        location = self._clean_card_value(query.get("location"))
+        if not summary or not location or summary == location:
+            return False
+
+        summary_zip = self._extract_zip_code(summary)
+        location_zip = self._extract_zip_code(location)
+        if not summary_zip or not location_zip or summary_zip != location_zip:
+            return False
+
+        return any(
+            question.startswith("What kind of care do you need")
+            for question in follow_up_questions
         )
 
     # ------------------------------------------------------------------

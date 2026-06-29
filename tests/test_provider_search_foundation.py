@@ -150,6 +150,49 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             ("ent",),
         )
 
+    def test_query_safe_alias_matrix_accepts_explicit_specialist_wording_across_families(
+        self,
+    ) -> None:
+        positive_cases = (
+            ("pediatrician", "pediatrics"),
+            ("dentist", "dentistry"),
+            ("otolaryngology", "ent"),
+            ("psychiatrist", "psychiatry-behavioral-health"),
+            ("cardiologist", "cardiology"),
+            ("obgyn", "obstetrics-gynecology"),
+            ("physical therapy", "physical-therapy-rehab"),
+        )
+
+        for alias, expected_family_id in positive_cases:
+            with self.subTest(alias=alias):
+                self.assertEqual(
+                    normalize_query_specialty_family_id(alias),
+                    expected_family_id,
+                )
+
+    def test_query_safe_alias_matrix_rejects_broad_provider_only_aliases_across_families(
+        self,
+    ) -> None:
+        provider_only_cases = (
+            ("mental health", "psychiatry-behavioral-health"),
+            ("behavioral health", "psychiatry-behavioral-health"),
+            ("therapy", "psychiatry-behavioral-health"),
+            ("counseling", "psychiatry-behavioral-health"),
+            ("sports medicine", "orthopedics"),
+            ("imaging", "radiology-imaging"),
+            ("allergy", "allergy-immunology"),
+            ("gi", "gastroenterology"),
+            ("urgent care", "urgent-care"),
+        )
+
+        for alias, expected_provider_family_id in provider_only_cases:
+            with self.subTest(alias=alias):
+                self.assertEqual(
+                    normalize_specialty_family_id(alias),
+                    expected_provider_family_id,
+                )
+                self.assertIsNone(normalize_query_specialty_family_id(alias))
+
     def test_build_canonical_provider_generates_stable_source_aware_id_when_missing(self) -> None:
         left = build_canonical_provider(
             provider_id="  ",

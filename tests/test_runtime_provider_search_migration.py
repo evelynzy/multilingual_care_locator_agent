@@ -1183,6 +1183,249 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(provider_request.location, "98101")
         self.assertIn("Cupertino OB/GYN Associates", result)
 
+    def test_handle_request_raw_message_without_explicit_cpt_keeps_zip_even_when_interpret_payload_hallucinates_procedure_intent(
+        self,
+    ) -> None:
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn-raw-zip-trusted",
+            name="Cupertino OB/GYN Associates",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Cupertino",
+            state="CA",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="408-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="98101",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=obgyn_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"CPT 98101 ob gyn",'
+                        '"medical_need":true,"location":null,"specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":["cpt"],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":["procedure code"]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "ob gyn 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 1)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.specialties, ("OB/GYN",))
+        self.assertEqual(provider_request.location, "98101")
+        self.assertIn("Cupertino OB/GYN Associates", result)
+
+    def test_handle_request_raw_message_without_explicit_cpt_strips_invented_procedure_gloss_from_query_payload(
+        self,
+    ) -> None:
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn-raw-zip-sanitized",
+            name="Cupertino OB/GYN Associates",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Cupertino",
+            state="CA",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="408-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="98101",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=obgyn_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"CPT 98101 ob gyn",'
+                        '"medical_need":true,"location":null,"specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":["cpt"],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":["procedure code"]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        with patch.object(
+            agent,
+            "_compose_result_card_response",
+            side_effect=lambda payload: json.dumps(payload["query"]),
+        ):
+            result = agent.handle_request(
+                client,
+                "ob gyn 98101",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        query_payload = json.loads(result)
+        self.assertEqual(query_payload["summary"], "ob gyn 98101")
+        self.assertEqual(query_payload["location"], "98101")
+        self.assertEqual(query_payload["keywords"], [])
+        self.assertEqual(query_payload["follow_up_focus"], [])
+        service.search.assert_called_once()
+
+    def test_handle_request_rejects_invented_bare_98101_location_without_raw_zip_evidence(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"ob gyn",'
+                        '"medical_need":true,"location":"98101","specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+        captured: Dict[str, Any] = {}
+
+        def _capture_response(
+            _client,
+            payload,
+            _max_tokens,
+            _temperature,
+            _top_p,
+            template_key="response_template",
+        ) -> str:
+            captured["payload"] = payload
+            captured["template_key"] = template_key
+            return "location-needed"
+
+        with patch.object(agent, "_compose_response", side_effect=_capture_response):
+            result = agent.handle_request(
+                client,
+                "ob gyn",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "location-needed")
+        self.assertEqual(captured["template_key"], "response_template_location_needed")
+        self.assertEqual(captured["payload"]["query"]["location"], None)
+        self.assertEqual(
+            captured["payload"]["follow_up_questions"],
+            ["What city and state or ZIP code should I search?"],
+        )
+        service.search.assert_not_called()
+
+    def test_handle_request_restores_real_raw_city_state_when_model_hallucinates_bare_98101(
+        self,
+    ) -> None:
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn-austin-restored",
+            name="Austin OB/GYN Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Austin",
+            state="TX",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="512-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="Austin, TX",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=obgyn_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"ob gyn Austin TX",'
+                        '"medical_need":true,"location":"98101","specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "ob gyn Austin, TX",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 1)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.location, "Austin, TX")
+        self.assertIn("Austin OB/GYN Clinic", result)
+
     def test_handle_request_restores_cardiovascular_disease_from_valid_interpret_json_with_empty_specialties(
         self,
     ) -> None:
@@ -1702,6 +1945,54 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         )
         service.search.assert_not_called()
 
+    def test_handle_request_abstains_for_child_allergy_when_model_picks_pediatrics(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English",'
+                        '"summary":"child allergy 98101","medical_need":true,'
+                        '"location":"98101","specialties":["Pediatrics"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "child allergy 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        self.assertNotIn(
+            "What city and state or ZIP code should I search?",
+            result,
+        )
+        service.search.assert_not_called()
+
     def test_handle_request_history_merge_drops_stale_specialty_after_ambiguous_latest_turn(
         self,
     ) -> None:
@@ -1848,6 +2139,195 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertFalse(merged_query["needs_clarification"])
         service.search.assert_called_once()
 
+    def test_handle_request_history_merge_keeps_full_summary_for_location_only_follow_up_during_specialty_clarification(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        full_history_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn or cardiology",
+            medical_need=True,
+            location="98101",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=True,
+            follow_up_focus=["specialty clarification"],
+        )
+        latest_turn_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="98101",
+            medical_need=True,
+            location="98101",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            needs_clarification=False,
+            follow_up_focus=[],
+        )
+
+        with patch.object(
+            agent,
+            "_interpret_user_need",
+            side_effect=[full_history_query, latest_turn_query],
+        ), patch.object(
+            agent,
+            "_compose_response",
+            side_effect=lambda *_args, **_kwargs: json.dumps(_args[1]),
+        ):
+            result = agent.handle_request(
+                _ScriptedChatClient([{"content": "ok"}]),
+                "98101",
+                [{"role": "user", "content": "ob gyn or cardiology"}],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        merged_payload = json.loads(result)
+        self.assertEqual(merged_payload["query"]["summary"], "ob gyn or cardiology")
+        self.assertEqual(
+            merged_payload["query"]["follow_up_focus"],
+            ["specialty clarification"],
+        )
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            merged_payload["follow_up_questions"],
+        )
+        self.assertNotIn(
+            "What city and state or ZIP code should I search?",
+            merged_payload["follow_up_questions"],
+        )
+        service.search.assert_not_called()
+
+    def test_handle_request_history_merge_keeps_full_summary_for_location_only_follow_up_with_specialist_echo(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        full_history_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="ob gyn or cardiology",
+            medical_need=True,
+            location=None,
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=True,
+            follow_up_focus=["specialty clarification"],
+        )
+        latest_turn_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="98101",
+            medical_need=True,
+            location="98101",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=False,
+            follow_up_focus=[],
+        )
+
+        with patch.object(
+            agent,
+            "_interpret_user_need",
+            side_effect=[full_history_query, latest_turn_query],
+        ), patch.object(
+            agent,
+            "_compose_response",
+            side_effect=lambda *_args, **_kwargs: json.dumps(_args[1]),
+        ):
+            result = agent.handle_request(
+                _ScriptedChatClient([{"content": "ok"}]),
+                "98101",
+                [{"role": "user", "content": "ob gyn or cardiology"}],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        merged_payload = json.loads(result)
+        self.assertEqual(merged_payload["query"]["summary"], "ob gyn or cardiology")
+        self.assertEqual(merged_payload["query"]["care_setting"], "specialist")
+        self.assertEqual(
+            merged_payload["query"]["follow_up_focus"],
+            ["specialty clarification"],
+        )
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            merged_payload["follow_up_questions"],
+        )
+        self.assertNotIn(
+            "What city and state or ZIP code should I search?",
+            merged_payload["follow_up_questions"],
+        )
+        service.search.assert_not_called()
+
+    def test_merge_parsed_queries_does_not_preserve_full_summary_for_location_only_follow_up_without_prior_specialty_clarification(
+        self,
+    ) -> None:
+        agent = CareLocatorAgent(provider_search_service=Mock())
+        full_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="dermatology",
+            medical_need=True,
+            location=None,
+            specialties=["Dermatology"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=False,
+            follow_up_focus=[],
+        )
+        latest_query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="98101",
+            medical_need=True,
+            location="98101",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=False,
+            follow_up_focus=[],
+        )
+
+        merged_query = agent._merge_parsed_queries(full_query, latest_query)
+        self.assertEqual(merged_query.summary, "98101")
+        self.assertEqual(merged_query.specialties, ["Dermatology"])
+        self.assertEqual(merged_query.follow_up_focus, [])
+        self.assertFalse(merged_query.needs_clarification)
+
     def test_handle_request_keeps_explicit_cpt_intent_when_valid_interpret_json_omits_location(self) -> None:
         service = Mock()
         service.search.return_value = ProviderSearchResponse(
@@ -1869,22 +2349,216 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                 }
             ]
         )
+        captured: Dict[str, Any] = {}
+
+        def _capture_response(
+            _client,
+            payload,
+            _max_tokens,
+            _temperature,
+            _top_p,
+            template_key="response_template",
+        ) -> str:
+            captured["payload"] = payload
+            captured["template_key"] = template_key
+            return "location-needed"
+
+        with patch.object(agent, "_compose_response", side_effect=_capture_response):
+            result = agent.handle_request(
+                client,
+                "CPT 98101 ob gyn",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "location-needed")
+        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(captured["template_key"], "response_template_location_needed")
+        self.assertEqual(captured["payload"]["query"]["location"], None)
+        self.assertEqual(captured["payload"]["query"]["specialties"], ["OB/GYN"])
+        self.assertEqual(
+            captured["payload"]["follow_up_questions"],
+            ["What city and state or ZIP code should I search?"],
+        )
+        self.assertEqual(captured["payload"]["fallback_results"], [])
+        service.search.assert_not_called()
+
+    def test_handle_request_explicit_cpt_preserves_trusted_city_state_zip_location(self) -> None:
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn-austin-cpt",
+            name="Austin OB/GYN Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Austin",
+            state="TX",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="512-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="Austin, TX 78701",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=obgyn_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"CPT 98101 ob gyn Austin TX 78701",'
+                        '"medical_need":true,"location":"Austin, TX","specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":["cpt"],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":["procedure code"]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
 
         result = agent.handle_request(
             client,
-            "CPT 98101 ob gyn",
+            "CPT 98101 ob gyn Austin, TX 78701",
             [],
             max_tokens=256,
             temperature=0.2,
             top_p=0.9,
         )
 
-        self.assertEqual(len(client.calls), 2)
+        self.assertEqual(len(client.calls), 1)
         service.search.assert_called_once()
         provider_request = service.search.call_args[0][0]
-        self.assertEqual(provider_request.location, None)
-        self.assertEqual(provider_request.specialties, ("OB/GYN",))
-        self.assertIn("Important safety and trust notes:", result)
+        self.assertEqual(provider_request.location, "Austin, TX 78701")
+        self.assertIn("Austin OB/GYN Clinic", result)
+
+    def test_handle_request_explicit_cpt_does_not_promote_trailing_procedure_code_to_zip_after_city_state(
+        self,
+    ) -> None:
+        obgyn_provider = build_canonical_provider(
+            provider_id="provider-obgyn-austin-city-only",
+            name="Austin OB/GYN Clinic",
+            source_name="NPI Registry (individual)",
+            dataset="npi_idv",
+            city="Austin",
+            state="TX",
+            taxonomy="OB/GYN",
+            specialties=("OB/GYN",),
+            phone="512-555-0100",
+        )
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("OB/GYN",),
+                location="Austin, TX",
+            ),
+            provider_results=(
+                ProviderSearchResult(
+                    provider=obgyn_provider,
+                    score=1.0,
+                    source="provider_search_service",
+                ),
+            ),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"Austin TX CPT 98101 ob gyn",'
+                        '"medical_need":true,"location":"Austin, TX","specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":["cpt"],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":["procedure code"]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "Austin, TX CPT 98101 ob gyn",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 1)
+        service.search.assert_called_once()
+        provider_request = service.search.call_args[0][0]
+        self.assertEqual(provider_request.location, "Austin, TX")
+        self.assertNotEqual(provider_request.location, "Austin, TX 98101")
+        self.assertIn("Austin OB/GYN Clinic", result)
+
+    def test_handle_request_explicit_cpt_rejects_model_invented_city_without_raw_location_evidence(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"CPT 98101 ob gyn Austin TX",'
+                        '"medical_need":true,"location":"Austin, TX","specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":["cpt"],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":["procedure code"]}'
+                    ),
+                    "finish_reason": "stop",
+                }
+            ]
+        )
+        captured: Dict[str, Any] = {}
+
+        def _capture_response(
+            _client,
+            payload,
+            _max_tokens,
+            _temperature,
+            _top_p,
+            template_key="response_template",
+        ) -> str:
+            captured["payload"] = payload
+            captured["template_key"] = template_key
+            return "location-needed"
+
+        with patch.object(agent, "_compose_response", side_effect=_capture_response):
+            result = agent.handle_request(
+                client,
+                "CPT 98101 ob gyn",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "location-needed")
+        self.assertEqual(captured["template_key"], "response_template_location_needed")
+        self.assertEqual(captured["payload"]["query"]["location"], None)
+        self.assertEqual(
+            captured["payload"]["follow_up_questions"],
+            ["What city and state or ZIP code should I search?"],
+        )
+        service.search.assert_not_called()
 
     def test_handle_request_cardiology_98101_prefers_direct_specialty_result_over_generic_family_match(
         self,
@@ -3663,6 +4337,100 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
         self.assertEqual(len(client.calls), 3)
         service.search.assert_not_called()
 
+    def test_handle_request_pain_98101_uses_deterministic_clarification_response(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"pain 98101",'
+                        '"medical_need":true,"location":"98101","specialties":[],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":null,"urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": "This looks like CPT 98101 procedure code support.",
+                    "finish_reason": "stop",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "pain 98101",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertEqual(len(client.calls), 1)
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        self.assertNotIn("CPT 98101", result)
+        self.assertNotIn("procedure code", result.lower())
+        service.search.assert_not_called()
+
+    def test_handle_request_bare_specialist_near_me_asks_location_and_specialty_clarification(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(),
+            search_trace=SearchTrace(),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        client = _ScriptedChatClient(
+            [
+                {
+                    "content": (
+                        '{"detected_language":"English","response_language":"English","summary":"specialist",'
+                        '"medical_need":true,"location":null,"specialties":[],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    ),
+                    "finish_reason": "stop",
+                },
+                {
+                    "content": None,
+                    "finish_reason": "length",
+                },
+            ]
+        )
+
+        result = agent.handle_request(
+            client,
+            "specialist near me",
+            [],
+            max_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+        )
+
+        self.assertIn("What city and state or ZIP code should I search?", result)
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            result,
+        )
+        self.assertNotIn(
+            "For a known specialty or referral need, a specialist is usually the right route.",
+            result,
+        )
+        service.search.assert_not_called()
+
     def test_handle_request_uses_us_trusted_fallback_resources_for_city_state_zero_results(self) -> None:
         service = Mock()
         service.search.return_value = ProviderSearchResponse(
@@ -3723,6 +4491,91 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
             "Medicare Care Compare",
         )
         self.assertNotIn("notes", captured["payload"])
+
+    def test_handle_request_zero_result_specialist_follow_up_uses_specialist_trusted_fallback(
+        self,
+    ) -> None:
+        service = Mock()
+        service.search.return_value = ProviderSearchResponse(
+            request=ProviderSearchRequest(
+                specialties=("Dermatology",),
+                location="Pittsburgh, PA",
+            ),
+            provider_results=(),
+            fallback_resources=(),
+            missing_location_hint=None,
+            search_trace=SearchTrace(
+                source_traces=(
+                    SourceTrace(source_name="clinicaltables", dataset="npi_idv", result_count=0),
+                ),
+                sources_attempted=("clinicaltables:npi_idv",),
+                total_candidates=0,
+            ),
+        )
+        agent = CareLocatorAgent(provider_search_service=service)
+        agent.fallback_resources = [
+            {
+                "name": "Primary Care Directory",
+                "url": "https://example.com/pcp",
+                "description": "General primary care directory.",
+                "regions": ["united states"],
+                "care_settings": ["pcp"],
+            },
+            {
+                "name": "Specialist Directory",
+                "url": "https://example.com/specialist",
+                "description": "Specialist care directory.",
+                "regions": ["united states"],
+                "care_settings": ["specialist"],
+            },
+        ]
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="dermatology follow-up in Pittsburgh",
+            medical_need=True,
+            location="Pittsburgh, PA",
+            specialties=["Dermatology"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+        captured: Dict[str, Any] = {}
+
+        def _capture(payload: Dict[str, Any]) -> str:
+            captured["payload"] = payload
+            return "fallback-cards"
+
+        with patch.object(agent, "_interpret_user_need", return_value=query), patch.object(
+            agent,
+            "_compose_result_card_response",
+            side_effect=_capture,
+        ):
+            result = agent.handle_request(
+                _SequencedChatClient(),
+                "dermatology follow-up in Pittsburgh, PA",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "fallback-cards")
+        self.assertEqual(captured["payload"]["local_results"], [])
+        self.assertEqual(
+            [item["name"] for item in captured["payload"]["fallback_results"]],
+            ["Specialist Directory"],
+        )
+        self.assertIn(
+            "specialist is usually the right route",
+            captured["payload"]["care_setting_guidance"],
+        )
+        self.assertNotIn(
+            "primary care is usually the best fit",
+            captured["payload"]["care_setting_guidance"],
+        )
+        self.assertIn("specialist_plan_guidance", captured["payload"])
 
     def test_handle_request_uses_source_failure_note_instead_of_no_providers_note(self) -> None:
         service = Mock()

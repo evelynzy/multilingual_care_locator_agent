@@ -508,7 +508,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn("**Trusted resources and fallback options:**", response)
         self.assertIn("1. **Medicare Care Compare**: Region: Pittsburgh, PA", response)
         self.assertIn("; Source: Trusted public directories", response)
-        self.assertIn(r"; Website: https://www\.medicare\.gov/care\-compare/", response)
+        self.assertIn(r"; Website: https://www.medicare.gov/care-compare/", response)
         self.assertIn(
             r"; Details: Compare clinicians and facilities using Medicare's public directory\.",
             response,
@@ -568,10 +568,58 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertIn(r"1. **Medicare \*\*Care\*\* Compare \[Official\]**", response)
         self.assertIn(r"Region: Pittsburgh, PA \(Metro\)", response)
         self.assertIn(r"Source: Trusted \[public\] directories", response)
-        self.assertIn(r"Website: https://example\.com/care\(compare\)", response)
+        self.assertIn("Website: https://example.com/care(compare)", response)
         self.assertIn(r"Details: Use \*trusted\* public data \> call first\.", response)
         self.assertNotIn("Medicare **Care** Compare [Official]", response)
         self.assertNotIn("Use *trusted* public data > call first.", response)
+        self.assertNotIn(r"Website: https://example\.com/care\(compare\)", response)
+
+    def test_format_fallback_resource_entry_escapes_non_url_website_text(self) -> None:
+        entry = self.agent._format_fallback_resource_entry(
+            {
+                "name": "Fallback Directory",
+                "location": "Austin, TX",
+                "website": "Portal [login]",
+                "description": "Bring plan details.",
+                "source": "Trusted public directories",
+            },
+            1,
+        )
+
+        self.assertIn(r"Website: Portal \[login\]", entry)
+        self.assertNotIn("Website: Portal [login]", entry)
+
+    def test_format_fallback_resource_entry_escapes_non_web_url_schemes(self) -> None:
+        entry = self.agent._format_fallback_resource_entry(
+            {
+                "name": "Fallback Directory",
+                "location": "Austin, TX",
+                "website": "javascript://alert(1)",
+                "description": "Bring plan details.",
+                "source": "Trusted public directories",
+            },
+            1,
+        )
+
+        self.assertIn(r"Website: javascript://alert\(1\)", entry)
+        self.assertNotIn("Website: javascript://alert(1)", entry)
+
+        self.assertEqual(
+            self.agent._format_visible_website_value("https://example.com/path(test)"),
+            "https://example.com/path(test)",
+        )
+        self.assertEqual(
+            self.agent._format_visible_website_value("http://example.com/path(test)"),
+            "http://example.com/path(test)",
+        )
+        self.assertEqual(
+            self.agent._format_visible_website_value("data://payload[test](here)"),
+            r"data://payload\[test\]\(here\)",
+        )
+        self.assertEqual(
+            self.agent._format_visible_website_value("file://tmp/report(backup)"),
+            r"file://tmp/report\(backup\)",
+        )
 
     def test_compose_response_appends_required_trust_guidance(self) -> None:
         client = self._client_with_response("Model-rendered answer.")
