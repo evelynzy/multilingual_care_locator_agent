@@ -1,0 +1,11 @@
+[run]
+branch = True
+omit =
+    tests/*
+    .venv/*
+    scripts/*
+    */site-packages/*
+
+[report]
+show_missing = True
+skip_covered = False
