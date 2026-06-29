@@ -252,4 +252,9 @@ with gr.Blocks(fill_height=True, css=custom_css) as demo:
 
 
 if __name__ == "__main__":
-    demo.launch()
+    # ssr_mode=False: Gradio 5.47's experimental SSR mode runs a post-launch
+    # localhost-reachability check that fails inside the Hugging Face Space
+    # network namespace, raising "When localhost is not accessible, a shareable
+    # link must be created" and crash-looping the Space. Disable SSR to use the
+    # stable client-side rendering path.
+    demo.launch(ssr_mode=False)
