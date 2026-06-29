@@ -398,6 +398,80 @@ class CareNavigationGuidanceTests(unittest.TestCase):
             "specialist",
         )
 
+    def test_care_setting_classifier_treats_bare_specialist_without_specific_specialty_as_unclear(
+        self,
+    ) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="specialist",
+            medical_need=True,
+            location=None,
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+        )
+
+        self.assertFalse(self.agent._has_clear_care_need(query, "specialist near me"))
+        self.assertEqual(
+            self.agent._classify_care_setting(query, "specialist near me"),
+            "unclear",
+        )
+
+    def test_handle_request_bare_specialist_near_me_asks_location_and_specialty_clarification(
+        self,
+    ) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="specialist",
+            medical_need=True,
+            location=None,
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=False,
+            follow_up_focus=[],
+        )
+
+        captured: dict = {}
+
+        def _capture_response(client, payload, max_tokens, temperature, top_p, template_key="response_template"):
+            captured["payload"] = payload
+            captured["template_key"] = template_key
+            return "ok"
+
+        with patch.object(self.agent, "_interpret_user_need", return_value=query), patch.object(
+            self.agent,
+            "_compose_response",
+            side_effect=_capture_response,
+        ):
+            result = self.agent.handle_request(
+                Mock(),
+                "specialist near me",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(captured["template_key"], "response_template_clarification_needed")
+        self.assertEqual(
+            captured["payload"]["follow_up_questions"],
+            [
+                "What city and state or ZIP code should I search?",
+                "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            ],
+        )
+        self.assertNotIn("care_setting_guidance", captured["payload"])
+        self.agent.provider_search_service.search.assert_not_called()
+
     def test_build_navigation_guidance_asks_specialty_follow_up_for_ambiguous_specialty_intent(
         self,
     ) -> None:
@@ -429,6 +503,277 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         self.assertIsNone(guidance["care_setting_guidance"])
         self.assertFalse(guidance["location_only"])
 
+    def test_handle_request_abstains_for_child_allergy_when_model_picks_pediatrics(
+        self,
+    ) -> None:
+        captured: dict = {}
+
+        def _capture_response(client, payload, max_tokens, temperature, top_p, template_key="response_template"):
+            captured["payload"] = payload
+            captured["template_key"] = template_key
+            return "ok"
+
+        with patch.object(
+            self.agent,
+            "_compose_response",
+            side_effect=_capture_response,
+        ):
+            result = self.agent.handle_request(
+                _StubChatClient(
+                    (
+                        '{"detected_language":"English","response_language":"English","summary":"child allergy 95051",'
+                        '"medical_need":true,"location":"95051","specialties":["Pediatrics"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    )
+                ),
+                "child allergy 95051",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(captured["template_key"], "response_template_clarification_needed")
+        self.assertEqual(captured["payload"]["query"]["specialties"], [])
+        self.assertTrue(captured["payload"]["query"]["needs_clarification"])
+        self.assertEqual(
+            captured["payload"]["query"]["follow_up_focus"],
+            ["specialty clarification"],
+        )
+        self.assertEqual(
+            captured["payload"]["follow_up_questions"],
+            ["What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?"],
+        )
+        self.agent.provider_search_service.search.assert_not_called()
+
+    def test_handle_request_rejects_invented_bare_95051_location_without_raw_zip_evidence(
+        self,
+    ) -> None:
+        captured: dict = {}
+
+        def _capture_response(client, payload, max_tokens, temperature, top_p, template_key="response_template"):
+            captured["payload"] = payload
+            captured["template_key"] = template_key
+            return "ok"
+
+        with patch.object(
+            self.agent,
+            "_compose_response",
+            side_effect=_capture_response,
+        ):
+            result = self.agent.handle_request(
+                _StubChatClient(
+                    (
+                        '{"detected_language":"English","response_language":"English","summary":"ob gyn",'
+                        '"medical_need":true,"location":"95051","specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    )
+                ),
+                "ob gyn",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(captured["template_key"], "response_template_location_needed")
+        self.assertEqual(captured["payload"]["query"]["location"], None)
+        self.assertEqual(
+            captured["payload"]["follow_up_questions"],
+            ["What city and state or ZIP code should I search?"],
+        )
+        self.agent.provider_search_service.search.assert_not_called()
+
+    def test_handle_request_raw_message_without_explicit_cpt_strips_invented_procedure_gloss_from_query_payload(
+        self,
+    ) -> None:
+        captured: dict = {}
+
+        def _capture_result_cards(payload):
+            captured["payload"] = payload
+            return "cards"
+
+        with patch.object(
+            self.agent,
+            "_compose_result_card_response",
+            side_effect=_capture_result_cards,
+        ):
+            result = self.agent.handle_request(
+                _StubChatClient(
+                    (
+                        '{"detected_language":"English","response_language":"English","summary":"CPT 95051 ob gyn",'
+                        '"medical_need":true,"location":null,"specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":["cpt"],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":["procedure code"]}'
+                    )
+                ),
+                "ob gyn 95051",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "cards")
+        self.assertEqual(captured["payload"]["query"]["summary"], "ob gyn 95051")
+        self.assertEqual(captured["payload"]["query"]["location"], "95051")
+        self.assertEqual(captured["payload"]["query"]["keywords"], [])
+        self.assertEqual(captured["payload"]["query"]["follow_up_focus"], [])
+
+    def test_handle_request_restores_real_raw_city_state_when_model_hallucinates_bare_95051(
+        self,
+    ) -> None:
+        captured: dict = {}
+
+        def _capture_result_cards(payload):
+            captured["payload"] = payload
+            return "cards"
+
+        with patch.object(
+            self.agent,
+            "_compose_result_card_response",
+            side_effect=_capture_result_cards,
+        ):
+            result = self.agent.handle_request(
+                _StubChatClient(
+                    (
+                        '{"detected_language":"English","response_language":"English","summary":"ob gyn Austin TX",'
+                        '"medical_need":true,"location":"95051","specialties":["OB/GYN"],"insurance":[],'
+                        '"preferred_languages":[],"keywords":[],"patient_context":null,'
+                        '"care_setting":"specialist","urgency":null,"needs_clarification":false,'
+                        '"follow_up_focus":[]}'
+                    )
+                ),
+                "ob gyn Austin, TX",
+                [],
+                max_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+            )
+
+        self.assertEqual(result, "cards")
+        self.assertEqual(captured["payload"]["query"]["location"], "Austin, TX")
+        self.assertEqual(captured["payload"]["local_results"], [])
+        self.assertEqual(len(captured["payload"]["fallback_results"]), 1)
+        self.assertEqual(
+            captured["payload"]["fallback_results"][0]["name"],
+            "Medicare Care Compare",
+        )
+        self.assertEqual(
+            captured["payload"]["fallback_results"][0]["location"],
+            "Austin, TX",
+        )
+
+    def test_is_location_only_follow_up_turn_accepts_location_with_specialist_care_setting_echo(
+        self,
+    ) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="95051",
+            medical_need=True,
+            location="95051",
+            specialties=[],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            care_setting="specialist",
+            needs_clarification=True,
+            follow_up_focus=["specialty clarification"],
+        )
+
+        self.assertTrue(self.agent._is_location_only_follow_up_turn(query))
+
+    def test_build_navigation_guidance_explicit_cpt_preserves_trusted_city_state_zip(self) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="CPT 95051 ob gyn Austin TX 78701",
+            medical_need=True,
+            location="Austin, TX 78701",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=["cpt"],
+            patient_context=None,
+            needs_clarification=False,
+            follow_up_focus=["procedure code"],
+        )
+
+        guidance = self.agent._build_navigation_guidance(
+            query,
+            "CPT 95051 ob gyn Austin, TX 78701",
+        )
+
+        self.assertEqual(guidance["mode"], "search")
+        self.assertEqual(guidance["follow_up_questions"], [])
+        self.assertFalse(guidance["location_only"])
+
+    def test_build_navigation_guidance_explicit_cpt_does_not_treat_trailing_procedure_code_as_zip(
+        self,
+    ) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="Austin TX CPT 95051 ob gyn",
+            medical_need=True,
+            location="Austin, TX",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=["cpt"],
+            patient_context=None,
+            needs_clarification=False,
+            follow_up_focus=["procedure code"],
+        )
+
+        guidance = self.agent._build_navigation_guidance(
+            query,
+            "Austin, TX CPT 95051 ob gyn",
+        )
+
+        self.assertEqual(guidance["mode"], "search")
+        self.assertEqual(guidance["follow_up_questions"], [])
+        self.assertFalse(guidance["location_only"])
+
+    def test_build_navigation_guidance_explicit_cpt_rejects_invented_city_without_raw_location(
+        self,
+    ) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="CPT 95051 ob gyn Austin TX",
+            medical_need=True,
+            location="Austin, TX",
+            specialties=["OB/GYN"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=["cpt"],
+            patient_context=None,
+            needs_clarification=False,
+            follow_up_focus=["procedure code"],
+        )
+
+        guidance = self.agent._build_navigation_guidance(
+            query,
+            "CPT 95051 ob gyn",
+        )
+
+        self.assertEqual(guidance["mode"], "clarification")
+        self.assertEqual(
+            guidance["follow_up_questions"],
+            ["What city and state or ZIP code should I search?"],
+        )
+        self.assertTrue(guidance["location_only"])
+
     def test_build_navigation_guidance_treats_urgent_care_as_route_context_not_competing_specialty(
         self,
     ) -> None:
@@ -455,6 +800,34 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         self.assertEqual(guidance["mode"], "search")
         self.assertEqual(guidance["follow_up_questions"], [])
         self.assertIn("urgent care is usually the best fit", guidance["care_setting_guidance"])
+
+    def test_build_navigation_guidance_specialty_follow_up_prefers_specialist_route_over_pcp(
+        self,
+    ) -> None:
+        query = ParsedCareQuery(
+            detected_language="English",
+            response_language="English",
+            summary="dermatology follow-up in Pittsburgh",
+            medical_need=True,
+            location="Pittsburgh, PA",
+            specialties=["Dermatology"],
+            insurance=[],
+            preferred_languages=[],
+            keywords=[],
+            patient_context=None,
+            needs_clarification=False,
+            follow_up_focus=[],
+        )
+
+        guidance = self.agent._build_navigation_guidance(
+            query,
+            "dermatology follow-up in Pittsburgh, PA",
+        )
+
+        self.assertEqual(guidance["mode"], "search")
+        self.assertEqual(guidance["follow_up_questions"], [])
+        self.assertIn("specialist is usually the right route", guidance["care_setting_guidance"])
+        self.assertNotIn("primary care is usually the best fit", guidance["care_setting_guidance"])
 
     def test_specialized_prompt_templates_are_composed_not_fallbacked(self) -> None:
         payload = {
@@ -503,6 +876,47 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         emergency_prompt = client.calls[-1][1]["content"]
         self.assertIn("Do not ask follow-up questions", emergency_prompt)
         self.assertIn("emergency services now or go to the nearest emergency room", emergency_prompt)
+
+    def test_compose_response_uses_deterministic_clarification_for_non_explicit_numeric_summary(
+        self,
+    ) -> None:
+        payload = {
+            "query": {
+                "response_language": "English",
+                "detected_language": "English",
+                "summary": "pain 95051",
+                "medical_need": True,
+                "location": "95051",
+                "specialties": [],
+                "keywords": [],
+                "follow_up_focus": [],
+            },
+            "follow_up_questions": [
+                "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?"
+            ],
+            "local_results": [],
+            "fallback_results": [],
+            "verification_guidance": "Call the provider and insurer to confirm network status.",
+        }
+
+        client = _StubChatClient("This sounds like CPT 95051 procedure code guidance.")
+
+        response = self.agent._compose_response(
+            client,
+            payload,
+            max_tokens=128,
+            temperature=0.1,
+            top_p=0.9,
+            template_key="response_template_clarification_needed",
+        )
+
+        self.assertEqual(len(client.calls), 0)
+        self.assertIn(
+            "What kind of care do you need (for example primary care, pediatrics, dermatology, ENT, or urgent care)?",
+            response,
+        )
+        self.assertNotIn("CPT 95051", response)
+        self.assertNotIn("procedure code", response.lower())
 
 
 if __name__ == "__main__":
