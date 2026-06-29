@@ -78,5 +78,52 @@ class InterpretStructuredOutputTests(unittest.TestCase):
         self.assertEqual(result.location, "10013")
 
 
+class InterpretGracefulDegradationTests(unittest.TestCase):
+    """Provider rejects response_format → must fall back to plain call, not raise."""
+
+    def setUp(self):
+        self.agent = CareLocatorAgent(provider_search_service=Mock())
+
+    def _make_rejecting_client(self):
+        """Returns a client whose chat_completion raises when response_format is present,
+        but returns a valid completion otherwise."""
+
+        def _chat_completion(messages, **kwargs):
+            if "response_format" in kwargs:
+                raise RuntimeError("response_format not supported")
+            return _completion(_VALID)
+
+        client = Mock()
+        client.chat_completion.side_effect = _chat_completion
+        return client
+
+    def test_degrade_gracefully_when_provider_rejects_structured_output(self):
+        """If response_format causes an exception, the call must be retried without it
+        and _interpret_user_need must return a valid result rather than raising."""
+        client = self._make_rejecting_client()
+
+        result = self.agent._interpret_user_need(client, "儿科10013", [])
+
+        self.assertEqual(result.location, "10013")
+
+    def test_at_least_one_call_made_without_response_format(self):
+        """After the structured-output call fails, at least one call without
+        response_format must have been attempted."""
+        client = self._make_rejecting_client()
+
+        self.agent._interpret_user_need(client, "儿科10013", [])
+
+        calls_without_rf = [
+            call
+            for call in client.chat_completion.call_args_list
+            if "response_format" not in call[1]
+        ]
+        self.assertGreater(
+            len(calls_without_rf),
+            0,
+            "Expected at least one call without response_format",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

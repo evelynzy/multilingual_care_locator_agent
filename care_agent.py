@@ -1574,6 +1574,32 @@ class CareLocatorAgent:
         return re.sub(r"([`*_{}\[\]()#+.!|>~-])", r"\\\1", escaped)
 
     # ------------------------------------------------------------------
+    def _interpret_completion(self, client, messages):
+        """Call chat_completion with structured-output request_format.
+        If the provider rejects it (any exception), retry once without
+        response_format so the rest of the parse/repair/rescue chain can
+        still run.
+        """
+        try:
+            return client.chat_completion(
+                messages,
+                max_tokens=INTERPRET_MAX_TOKENS,
+                temperature=0.0,
+                top_p=0.1,
+                response_format=INTERPRET_RESPONSE_FORMAT,
+            )
+        except Exception:
+            logger.warning(
+                "Structured-output interpret call failed; retrying without response_format",
+                exc_info=True,
+            )
+            return client.chat_completion(
+                messages,
+                max_tokens=INTERPRET_MAX_TOKENS,
+                temperature=0.0,
+                top_p=0.1,
+            )
+
     def _interpret_user_need(
         self, client: InferenceClient, message: str, history: List[Dict[str, str]]
     ) -> ParsedCareQuery:
@@ -1592,13 +1618,7 @@ class CareLocatorAgent:
             + [{"role": "user", "content": message}]
         )
 
-        completion = client.chat_completion(
-            messages,
-            max_tokens=INTERPRET_MAX_TOKENS,
-            temperature=0.0,
-            top_p=0.1,
-            response_format=INTERPRET_RESPONSE_FORMAT,
-        )
+        completion = self._interpret_completion(client, messages)
 
         first_choice = completion.choices[0] if completion.choices else None
         content = self._content_from_completion_choice(first_choice) or ""
@@ -1620,13 +1640,7 @@ class CareLocatorAgent:
                     }
                 ]
             )
-            retry_completion = client.chat_completion(
-                retry_messages,
-                max_tokens=INTERPRET_MAX_TOKENS,
-                temperature=0.0,
-                top_p=0.1,
-                response_format=INTERPRET_RESPONSE_FORMAT,
-            )
+            retry_completion = self._interpret_completion(client, retry_messages)
             retry_first_choice = (
                 retry_completion.choices[0]
                 if retry_completion.choices
