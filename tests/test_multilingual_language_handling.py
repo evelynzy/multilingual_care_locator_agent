@@ -114,22 +114,25 @@ class RenderLocaleResolutionTests(unittest.TestCase):
 
 
 class NativeScriptAliasGapTests(unittest.TestCase):
-    """SUSPECTED BUGS surfaced (not fixed): native-script Korean and Vietnamese
-    aliases are listed in the alias table but never match, because
-    _normalize_response_language applies NFKD + combining-mark stripping, which
-    decomposes Hangul and removes Vietnamese diacritics so the normalized input
-    no longer equals the stored dict key. (CJK and Arabic survive NFKD.)
-    These expectedFailures document the intended behavior; if the normalization
-    or the alias keys are fixed, they flip to unexpected-success and flag here.
-    """
+    """Native-script aliases must resolve to their language (regression guard)."""
 
-    @unittest.expectedFailure
     def test_korean_native_script_should_resolve_to_korean(self):
         self.assertEqual(_get_prewritten_required_trust_guidance("한국어"), G["korean"])
 
-    @unittest.expectedFailure
     def test_vietnamese_native_script_should_resolve_to_vietnamese(self):
         self.assertEqual(_get_prewritten_required_trust_guidance("tiếng việt"), G["vietnamese"])
+
+    def test_native_script_aliases_resolve_for_all_distinct_scripts(self):
+        cases = [
+            ("中文", "simplified_chinese"),
+            ("简体中文", "simplified_chinese"),
+            ("한국어", "korean"),
+            ("tiếng việt", "vietnamese"),
+            ("العربية", "arabic"),
+        ]
+        for alias, expected_key in cases:
+            with self.subTest(alias=alias):
+                self.assertEqual(_get_prewritten_required_trust_guidance(alias), G[expected_key])
 
 
 if __name__ == "__main__":

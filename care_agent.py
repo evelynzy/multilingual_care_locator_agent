@@ -355,15 +355,19 @@ def _is_unknown_response_language(response_language: Optional[str]) -> bool:
     return not normalized_language or normalized_language in _UNKNOWN_LANGUAGE_MARKERS
 
 
-def _get_prewritten_required_trust_guidance(response_language: Optional[str]) -> Optional[str]:
-    if _is_unknown_response_language(response_language):
-        return _REQUIRED_TRUST_GUIDANCE
+# Normalize alias keys the SAME way inputs are normalized, so native-script
+# aliases (Korean 한국어 decomposes under NFKD; Vietnamese tiếng việt loses its
+# diacritics) match. Language-agnostic: any future native-script alias works.
+_NORMALIZED_TRUST_GUIDANCE_ALIASES = {
+    _normalize_response_language(alias): language_key
+    for alias, language_key in _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.items()
+}
 
-    normalized_language = _normalize_response_language(response_language)
-    language_key = _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.get(normalized_language)
 
+def _lookup_language_alias(normalized_language: str) -> Optional[str]:
+    language_key = _NORMALIZED_TRUST_GUIDANCE_ALIASES.get(normalized_language)
     if language_key is None:
-        for alias, alias_language_key in _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.items():
+        for alias, alias_language_key in _NORMALIZED_TRUST_GUIDANCE_ALIASES.items():
             if (
                 normalized_language.startswith(f"{alias} ")
                 or normalized_language.startswith(f"{alias}-")
@@ -371,10 +375,16 @@ def _get_prewritten_required_trust_guidance(response_language: Optional[str]) ->
             ):
                 language_key = alias_language_key
                 break
+    return language_key
 
+
+def _get_prewritten_required_trust_guidance(response_language: Optional[str]) -> Optional[str]:
+    if _is_unknown_response_language(response_language):
+        return _REQUIRED_TRUST_GUIDANCE
+
+    language_key = _lookup_language_alias(_normalize_response_language(response_language))
     if language_key is None:
         return None
-
     return _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key]
 
 
@@ -382,22 +392,10 @@ def _resolved_supported_language_key(response_language: Optional[str]) -> str:
     if _is_unknown_response_language(response_language):
         return "english"
 
-    normalized_language = _normalize_response_language(response_language)
-    language_key = _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.get(normalized_language)
-
-    if language_key is None:
-        for alias, alias_language_key in _REQUIRED_TRUST_GUIDANCE_LANGUAGE_ALIASES.items():
-            if (
-                normalized_language.startswith(f"{alias} ")
-                or normalized_language.startswith(f"{alias}-")
-                or normalized_language.startswith(f"{alias} (")
-            ):
-                language_key = alias_language_key
-                break
-
+    language_key = _lookup_language_alias(_normalize_response_language(response_language))
     if language_key not in _DETERMINISTIC_RENDER_COPY:
         return "english"
-    return language_key or "english"
+    return language_key
 
 
 def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
