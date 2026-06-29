@@ -98,7 +98,7 @@ class _SequencedChatClient:
         self.response_texts = list(response_texts)
         self.calls = []
 
-    def chat_completion(self, messages, max_tokens, temperature, top_p):
+    def chat_completion(self, messages, max_tokens, temperature, top_p, **kwargs):
         self.calls.append(
             {
                 "messages": messages,

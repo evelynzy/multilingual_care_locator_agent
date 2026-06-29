@@ -94,7 +94,7 @@ class _StubChatClient:
         self.response_text = response_text
         self.calls = []
 
-    def chat_completion(self, messages, max_tokens, temperature, top_p):
+    def chat_completion(self, messages, max_tokens, temperature, top_p, **kwargs):
         self.calls.append(messages)
         return type("Completion", (), {"choices": [_StubCompletionChoice(self.response_text)]})()
 

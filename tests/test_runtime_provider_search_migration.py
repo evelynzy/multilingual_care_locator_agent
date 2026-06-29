@@ -44,7 +44,7 @@ class _SequencedChatClient:
     def __init__(self) -> None:
         self.calls = []
 
-    def chat_completion(self, messages, max_tokens, temperature, top_p):
+    def chat_completion(self, messages, max_tokens, temperature, top_p, **kwargs):
         self.calls.append(messages)
         return type("Completion", (), {"choices": []})()
 
@@ -54,7 +54,7 @@ class _ScriptedChatClient:
         self.responses = list(responses)
         self.calls = []
 
-    def chat_completion(self, messages, max_tokens, temperature, top_p):
+    def chat_completion(self, messages, max_tokens, temperature, top_p, **kwargs):
         self.calls.append(
             {
                 "messages": messages,

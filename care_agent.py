@@ -685,6 +685,61 @@ _EXPLICIT_ALLERGY_SPECIALTY_PATTERNS = (
 )
 
 
+INTERPRET_MAX_TOKENS = 1024
+
+INTERPRET_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "care_intent",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "detected_language",
+                "response_language",
+                "summary",
+                "medical_need",
+                "location",
+                "specialties",
+                "insurance",
+                "preferred_languages",
+                "keywords",
+                "patient_context",
+                "care_setting",
+                "urgency",
+                "needs_clarification",
+                "follow_up_focus",
+            ],
+            "properties": {
+                "detected_language": {"type": "string"},
+                "response_language": {"type": "string"},
+                "summary": {"type": "string"},
+                "medical_need": {"type": "boolean"},
+                "location": {"type": ["string", "null"]},
+                "specialties": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Specialty names in ENGLISH, translated from the user's "
+                        "language (e.g. 儿科 -> pediatrics, 心脏科 -> cardiology). "
+                        "The provider directory only matches English terms."
+                    ),
+                },
+                "insurance": {"type": "array", "items": {"type": "string"}},
+                "preferred_languages": {"type": "array", "items": {"type": "string"}},
+                "keywords": {"type": "array", "items": {"type": "string"}},
+                "patient_context": {"type": ["string", "null"]},
+                "care_setting": {"type": ["string", "null"]},
+                "urgency": {"type": ["string", "null"]},
+                "needs_clarification": {"type": "boolean"},
+                "follow_up_focus": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+    },
+}
+
+
 @dataclass
 class ParsedCareQuery:
     """Structured representation of the user's care request."""
@@ -1539,9 +1594,10 @@ class CareLocatorAgent:
 
         completion = client.chat_completion(
             messages,
-            max_tokens=512,
+            max_tokens=INTERPRET_MAX_TOKENS,
             temperature=0.0,
             top_p=0.1,
+            response_format=INTERPRET_RESPONSE_FORMAT,
         )
 
         first_choice = completion.choices[0] if completion.choices else None
@@ -1566,9 +1622,10 @@ class CareLocatorAgent:
             )
             retry_completion = client.chat_completion(
                 retry_messages,
-                max_tokens=512,
+                max_tokens=INTERPRET_MAX_TOKENS,
                 temperature=0.0,
                 top_p=0.1,
+                response_format=INTERPRET_RESPONSE_FORMAT,
             )
             retry_first_choice = (
                 retry_completion.choices[0]
