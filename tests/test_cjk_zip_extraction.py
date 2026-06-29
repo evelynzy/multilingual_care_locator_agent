@@ -52,6 +52,16 @@ class CjkZipExtractionTests(unittest.TestCase):
         # A longer run of digits must not be mistaken for a 5-digit ZIP.
         self.assertIsNone(self.agent._extract_zip_code("code 100135"))
 
+    # --- latin-glued ZIP: documents/locks the widened regex behavior ---
+
+    def test_extract_zip_glued_to_latin_letters(self):
+        # The widened regex (no \\b) also extracts when digits are glued to Latin text.
+        self.assertEqual(self.agent._extract_zip_code("abc10013"), "10013")
+
+    def test_seven_digit_run_glued_to_latin_not_extracted(self):
+        # The 6+-digit guard must still hold for Latin-glued numbers.
+        self.assertIsNone(self.agent._extract_zip_code("x1234567y"))
+
 
 if __name__ == "__main__":
     unittest.main()
