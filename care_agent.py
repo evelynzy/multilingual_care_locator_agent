@@ -2783,7 +2783,16 @@ class CareLocatorAgent:
                     ):
                         continue
                 else:
-                    if not any(filter_term in {"international", "global"} for filter_term in region_filters):
+                    # Location is unknown: include national/US-scoped resources
+                    # as well as globally-scoped ones so a US user who did not
+                    # provide a parseable location still sees national links.
+                    _UNKNOWN_LOCATION_INCLUDED = {
+                        "international", "global", "united states", "usa", "us"
+                    }
+                    if not any(
+                        filter_term in _UNKNOWN_LOCATION_INCLUDED
+                        for filter_term in region_filters
+                    ):
                         continue
 
             suggestions.append(
