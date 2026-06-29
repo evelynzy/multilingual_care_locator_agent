@@ -53,6 +53,14 @@ class MultilingualSmokeTests(unittest.TestCase):
     def test_english_control_returns_providers(self):
         self.assertIn("provider-card", self._respond("pediatrics 10013"))
 
+    def test_spanish_query_returns_providers(self):
+        self.assertIn("provider-card", self._respond("dentista 33012"))
+
+    def test_arabic_pediatrics_returns_providers(self):
+        # أطفال = pediatrics. A failure here is a finding: the LLM path does not
+        # generalize past the languages already tried.
+        self.assertIn("provider-card", self._respond("أطفال 10013"))
+
 
 if __name__ == "__main__":
     unittest.main()
