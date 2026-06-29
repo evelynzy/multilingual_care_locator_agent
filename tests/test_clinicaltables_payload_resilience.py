@@ -169,14 +169,12 @@ class BuildFallbackProviderResilienceTests(unittest.TestCase):
 
         self.assertEqual(provider.name, "Acme Clinic")
         self.assertEqual(provider.source, "NPI Registry (organization)")
-        # NOTE: current behavior, suspected bug -- ``str(None).strip()`` evaluates
-        # to the truthy literal "None", so null row fields are surfaced as the
-        # string "None" instead of being treated as empty/absent. Expected
-        # behavior would leave phone/taxonomy/address empty (None) here. This is
-        # pinned (not silently accepted) and reported.
-        self.assertEqual(provider.phone, "None")
-        self.assertEqual(provider.taxonomy, "None")
-        self.assertEqual(provider.address, "None")
+        # Corrected behavior: None row values must not surface as the string
+        # "None"; they must be treated as absent (None / empty string).
+        self.assertIsNone(provider.phone)
+        self.assertIsNone(provider.taxonomy)
+        # absent address normalizes to None (not the string "None")
+        self.assertIsNone(provider.address)
 
 
 if __name__ == "__main__":
