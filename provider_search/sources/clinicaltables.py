@@ -453,9 +453,15 @@ class ClinicalTablesSource:
             if reformatted:
                 name_value = reformatted
 
-        phone = str(row[4]).strip() if len(row) > 4 and str(row[4]).strip() else None
-        taxonomy = str(row[2]).strip() if len(row) > 2 and str(row[2]).strip() else None
-        address = str(row[3]).strip() if len(row) > 3 and str(row[3]).strip() else ""
+        def _row_str(value: object) -> str:
+            """Convert a row cell to string, treating None as empty."""
+            if value is None:
+                return ""
+            return str(value).strip()
+
+        phone = (_row_str(row[4]) or None) if len(row) > 4 else None
+        taxonomy = (_row_str(row[2]) or None) if len(row) > 2 else None
+        address = _row_str(row[3]) if len(row) > 3 else ""
         provider_id = row[1] if len(row) > 1 else None
 
         provider = build_canonical_provider(
