@@ -15,3 +15,7 @@ htmlcov/
 
 # local AI-tooling scratch dir (never commit)
 .superpowers/
+
+# AI-assisted planning docs — keep local, never push
+docs/specs/
+docs/plans/
