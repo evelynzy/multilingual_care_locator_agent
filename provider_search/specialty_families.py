@@ -123,7 +123,18 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "cardiologist",
             "cardiovascular disease",
             "physician internal medicine cardiovascular disease",
+            # Live ClinicalTables cardiology subspecialties arrive as bare
+            # specialization descriptions (no "Physician/" wrapper) or as NUCC
+            # codes, neither of which the suffix/comma canonicalization can rescue.
+            # Recognize them so real cardiologists are not dropped as
+            # specialty_mismatch on cardiology intent.
+            "interventional cardiology",
+            "clinical cardiac electrophysiology",
+            "advanced heart failure and transplant cardiology",
             "207rc0000x",
+            "207rc0001x",
+            "207ri0011x",
+            "207ra0001x",
         ),
     ),
     SpecialtyFamily(
