@@ -2592,7 +2592,11 @@ class CareLocatorAgent:
 
     # ------------------------------------------------------------------
     def _extract_zip_code(self, value: str) -> Optional[str]:
-        match = re.search(r"\b(\d{5})(?:-\d{4})?\b", value)
+        # Use digit lookarounds rather than \b word boundaries: Python's Unicode
+        # regex treats CJK characters as word characters, so "\b\d{5}\b" fails to
+        # match a ZIP glued to CJK text (e.g. "儿科10013"). Lookarounds still
+        # reject digits that are part of a longer number (e.g. "100135").
+        match = re.search(r"(?<!\d)(\d{5})(?:-\d{4})?(?!\d)", value)
         if match:
             return match.group(1)
         return None
