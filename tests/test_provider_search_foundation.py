@@ -473,6 +473,83 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
 
                 self.assertEqual(family_ids, expected_family_ids)
 
+    def test_normalize_specialty_family_id_recognizes_cardiology_subspecialty_aliases_and_codes(
+        self,
+    ) -> None:
+        for value in (
+            "Interventional Cardiology",
+            "Clinical Cardiac Electrophysiology",
+            "Advanced Heart Failure and Transplant Cardiology",
+            "207RI0011X",
+            "207RC0001X",
+            "207RA0001X",
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(normalize_specialty_family_id(value), "cardiology")
+
+    def test_derive_provider_specialty_family_ids_recognizes_live_cardiology_subspecialty_variants(
+        self,
+    ) -> None:
+        # Live ClinicalTables cardiology subspecialty providers arrive with a
+        # NUCC grouping in provider_type, a bare specialization description, and
+        # a code. These previously derived no cardiology family id (empty or
+        # primary-care) and were dropped as specialty_mismatch on cardiology
+        # intent. The provider must surface cardiology so the gate admits it.
+        subspecialty_variants = (
+            (
+                (
+                    "Internal Medicine, Interventional Cardiology",
+                    "Interventional Cardiology",
+                    "207RI0011X",
+                ),
+                "Interventional Cardiology",
+            ),
+            (
+                (
+                    "Internal Medicine, Clinical Cardiac Electrophysiology",
+                    "Clinical Cardiac Electrophysiology",
+                    "207RC0001X",
+                ),
+                "Clinical Cardiac Electrophysiology",
+            ),
+            (
+                (
+                    "Internal Medicine, Advanced Heart Failure and Transplant Cardiology",
+                    "Advanced Heart Failure and Transplant Cardiology",
+                    "207RA0001X",
+                ),
+                "Advanced Heart Failure and Transplant Cardiology",
+            ),
+        )
+
+        for specialties, taxonomy in subspecialty_variants:
+            with self.subTest(taxonomy=taxonomy):
+                family_ids = derive_provider_specialty_family_ids(
+                    specialties=specialties,
+                    taxonomy=taxonomy,
+                )
+
+                self.assertIn("cardiology", family_ids)
+
+    def test_cardiology_subspecialty_aliases_stay_query_narrow_and_off_obgyn(
+        self,
+    ) -> None:
+        # Trust-boundary guard: new provider-side subspecialty aliases must not
+        # leak into the narrow query-time rescue, and must not perturb the
+        # hard-won OB/GYN family derivation.
+        self.assertIsNone(normalize_query_specialty_family_id("interventional cardiology"))
+        self.assertIsNone(
+            normalize_query_specialty_family_id("clinical cardiac electrophysiology")
+        )
+        self.assertEqual(normalize_specialty_family_id("ob gyn"), "obstetrics-gynecology")
+        self.assertEqual(
+            derive_provider_specialty_family_ids(
+                specialties=("Clinic/Center", "Physician/Obstetrics & Gynecology"),
+                taxonomy="Physician/Obstetrics & Gynecology",
+            ),
+            ("obstetrics-gynecology",),
+        )
+
     def test_derive_provider_specialty_family_ids_does_not_overmatch_wrapped_compound_taxonomy_tails(
         self,
     ) -> None:
