@@ -215,18 +215,11 @@ class MergeProviderRecordsTests(unittest.TestCase):
             fallback=fallback,
         )
 
-        # NOTE: current behavior, suspected bug -- ``_merge_provider_records``
-        # builds the result from ``primary.with_updates(...)`` and only merges a
-        # fixed set of metadata fields (provider_id, source, verification,
-        # freshness, provenance/retrieval/ranking/raw dicts). Scalar fields the
-        # fallback uniquely carries (address, insurance_reported, city/state,
-        # etc.) are NOT merged, so complementary data the primary lacks is
-        # silently dropped. Expected behavior would retain the fallback's
-        # non-empty address/insurance here. Pinned and reported.
-        self.assertIsNone(merged.address)
-        self.assertEqual(merged.insurance_reported, ())
+        # Corrected behavior: complementary scalar fields the primary lacks
+        # (address, insurance_reported) must be filled from the fallback.
+        self.assertEqual(merged.address, "123 Main St, Dallas, TX 75201")
+        self.assertEqual(merged.insurance_reported, ("Aetna",))
 
-    @unittest.expectedFailure
     def test_merge_should_retain_all_complementary_fields(self) -> None:
         """Executable spec of the desired merge behavior (currently failing).
 

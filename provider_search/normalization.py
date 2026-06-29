@@ -429,6 +429,20 @@ def _merge_provider_context(
     return primary.with_updates(
         provider_id=_merge_provider_id(primary.provider_id, fallback.provider_id),
         source=primary.source or fallback.source,
+        # Scalar fields: fill from fallback only when the primary value is empty.
+        address=primary.address or fallback.address,
+        city=primary.city or fallback.city,
+        state=primary.state or fallback.state,
+        country=primary.country or fallback.country,
+        phone=primary.phone or fallback.phone,
+        website=primary.website or fallback.website,
+        description=primary.description or fallback.description,
+        taxonomy=primary.taxonomy or fallback.taxonomy,
+        telehealth=primary.telehealth if primary.telehealth is not None else fallback.telehealth,
+        # Sequence fields: take fallback when primary tuple is empty.
+        insurance_reported=primary.insurance_reported if primary.insurance_reported else fallback.insurance_reported,
+        languages=primary.languages if primary.languages else fallback.languages,
+        specialties=primary.specialties if primary.specialties else fallback.specialties,
         specialty_family_ids=_merge_string_values(
             fallback.specialty_family_ids,
             primary.specialty_family_ids,
