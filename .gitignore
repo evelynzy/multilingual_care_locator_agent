@@ -12,3 +12,6 @@ FLIGHTDECK_HANDOFF.md
 .coverage
 coverage.xml
 htmlcov/
+
+# local AI-tooling scratch dir (never commit)
+.superpowers/
