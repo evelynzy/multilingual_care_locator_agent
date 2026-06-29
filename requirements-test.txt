@@ -1,0 +1,8 @@
+# Minimal dependencies to run the automated test suite (tests/).
+# The suite stubs the heavy runtime deps (gradio, huggingface_hub, datasets,
+# llama-index, dotenv) at import time, so they are intentionally NOT installed
+# here. Validated against a clean venv: these four run all tests offline.
+pytest>=7.0
+pytest-cov>=4.0
+requests>=2.31.0
+pyyaml>=6.0

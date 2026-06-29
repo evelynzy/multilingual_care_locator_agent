@@ -9,3 +9,6 @@ tests/*.ipynb
 .DS_Store
 specialty-scenario-report*.md
 FLIGHTDECK_HANDOFF.md
+.coverage
+coverage.xml
+htmlcov/
