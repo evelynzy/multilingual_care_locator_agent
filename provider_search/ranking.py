@@ -22,6 +22,27 @@ _ACCEPTING_STATUSES = {"accepting", "accepting new patients", "open"}
 _TELEHEALTH_TERMS = {"telehealth", "virtual", "video", "remote", "online"}
 _GENERIC_SPECIALTY_EVIDENCE_PREFIXES = ("clinic center",)
 
+# Two-letter US state codes used for state-aware location scoring.
+_US_STATE_CODES = frozenset({
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+    "DC",
+})
+
+
+def _extract_state_code(text: Optional[str]) -> Optional[str]:
+    """Return the first standalone 2-letter US state code found in *text*."""
+    if not text:
+        return None
+    for token in re.split(r"[,\s]+", text.strip()):
+        upper = token.strip().upper()
+        if upper in _US_STATE_CODES:
+            return upper
+    return None
+
 
 @dataclass(frozen=True)
 class ProviderGateEvaluation:
@@ -142,6 +163,12 @@ def _build_score_breakdown(
         _tokenize(request.location),
         _tokenize(provider.location_summary),
     )
+    request_state = _extract_state_code(request.location)
+    provider_state = (provider.state or "").strip().upper() or None
+    if request_state and provider_state and request_state != provider_state:
+        location_score = 0.0
+    else:
+        location_score = 1.0 if location_matches > 0 else 0.0
     specialty_matches = len(matched_specialties)
     language_matches = len(_match_values(request.preferred_languages, provider.languages))
     insurance_matches = len(_match_values(request.insurance, provider.insurance_reported))
@@ -164,7 +191,7 @@ def _build_score_breakdown(
         "keyword_alignment": 1.75 * keyword_matches,
         "language_alignment": 1.5 * language_matches,
         "insurance_alignment": 1.5 * insurance_matches,
-        "location_alignment": 1.0 if location_matches > 0 else 0.0,
+        "location_alignment": location_score,
         "accepting_new_patients": 0.75 if accepting_verified else 0.0,
         "insurance_verified": 0.5 if insurance_verified else 0.0,
         "telehealth_alignment": 0.5 if telehealth_requested and provider.telehealth else 0.0,

@@ -72,11 +72,10 @@ class LocationAlignmentTests(unittest.TestCase):
     def _location_alignment(self, result):
         return result.provider.ranking_metadata["score_breakdown"]["location_alignment"]
 
-    def test_same_city_different_state_currently_scores_equal(self):
+    def test_state_aware_location_scoring_gives_zero_to_wrong_state(self):
         # No specialty filter, so both providers are admitted and differ only by
-        # state. _build_score_breakdown gives location_alignment = 1.0 on ANY token
-        # overlap, so "Los Angeles TX" earns the same location credit as
-        # "Los Angeles CA" for a CA search.
+        # state. When the request specifies a US state, a provider in a different
+        # state must receive location_alignment = 0.0, not 1.0.
         ca_provider = _provider(
             provider_id="npi-ca",
             name="LA CA Clinic",
@@ -96,11 +95,10 @@ class LocationAlignmentTests(unittest.TestCase):
         # preserved display name instead.
         by_name = {r.provider.name: r for r in ranked}
 
-        # NOTE: current behavior (suspected precision limitation): the out-of-state
-        # provider gets full location credit. Pinned so a future state-aware fix
-        # surfaces here as an unexpected change.
+        # The CA provider matches on state -> full location credit.
         self.assertEqual(self._location_alignment(by_name["LA CA Clinic"]), 1.0)
-        self.assertEqual(self._location_alignment(by_name["LA TX Clinic"]), 1.0)
+        # The TX provider's state conflicts with the request state -> no credit.
+        self.assertEqual(self._location_alignment(by_name["LA TX Clinic"]), 0.0)
 
 
 if __name__ == "__main__":
