@@ -19,3 +19,7 @@ htmlcov/
 # local working notes — keep local, never push
 docs/specs/
 docs/plans/
+
+# fairness-eval run artifacts (regenerable)
+eval/.cache/
+eval/results.jsonl
