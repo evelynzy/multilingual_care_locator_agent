@@ -53,25 +53,31 @@ def _parse_variant(language: str, raw: dict) -> LanguageVariant:
 
 
 def _parse_scenario(raw: dict) -> Scenario:
-    gold_raw = raw["gold"]
-    gold = GoldLabels(
-        expected_specialty=gold_raw.get("expected_specialty"),
-        expected_state=gold_raw.get("expected_state"),
-        expect_followup=bool(gold_raw["expect_followup"]),
-        expect_nonzero_providers=bool(gold_raw["expect_nonzero_providers"]),
-        expect_emergency_routing=bool(gold_raw["expect_emergency_routing"]),
-        expected_preferred_language=gold_raw.get("expected_preferred_language"),
-    )
-    variants = {
-        lang: _parse_variant(lang, variant_raw)
-        for lang, variant_raw in raw["variants"].items()
-    }
+    try:
+        gold_raw = raw["gold"]
+        gold = GoldLabels(
+            expected_specialty=gold_raw.get("expected_specialty"),
+            expected_state=gold_raw.get("expected_state"),
+            expect_followup=bool(gold_raw["expect_followup"]),
+            expect_nonzero_providers=bool(gold_raw["expect_nonzero_providers"]),
+            expect_emergency_routing=bool(gold_raw["expect_emergency_routing"]),
+            expected_preferred_language=gold_raw.get("expected_preferred_language"),
+        )
+        scenario_id = raw["id"]
+        category = raw["category"]
+        dimension = raw["dimension"]
+        variants = {
+            lang: _parse_variant(lang, variant_raw)
+            for lang, variant_raw in raw["variants"].items()
+        }
+    except KeyError as exc:
+        raise ValueError("Malformed scenario, missing required key: {0}".format(exc)) from exc
     if "en" not in variants:
-        raise ValueError("Scenario {0} missing english seed".format(raw.get("id")))
+        raise ValueError("Scenario {0} missing english seed".format(scenario_id))
     return Scenario(
-        id=str(raw["id"]),
-        category=str(raw["category"]),
-        dimension=str(raw["dimension"]),
+        id=str(scenario_id),
+        category=str(category),
+        dimension=str(dimension),
         gold=gold,
         variants=variants,
     )
