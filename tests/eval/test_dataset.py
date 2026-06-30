@@ -38,6 +38,11 @@ class DatasetTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_scenarios("tests/eval/fixtures/bad_scenarios.json")
 
+    def test_rejects_missing_required_key(self):
+        # A scenario missing the "gold" key must surface as ValueError, not KeyError.
+        with self.assertRaises(ValueError):
+            load_scenarios("tests/eval/fixtures/missing_key_scenarios.json")
+
 
 if __name__ == "__main__":
     unittest.main()
