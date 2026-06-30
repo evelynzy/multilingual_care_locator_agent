@@ -123,7 +123,9 @@ def run_trace(
 
     trace = Trace(scenario_id=scenario.id, language=language, turns=captures, error=error)
 
-    if use_cache:
+    # Do not cache errored traces: a transient failure (rate limit, timeout)
+    # must not permanently poison a scenario's cache entry.
+    if use_cache and error is None:
         os.makedirs(cache_dir, exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(trace_to_dict(trace), handle, ensure_ascii=False, indent=2)
