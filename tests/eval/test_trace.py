@@ -67,5 +67,120 @@ class TraceLiveTests(unittest.TestCase):
         self.assertTrue(turn.html_has_card)
 
 
+class _FakeProvider:
+    def __init__(self, state):
+        self.state = state
+
+
+class _FakeResult:
+    def __init__(self, state):
+        self.provider = _FakeProvider(state)
+
+
+class _FakeResponse:
+    def __init__(self, results):
+        self.provider_results = results
+
+
+class _FakeService:
+    def __init__(self, last_request=None, last_response=None):
+        self.last_request = last_request
+        self.last_response = last_response
+
+    def reset(self):
+        self.last_request = None
+        self.last_response = None
+
+
+class _FakeParsed:
+    def __init__(self, specialties=None, preferred_languages=None, urgency=None,
+                 care_setting=None, needs_clarification=False):
+        self.specialties = specialties or []
+        self.preferred_languages = preferred_languages or []
+        self.urgency = urgency
+        self.care_setting = care_setting
+        self.needs_clarification = needs_clarification
+
+
+class _CaptureAgent:
+    def __init__(self, parsed=None, service=None):
+        self.last_parsed_query = parsed
+        self.provider_search_service = service or _FakeService()
+
+
+class _RaisingAgent:
+    def __init__(self):
+        self.last_parsed_query = None
+        self.provider_search_service = _FakeService()
+
+    def reset_capture(self):
+        self.last_parsed_query = None
+        self.provider_search_service.reset()
+
+    def handle_request(self, *args, **kwargs):
+        raise RuntimeError("boom")
+
+
+class TraceCaptureAndCacheTests(unittest.TestCase):
+    def test_capture_no_search_turn(self):
+        from eval.trace import _capture_turn
+
+        agent = _CaptureAgent(
+            parsed=_FakeParsed(needs_clarification=True),
+            service=_FakeService(last_request=None, last_response=None),
+        )
+        turn = _capture_turn("mental health 98101", agent, "Could you clarify?")
+        self.assertFalse(turn.searched)
+        self.assertEqual(turn.request_specialties, [])
+        self.assertEqual(turn.provider_states, [])
+        self.assertEqual(turn.provider_count, 0)
+        self.assertFalse(turn.html_has_card)
+        self.assertTrue(turn.parsed_needs_clarification)
+
+    def test_capture_search_turn(self):
+        from eval.trace import _capture_turn
+        from provider_search.models import ProviderSearchRequest
+
+        request = ProviderSearchRequest(
+            specialties=("cardiology",), preferred_languages=("spanish",)
+        )
+        response = _FakeResponse([_FakeResult("CA"), _FakeResult("tx")])
+        agent = _CaptureAgent(
+            parsed=_FakeParsed(specialties=["cardiology"]),
+            service=_FakeService(last_request=request, last_response=response),
+        )
+        turn = _capture_turn("cardiology 98101", agent, "<div class='provider-card'>")
+        self.assertTrue(turn.searched)
+        self.assertEqual(turn.request_specialties, ["cardiology"])
+        self.assertEqual(turn.request_preferred_languages, ["spanish"])
+        self.assertEqual(turn.provider_states, ["CA", "TX"])
+        self.assertEqual(turn.provider_count, 2)
+        self.assertTrue(turn.html_has_card)
+
+    def test_errored_run_is_not_cached(self):
+        from eval.dataset import GoldLabels, LanguageVariant, Scenario
+
+        scenario = Scenario(
+            id="t-err",
+            category="c",
+            dimension="d",
+            gold=GoldLabels(None, None, False, False, False, None),
+            variants={
+                "en": LanguageVariant("en", ["hi"], "english_seed", "human_verified", None, None)
+            },
+        )
+        with tempfile.TemporaryDirectory() as d:
+            trace = run_trace(
+                scenario,
+                "en",
+                _RaisingAgent(),
+                client=None,
+                settings={"max_tokens": 1, "temperature": 0.0, "top_p": 1.0},
+                cache_dir=d,
+            )
+            self.assertIsNotNone(trace.error)
+            self.assertEqual(os.listdir(d), [])
+
+
 if __name__ == "__main__":
     unittest.main()
