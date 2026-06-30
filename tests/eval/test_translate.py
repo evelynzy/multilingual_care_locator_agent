@@ -82,6 +82,22 @@ class TranslateWriterTests(unittest.TestCase):
             self.assertEqual(fill_missing_variants(path, _StubClient(), model="fake-model"), 4)
             self.assertEqual(fill_missing_variants(path, _StubClient(), model="fake-model"), 0)
 
+    def test_translate_turns_falls_back_when_choice_has_no_message(self):
+        from eval.translate import translate_turns
+
+        class _NoMessageClient:
+            def chat_completion(self, messages, model=None, max_tokens=None, temperature=None):
+                class _Choice:
+                    pass  # malformed: no .message attribute
+
+                class _Resp:
+                    choices = [_Choice()]
+
+                return _Resp()
+
+        result = translate_turns(["cardiology 98101"], "zh", _NoMessageClient(), model="m")
+        self.assertEqual(result, ["cardiology 98101"])
+
 
 if __name__ == "__main__":
     unittest.main()

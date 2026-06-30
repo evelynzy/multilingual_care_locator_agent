@@ -16,7 +16,9 @@ _SYSTEM = (
 def _extract_text(completion) -> str:
     if not getattr(completion, "choices", None):
         return ""
-    message = completion.choices[0].message
+    message = getattr(completion.choices[0], "message", None)
+    if message is None:
+        return ""
     return (getattr(message, "content", "") or "").strip()
 
 
