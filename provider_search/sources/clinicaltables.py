@@ -95,6 +95,17 @@ _LOCATION_ALIASES = {
     "dallas fort worth": "Dallas TX",
 }
 
+# Umbrella specialty terms the NPI registry has no taxonomy for. NPI files these
+# providers under specific taxonomies (Family Medicine / Internal Medicine), so
+# searching the umbrella term literally returns zero results. When NPI offers no
+# suggestion of its own, fall back to a representative NPI-recognized taxonomy.
+_UMBRELLA_TAXONOMY_TERMS = {
+    "primary care": "family medicine",
+    "primary care physician": "family medicine",
+    "primary care doctor": "family medicine",
+    "pcp": "family medicine",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -305,11 +316,18 @@ class ClinicalTablesSource:
             cleaned = normalize_text(specialty)
             if not cleaned:
                 continue
-            suggested = self._best_suggestion_across_datasets(
-                cleaned,
-                _TAXONOMY_CANDIDATE_FIELDS,
-            )
-            candidate = suggested or cleaned
+            # Known umbrella terms take precedence: NPI's suggest endpoint echoes
+            # them back (a truthy self-match that still returns zero providers),
+            # so we must not defer to it for these.
+            umbrella = _UMBRELLA_TAXONOMY_TERMS.get(cleaned.casefold())
+            if umbrella:
+                candidate = umbrella
+            else:
+                suggested = self._best_suggestion_across_datasets(
+                    cleaned,
+                    _TAXONOMY_CANDIDATE_FIELDS,
+                )
+                candidate = suggested or cleaned
             if candidate not in suggested_terms:
                 suggested_terms.append(candidate)
         return tuple(suggested_terms)
