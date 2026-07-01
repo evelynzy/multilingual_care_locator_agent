@@ -75,12 +75,14 @@ def run_matrix(
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
     from huggingface_hub import InferenceClient
     from config_loader import get_chat_model_settings
     from provider_search.service import ProviderSearchService
     from provider_search.sources.clinicaltables import ClinicalTablesSource
     from eval.instrumented_agent import TracingAgent
 
+    load_dotenv()  # read HF_TOKEN from .env, like app.py
     settings = get_chat_model_settings()
     client = InferenceClient(model=settings["model_id"], token=os.environ["HF_TOKEN"])
     agent = TracingAgent(ProviderSearchService(clinicaltables_source=ClinicalTablesSource()))
