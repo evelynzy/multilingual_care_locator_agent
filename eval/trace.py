@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
 from typing import List, Optional, Tuple
 
@@ -54,6 +55,27 @@ def _cache_path(cache_dir: str, scenario_id: str, language: str, turns: Tuple[st
     return os.path.join(cache_dir, "{0}.{1}.{2}.json".format(scenario_id, language, digest))
 
 
+_STATE_RE = re.compile(r"\b([A-Za-z]{2})\s+\d{5}(?:-\d{4})?\b")
+
+
+def _provider_state(provider) -> str:
+    """Best-effort 2-letter state code.
+
+    Uses the structured field when present, else parses it from the address:
+    the ClinicalTables source leaves state/city unpopulated and embeds them in
+    the address string (e.g. '710 LAWRENCE EXPY, SANTA CLARA, CA 95051').
+    """
+    state = (getattr(provider, "state", None) or "").strip().upper()
+    if state:
+        return state
+    for field in (getattr(provider, "address", None), getattr(provider, "location_summary", None)):
+        if field:
+            match = _STATE_RE.search(field)
+            if match:
+                return match.group(1).upper()
+    return ""
+
+
 def _capture_turn(user_message: str, agent, html: str) -> TurnCapture:
     parsed = agent.last_parsed_query
     request = agent.provider_search_service.last_request
@@ -64,7 +86,7 @@ def _capture_turn(user_message: str, agent, html: str) -> TurnCapture:
     if response is not None:
         provider_count = len(response.provider_results)
         provider_states = [
-            (r.provider.state or "").strip().upper()
+            _provider_state(r.provider)
             for r in response.provider_results
         ]
 

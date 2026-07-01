@@ -72,8 +72,10 @@ class TraceLiveTests(unittest.TestCase):
 
 
 class _FakeProvider:
-    def __init__(self, state):
+    def __init__(self, state=None, address=None):
         self.state = state
+        self.address = address
+        self.location_summary = address
 
 
 class _FakeResult:
@@ -165,6 +167,18 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
         self.assertEqual(turn.provider_count, 2)
         self.assertTrue(turn.html_has_card)
         self.assertTrue(turn.emergency_routed)
+
+    def test_provider_state_falls_back_to_address(self):
+        from eval.trace import _provider_state
+
+        # ClinicalTables leaves .state blank; state must be parsed from the address.
+        blank = _FakeProvider(state=None, address="710 LAWRENCE EXPY, SANTA CLARA, CA 95051")
+        self.assertEqual(_provider_state(blank), "CA")
+        # A populated structured field wins and is upper-cased.
+        structured = _FakeProvider(state="ny", address=None)
+        self.assertEqual(_provider_state(structured), "NY")
+        # No usable location at all -> empty string.
+        self.assertEqual(_provider_state(_FakeProvider(state=None, address=None)), "")
 
     def test_errored_run_is_not_cached(self):
         from eval.dataset import GoldLabels, LanguageVariant, Scenario
