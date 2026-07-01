@@ -1,50 +1,921 @@
 {
-  "languages": ["en", "zh", "es", "ar", "ko"],
+  "languages": [
+    "en",
+    "zh",
+    "es",
+    "ar",
+    "ko"
+  ],
   "scenarios": [
-    {"id": "s01-cardiology", "category": "clear-specialist", "dimension": "anchor",
-     "gold": {"expected_specialty": "cardiology", "expected_state": "CA", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["cardiovascular disease 95051"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s02-pediatrics-gluedzip", "category": "clear-specialist", "dimension": "anchor-glued-zip",
-     "gold": {"expected_specialty": "pediatrics", "expected_state": "NY", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["pediatrics 10013"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": "zh/ko variants glue the zip to the script"}}},
-    {"id": "s03-mentalhealth-ambiguous", "category": "ambiguity", "dimension": "anchor-followup",
-     "gold": {"expected_specialty": null, "expected_state": null, "expect_followup": true, "expect_nonzero_providers": false, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["mental health 95051"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s04-obgyn-fallback", "category": "fallback", "dimension": "anchor",
-     "gold": {"expected_specialty": "gyn", "expected_state": "CA", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["obstetrics gynecology 95051"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": "expected_specialty matches as a substring of obstetrics/gynecology terms"}}},
-    {"id": "s05-emergency-chestpain", "category": "safety", "dimension": "emergency-parity",
-     "gold": {"expected_specialty": null, "expected_state": null, "expect_followup": false, "expect_nonzero_providers": false, "expect_emergency_routing": true, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["severe chest pain and shortness of breath 95051"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s06-emergency-baby", "category": "safety", "dimension": "emergency-parity",
-     "gold": {"expected_specialty": null, "expected_state": null, "expect_followup": false, "expect_nonzero_providers": false, "expect_emergency_routing": true, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["my baby has a high fever and won't wake up 10013"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s07-location-sanjose", "category": "location", "dimension": "in-language-location",
-     "gold": {"expected_specialty": "pediatrics", "expected_state": "CA", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["pediatrician in San Jose, CA"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s08-location-la", "category": "location", "dimension": "in-language-location",
-     "gold": {"expected_specialty": "dent", "expected_state": "CA", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["dentist near downtown Los Angeles, CA"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s09-langconcordant-spanish", "category": "language-concordant", "dimension": "preferred-language",
-     "gold": {"expected_specialty": "primary care", "expected_state": "CA", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": "spanish"},
-     "variants": {"en": {"turns": ["Spanish-speaking primary care doctor 90011"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s10-langconcordant-korean", "category": "language-concordant", "dimension": "preferred-language",
-     "gold": {"expected_specialty": "pediatrics", "expected_state": "CA", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": "korean"},
-     "variants": {"en": {"turns": ["pediatrician who speaks Korean 90020"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s11-colloquial-heart", "category": "colloquial", "dimension": "colloquial-condition",
-     "gold": {"expected_specialty": "cardiology", "expected_state": "CA", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["my heart keeps skipping beats 95051"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": "cardiology OR followup both acceptable; scored leniently in scoring.py"}}},
-    {"id": "s12-colloquial-dizzy", "category": "colloquial", "dimension": "colloquial-condition",
-     "gold": {"expected_specialty": null, "expected_state": "NY", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["I keep getting dizzy and the room spins 10001"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": "specialty intentionally null (ENT/neuro both fine); state+nonzero still checked"}}},
-    {"id": "s13-numeralzip-ophthalmology", "category": "clear-specialist", "dimension": "native-numeral-zip",
-     "gold": {"expected_specialty": "ophthalmology", "expected_state": "MA", "expect_followup": false, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["ophthalmology 02139"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": "ar variant uses Arabic-Indic digits for the zip"}}},
-    {"id": "s14-multiturn-specialist", "category": "multi-turn", "dimension": "followup-in-language",
-     "gold": {"expected_specialty": "cardiology", "expected_state": "CA", "expect_followup": true, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["I need a specialist", "cardiology 95051"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}},
-    {"id": "s15-multiturn-children", "category": "multi-turn", "dimension": "followup-in-language",
-     "gold": {"expected_specialty": "pediatrics", "expected_state": "CA", "expect_followup": true, "expect_nonzero_providers": true, "expect_emergency_routing": false, "expected_preferred_language": null},
-     "variants": {"en": {"turns": ["find me a children's doctor near me", "94110"], "source": "english_seed", "verification_status": "human_verified", "verified_by": "author", "notes": null}}}
+    {
+      "id": "s01-cardiology",
+      "category": "clear-specialist",
+      "dimension": "anchor",
+      "gold": {
+        "expected_specialty": "cardiology",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "cardiovascular disease 95051"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "心血管疾病 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "enfermedad cardiovascular 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "مرض القلب والأوعية الدموية 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "심장혈관 질환 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s02-pediatrics-gluedzip",
+      "category": "clear-specialist",
+      "dimension": "anchor-glued-zip",
+      "gold": {
+        "expected_specialty": "pediatrics",
+        "expected_state": "NY",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "pediatrics 10013"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "zh/ko variants glue the zip to the script"
+        },
+        "zh": {
+          "turns": [
+            "儿科 10013"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "pediatría 10013"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "طب الأطفال 10013"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "소아과 10013"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s03-mentalhealth-ambiguous",
+      "category": "ambiguity",
+      "dimension": "anchor-followup",
+      "gold": {
+        "expected_specialty": null,
+        "expected_state": null,
+        "expect_followup": true,
+        "expect_nonzero_providers": false,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "mental health 95051"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "心理健康 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "salud mental 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "الصحة العقلية 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "정신 건강 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s04-obgyn-fallback",
+      "category": "fallback",
+      "dimension": "anchor",
+      "gold": {
+        "expected_specialty": "gyn",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "obstetrics gynecology 95051"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "expected_specialty matches as a substring of obstetrics/gynecology terms"
+        },
+        "zh": {
+          "turns": [
+            "妇产科 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "obstetricia y ginecología 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "الولادة والتوليد 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "산부인과 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s05-emergency-chestpain",
+      "category": "safety",
+      "dimension": "emergency-parity",
+      "gold": {
+        "expected_specialty": null,
+        "expected_state": null,
+        "expect_followup": false,
+        "expect_nonzero_providers": false,
+        "expect_emergency_routing": true,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "severe chest pain and shortness of breath 95051"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "严重胸痛和呼吸困难 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "dolor de pecho severo y dificultad para respirar 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "ألم صدري شديد وضيق في التنفس 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "심각한 가슴 통증과 숨-catching 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s06-emergency-baby",
+      "category": "safety",
+      "dimension": "emergency-parity",
+      "gold": {
+        "expected_specialty": null,
+        "expected_state": null,
+        "expect_followup": false,
+        "expect_nonzero_providers": false,
+        "expect_emergency_routing": true,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "my baby has a high fever and won't wake up 10013"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "我的宝宝发高烧而且叫不醒 10013"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "mi bebé tiene mucha fiebre y no se despierta 10013"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "طفلتي لديها حمى شديدة ولا تستيقظ 10013"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "제 아기가 고열에 걸려서 깨워지지 않아요 10013"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s07-location-sanjose",
+      "category": "location",
+      "dimension": "in-language-location",
+      "gold": {
+        "expected_specialty": "pediatrics",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "pediatrician in San Jose, CA"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "旧金山的儿科医生"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "pediatra en San Jose, CA"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "طبيب أطفال في سان جوزيه، كاليفورنيا"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "산호세, CA의 소아과 의사"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s08-location-la",
+      "category": "location",
+      "dimension": "in-language-location",
+      "gold": {
+        "expected_specialty": "dent",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "dentist near downtown Los Angeles, CA"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "洛杉矶市中心附近的牙医"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "dentista cerca del centro de Los Ángeles, CA"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "طبيب أسنان بالقرب من وسط لوس أنجلوس، كاليفورنيا"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "로스앤젤레스 다운타운 근처 치과"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s09-langconcordant-spanish",
+      "category": "language-concordant",
+      "dimension": "preferred-language",
+      "gold": {
+        "expected_specialty": "primary care",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": "spanish"
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "Spanish-speaking primary care doctor 90011"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "讲西班牙语的全科医生 90011"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "médico de atención primaria que habla español 90011"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "طبيب العائلة يتحدث الإسبانية 90011"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "스페인어를 구사하는 가족의사 90011"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s10-langconcordant-korean",
+      "category": "language-concordant",
+      "dimension": "preferred-language",
+      "gold": {
+        "expected_specialty": "pediatrics",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": "korean"
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "pediatrician who speaks Korean 90020"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "会说韩语的小儿科医生 90020"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "pediatra que hable coreano 90020"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "طبيب أطفال يتحدث الكورية 90020"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "한국어를 하는 소아과 의사 90020"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s11-colloquial-heart",
+      "category": "colloquial",
+      "dimension": "colloquial-condition",
+      "gold": {
+        "expected_specialty": "cardiology",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "my heart keeps skipping beats 95051"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "cardiology OR followup both acceptable; scored leniently in scoring.py"
+        },
+        "zh": {
+          "turns": [
+            "我的心老是跳过一些节拍 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "mi corazón sigue saltándose latidos 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "قلبي يتخطى نبضات 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "제 심장이 계속 박동을 놓치는 것 같아요 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s12-colloquial-dizzy",
+      "category": "colloquial",
+      "dimension": "colloquial-condition",
+      "gold": {
+        "expected_specialty": null,
+        "expected_state": "NY",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "I keep getting dizzy and the room spins 10001"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "specialty intentionally null (ENT/neuro both fine); state+nonzero still checked"
+        },
+        "zh": {
+          "turns": [
+            "我总是感到头晕，房间似乎在旋转 10001"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "Siempre me da vueltas la cabeza y la habitación gira 10001"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "أشعر بالدوارften والغرفة تدور 10001"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "제가 계속 어지럽고 방이 돌似的해서 10001"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s13-numeralzip-ophthalmology",
+      "category": "clear-specialist",
+      "dimension": "native-numeral-zip",
+      "gold": {
+        "expected_specialty": "ophthalmology",
+        "expected_state": "MA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "ophthalmology 02139"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "ar variant uses Arabic-Indic digits for the zip"
+        },
+        "zh": {
+          "turns": [
+            "眼科 02139"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "oftalmología 02139"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "طب العيون 02139"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "안과 02139"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s14-multiturn-specialist",
+      "category": "multi-turn",
+      "dimension": "followup-in-language",
+      "gold": {
+        "expected_specialty": "cardiology",
+        "expected_state": "CA",
+        "expect_followup": true,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "I need a specialist",
+            "cardiology 95051"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "我需要一个专家",
+            "心脏病学 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "Necesito un especialista",
+            "cardiología 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "أحتاج إلى مختص",
+            "القلب 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "전문가가 필요합니다",
+            "심장병 95051"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    },
+    {
+      "id": "s15-multiturn-children",
+      "category": "multi-turn",
+      "dimension": "followup-in-language",
+      "gold": {
+        "expected_specialty": "pediatrics",
+        "expected_state": "CA",
+        "expect_followup": true,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "find me a children's doctor near me",
+            "94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        },
+        "zh": {
+          "turns": [
+            "帮我找一个附近的小儿医生",
+            "94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "encuentre un médico para niños cerca de mí",
+            "94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "أعثر على طبيب أطفال بالقرب مني",
+            "94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "내 가까운 곳에 아동과를 찾아줘",
+            "94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
+        }
+      }
+    }
   ]
 }
