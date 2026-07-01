@@ -40,6 +40,32 @@ be fixed by trusting `needs_clarification`. The correct fix is a curated
 "ambiguous umbrella → clarify" detector (independent of the LLM flag), analogous
 to the F1 umbrella map. Deferred.
 
+### F4 — deterministic scoring produces false negatives  (method)
+Semantically-correct-but-differently-worded outputs fail the substring scorer
+(e.g. Arabic returned `family medicine`, arguably more NPI-correct than the gold
+`primary care`, yet scored a fail). So raw pass rates slightly *overstate*
+disparities — the reason an independent LLM-judge with human validation is the
+right next layer.
+
+### F5 — most advertised specialties return zero (Layer B; the "AI-bridge" gap)
+Systematically verifying the app's 22 specialty families found that **search
+returns 0 providers at every ZIP** for at least seven — `orthopedics,
+endocrinology, pulmonology, rheumatology, nephrology, oncology, physical therapy`
+— while `dermatology, gastroenterology, neurology, urology, psychiatry, allergy,
+radiology` work. Same root cause as F1: the LLM understands the request
+correctly, but the deterministic layer sends the literal term to NPI, which files
+these under different taxonomy classifications (NPI has no bare "endocrinology";
+it lives under "Internal Medicine, Endocrinology, …").
+
+**This is the project's core value stated as a bug.** An LLM-fronted locator
+exists to *bridge* messy human requests → the rigid English-only NPI taxonomy. F5
+is exactly where that bridge is unbuilt: the LLM did its half; the last mile
+(specialty → NPI-taxonomy search terms) is missing. The fix generalizes F1's
+umbrella map — give each `specialty_families` entry its NPI-taxonomy synonyms
+(deterministic + reliable), with the LLM as a long-tail fallback. Deferred; would
+lift usable coverage from ~14 → 22 families. (These broken specialties are kept
+OUT of the fairness dataset so they don't muddy the cross-language signal.)
+
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM
 understood the English inputs correctly in every case — the failures are

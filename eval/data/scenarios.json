@@ -916,6 +916,198 @@
           "notes": "machine-translated; not verified by a Korean speaker"
         }
       }
+    },
+    {
+      "id": "s16-dermatology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "dermatology",
+        "expected_state": "IL",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "dermatologist 60614"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        }
+      }
+    },
+    {
+      "id": "s17-gastroenterology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "gastroenterology",
+        "expected_state": "GA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "gastroenterologist 30303"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        }
+      }
+    },
+    {
+      "id": "s18-neurology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "neurology",
+        "expected_state": "PA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "neurologist 19104"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        }
+      }
+    },
+    {
+      "id": "s19-urology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "urology",
+        "expected_state": "AZ",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "urologist 85004"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        }
+      }
+    },
+    {
+      "id": "s20-psychiatry",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "psychiatry",
+        "expected_state": "TX",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "psychiatrist 77002"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "specific term (contrast with s03 'mental health' umbrella)"
+        }
+      }
+    },
+    {
+      "id": "s21-allergy",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "allergy",
+        "expected_state": "MA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "allergist 02115"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": null
+        }
+      }
+    },
+    {
+      "id": "s22-dermatology-layperson",
+      "category": "colloquial",
+      "dimension": "phrasing-register",
+      "gold": {
+        "expected_specialty": "dermatology",
+        "expected_state": "IL",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "skin doctor 60614"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "layperson phrasing, pairs with s16"
+        }
+      }
+    },
+    {
+      "id": "s23-gastroenterology-layperson",
+      "category": "colloquial",
+      "dimension": "phrasing-register",
+      "gold": {
+        "expected_specialty": "gastroenterology",
+        "expected_state": "GA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "stomach doctor 30303"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "layperson phrasing, pairs with s17"
+        }
+      }
     }
   ]
 }
