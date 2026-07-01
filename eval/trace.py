@@ -23,6 +23,7 @@ class TurnCapture:
     provider_states: List[str]
     provider_count: int
     html_has_card: bool
+    emergency_routed: bool
 
 
 @dataclass(frozen=True)
@@ -47,8 +48,8 @@ def trace_from_dict(data: dict) -> Trace:
     )
 
 
-def _cache_path(cache_dir: str, scenario_id: str, language: str, turns: Tuple[str, ...]) -> str:
-    key_source = json.dumps([scenario_id, language, list(turns)], ensure_ascii=False)
+def _cache_path(cache_dir: str, scenario_id: str, language: str, turns: Tuple[str, ...], model: str) -> str:
+    key_source = json.dumps([scenario_id, language, list(turns), model], ensure_ascii=False)
     digest = hashlib.sha1(key_source.encode("utf-8")).hexdigest()[:16]
     return os.path.join(cache_dir, "{0}.{1}.{2}.json".format(scenario_id, language, digest))
 
@@ -80,6 +81,7 @@ def _capture_turn(user_message: str, agent, html: str) -> TurnCapture:
         provider_states=provider_states,
         provider_count=provider_count,
         html_has_card=("provider-card" in (html or "")),
+        emergency_routed=(getattr(agent, "last_navigation_mode", None) == "emergency"),
     )
 
 
@@ -94,7 +96,8 @@ def run_trace(
 ) -> Trace:
     variant = scenario.variants[language]
     turns_tuple = tuple(variant.turns)
-    path = _cache_path(cache_dir, scenario.id, language, turns_tuple)
+    model = settings.get("model_id", "")
+    path = _cache_path(cache_dir, scenario.id, language, turns_tuple, model)
 
     if use_cache and os.path.exists(path):
         with open(path, "r", encoding="utf-8") as handle:

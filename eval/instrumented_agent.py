@@ -41,6 +41,7 @@ class TracingAgent(CareLocatorAgent):
     def __init__(self, provider_search_service) -> None:
         super().__init__(provider_search_service=RecordingSearchService(provider_search_service))
         self.last_parsed_query: Optional[ParsedCareQuery] = None
+        self.last_navigation_mode: Optional[str] = None
 
     def _interpret_user_need(
         self, client, message: str, history: List[dict]
@@ -49,6 +50,12 @@ class TracingAgent(CareLocatorAgent):
         self.last_parsed_query = parsed
         return parsed
 
+    def _build_navigation_guidance(self, query, message: str):
+        guidance = super()._build_navigation_guidance(query, message)
+        self.last_navigation_mode = guidance.get("mode") if isinstance(guidance, dict) else None
+        return guidance
+
     def reset_capture(self) -> None:
         self.last_parsed_query = None
+        self.last_navigation_mode = None
         self.provider_search_service.reset()

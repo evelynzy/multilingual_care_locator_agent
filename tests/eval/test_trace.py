@@ -22,6 +22,7 @@ class TraceSerializationTests(unittest.TestCase):
             provider_states=["CA"],
             provider_count=1,
             html_has_card=True,
+            emergency_routed=False,
         )
         return Trace(scenario_id="s01-cardiology", language="en", turns=[turn], error=None)
 
@@ -32,11 +33,14 @@ class TraceSerializationTests(unittest.TestCase):
 
     def test_cache_path_is_stable_and_language_specific(self):
         with tempfile.TemporaryDirectory() as d:
-            p_en = _cache_path(d, "s01-cardiology", "en", ("cardiology 98101",))
-            p_en2 = _cache_path(d, "s01-cardiology", "en", ("cardiology 98101",))
-            p_zh = _cache_path(d, "s01-cardiology", "zh", ("cardiology 98101",))
+            p_en = _cache_path(d, "s01-cardiology", "en", ("cardiology 98101",), "model-a")
+            p_en2 = _cache_path(d, "s01-cardiology", "en", ("cardiology 98101",), "model-a")
+            p_zh = _cache_path(d, "s01-cardiology", "zh", ("cardiology 98101",), "model-a")
             self.assertEqual(p_en, p_en2)
             self.assertNotEqual(p_en, p_zh)
+            p_model_a = _cache_path(d, "s01-cardiology", "en", ("cardiology 98101",), "model-a")
+            p_model_b = _cache_path(d, "s01-cardiology", "en", ("cardiology 98101",), "model-b")
+            self.assertNotEqual(p_model_a, p_model_b)
 
 
 class TraceLiveTests(unittest.TestCase):
@@ -103,14 +107,16 @@ class _FakeParsed:
 
 
 class _CaptureAgent:
-    def __init__(self, parsed=None, service=None):
+    def __init__(self, parsed=None, service=None, last_navigation_mode=None):
         self.last_parsed_query = parsed
         self.provider_search_service = service or _FakeService()
+        self.last_navigation_mode = last_navigation_mode
 
 
 class _RaisingAgent:
     def __init__(self):
         self.last_parsed_query = None
+        self.last_navigation_mode = None
         self.provider_search_service = _FakeService()
 
     def reset_capture(self):
@@ -136,6 +142,7 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
         self.assertEqual(turn.provider_count, 0)
         self.assertFalse(turn.html_has_card)
         self.assertTrue(turn.parsed_needs_clarification)
+        self.assertFalse(turn.emergency_routed)
 
     def test_capture_search_turn(self):
         from eval.trace import _capture_turn
@@ -148,6 +155,7 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
         agent = _CaptureAgent(
             parsed=_FakeParsed(specialties=["cardiology"]),
             service=_FakeService(last_request=request, last_response=response),
+            last_navigation_mode="emergency",
         )
         turn = _capture_turn("cardiology 98101", agent, "<div class='provider-card'>")
         self.assertTrue(turn.searched)
@@ -156,6 +164,7 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
         self.assertEqual(turn.provider_states, ["CA", "TX"])
         self.assertEqual(turn.provider_count, 2)
         self.assertTrue(turn.html_has_card)
+        self.assertTrue(turn.emergency_routed)
 
     def test_errored_run_is_not_cached(self):
         from eval.dataset import GoldLabels, LanguageVariant, Scenario
