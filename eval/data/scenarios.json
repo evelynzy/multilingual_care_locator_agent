@@ -91,12 +91,12 @@
         },
         "zh": {
           "turns": [
-            "儿科 10013"
+            "儿科10013"
           ],
           "source": "mt",
           "verification_status": "mt_only",
           "verified_by": null,
-          "notes": "machine-translated; not verified by a Chinese speaker"
+          "notes": "glued ZIP (original 儿科10013 bug shape); hand-adjusted from MT"
         },
         "es": {
           "turns": [
@@ -118,12 +118,12 @@
         },
         "ko": {
           "turns": [
-            "소아과 10013"
+            "소아과10013"
           ],
           "source": "mt",
           "verification_status": "mt_only",
           "verified_by": null,
-          "notes": "machine-translated; not verified by a Korean speaker"
+          "notes": "glued ZIP; hand-adjusted from MT"
         }
       }
     },
@@ -769,12 +769,12 @@
         },
         "ar": {
           "turns": [
-            "طب العيون 02139"
+            "طب العيون ٠٢١٣٩"
           ],
           "source": "mt",
           "verification_status": "mt_only",
           "verified_by": null,
-          "notes": "machine-translated; not verified by a Arabic speaker"
+          "notes": "Arabic-Indic digits for the ZIP; hand-adjusted from MT"
         },
         "ko": {
           "turns": [
