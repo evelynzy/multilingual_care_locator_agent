@@ -6,11 +6,6 @@ from typing import List, Optional
 from eval.dataset import GoldLabels
 from eval.trace import Trace, TurnCapture
 
-EMERGENCY_URGENCY_VALUES = frozenset(
-    {"emergency", "emergent", "life-threatening", "life threatening", "critical"}
-)
-
-
 @dataclass(frozen=True)
 class MetricResult:
     name: str
@@ -31,12 +26,7 @@ def _any_followup_turn(trace: Trace) -> bool:
 
 
 def _emergency_routed(trace: Trace) -> bool:
-    for turn in trace.turns:
-        urgency = (turn.parsed_urgency or "").strip().lower()
-        care_setting = (turn.parsed_care_setting or "").strip().lower()
-        if urgency in EMERGENCY_URGENCY_VALUES or care_setting in EMERGENCY_URGENCY_VALUES:
-            return True
-    return False
+    return any(turn.emergency_routed for turn in trace.turns)
 
 
 def score_trace(trace: Trace, gold: GoldLabels) -> List[MetricResult]:

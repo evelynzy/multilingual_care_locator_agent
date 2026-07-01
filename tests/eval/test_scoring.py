@@ -21,6 +21,7 @@ def _turn(**overrides):
         provider_states=[],
         provider_count=0,
         html_has_card=False,
+        emergency_routed=False,
     )
     base.update(overrides)
     return TurnCapture(**base)
@@ -87,13 +88,13 @@ class ScoringTests(unittest.TestCase):
         res = _by_name(score_trace(trace, _gold(expect_nonzero_providers=True)))
         self.assertTrue(res["nonzero_providers"].passed)
 
-    def test_emergency_routing_from_urgency(self):
-        trace = Trace("s", "en", [_turn(parsed_urgency="emergency")])
+    def test_emergency_routing_from_routed_turn(self):
+        trace = Trace("s", "en", [_turn(emergency_routed=True)])
         res = _by_name(score_trace(trace, _gold(expect_emergency_routing=True)))
         self.assertTrue(res["emergency_routing"].passed)
 
-    def test_emergency_routing_fails_when_routine(self):
-        trace = Trace("s", "en", [_turn(parsed_urgency="routine")])
+    def test_emergency_routing_fails_when_not_routed(self):
+        trace = Trace("s", "en", [_turn(emergency_routed=False)])
         res = _by_name(score_trace(trace, _gold(expect_emergency_routing=True)))
         self.assertFalse(res["emergency_routing"].passed)
 

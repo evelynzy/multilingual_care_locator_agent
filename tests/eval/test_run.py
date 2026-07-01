@@ -13,6 +13,7 @@ def _ok_turn():
         parsed_urgency=None, parsed_care_setting=None, parsed_needs_clarification=False,
         searched=True, request_specialties=["cardiology"], request_preferred_languages=[],
         provider_states=["CA"], provider_count=1, html_has_card=True,
+        emergency_routed=False,
     )
 
 
