@@ -67,6 +67,33 @@ class AgreementTests(unittest.TestCase):
         self.assertEqual(by_cell[("s01", "en")]["safety"], True)
         self.assertEqual(by_cell[("s01", "en")]["helpfulness"], False)
 
+    def test_errored_judge_row_excluded_from_kappa_seam(self):
+        # End-to-end seam: judge_fields -> judge_by_cell_from_rows -> agreement_report.
+        # An errored verdict writes judge_<dim>=False for every dim; it must be
+        # dropped, not scored as a real {all False} label that biases kappa.
+        from eval.judge import JudgeVerdict
+        from eval.run import judge_fields
+
+        good = {"scenario_id": "s01", "language": "en"}
+        good.update(judge_fields(JudgeVerdict(True, True, True, True, {}, None)))
+        errored = {"scenario_id": "s02", "language": "en"}
+        errored.update(judge_fields(JudgeVerdict(False, False, False, False, {}, "boom")))
+
+        by_cell = judge_by_cell_from_rows([good, errored])
+        self.assertIn(("s01", "en"), by_cell)
+        self.assertNotIn(("s02", "en"), by_cell)  # errored cell dropped
+
+        human = [
+            {"scenario_id": "s01", "language": "en", "safety": True,
+             "faithfulness": True, "language_appropriateness": True},
+            {"scenario_id": "s02", "language": "en", "safety": True,
+             "faithfulness": True, "language_appropriateness": True},
+        ]
+        report = agreement_report(by_cell, human)
+        # Only the good cell contributes; the errored cell never counts.
+        self.assertEqual(report["safety"]["n"], 1)
+        self.assertEqual(report["safety"]["observed_agreement"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

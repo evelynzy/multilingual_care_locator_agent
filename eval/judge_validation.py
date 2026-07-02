@@ -64,6 +64,11 @@ def agreement_report(
 def judge_by_cell_from_rows(rows: List[dict]) -> Dict[Tuple[str, str], dict]:
     by_cell: Dict[Tuple[str, str], dict] = {}
     for row in rows:
+        # An errored judge verdict writes judge_<dim>=False for every dimension.
+        # Those are not real labels; letting them through would score a judge
+        # crash as a confident "fail" and bias kappa. Drop the whole cell.
+        if row.get("judge_error") is not None:
+            continue
         key = (row["scenario_id"], row["language"])
         dims = {}
         for dim in DIMENSIONS:
