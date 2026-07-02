@@ -66,6 +66,26 @@ umbrella map — give each `specialty_families` entry its NPI-taxonomy synonyms
 lift usable coverage from ~14 → 22 families. (These broken specialties are kept
 OUT of the fairness dataset so they don't muddy the cross-language signal.)
 
+### F6 — language-concordance requests silently return non-matching providers (Layer B; disclosure gap)
+When the user states a language requirement the app cannot satisfy — `s09` ("Spanish-speaking
+primary care"), `s10` ("Korean-speaking pediatrician") — and no NPI record carries language
+data (`languages` is empty across results), the app returns correctly-specialtied providers
+**without disclosing that the language requirement was not met**. The reply is *not* unfaithful:
+it never claims a provider speaks the language; it simply drops the stated need silently.
+Fix: when a preferred-language filter is requested but unmet, surface an explicit
+"couldn't verify language-concordant providers" notice instead of returning results as if the
+need were satisfied. **This is the agreed immediate next step** (surfaced by the author during
+judge-validation labeling).
+
+### F7 — the judge over-flags faithfulness on the F6 cells (judge-calibration; Layer A judge)
+The Qwen judge scored `s09`/`s10` `faithfulness=fail` in every language, conflating the F6
+*disclosure* gap with hallucination. Author labels mark them faithful → Cohen's κ on
+faithfulness collapses to 0 while language-appropriateness κ = 1.0 (`eval/RUNS.md`, 2026-07-02).
+Lesson surfaced by human validation: **faithfulness (are the claims grounded?) and disclosure
+(did we admit the unmet need?) are distinct axes** — the judge rubric should split them, and an
+aggregate faithfulness score shouldn't be trusted until it does (and until a larger, balanced
+labeled set exists).
+
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM
 understood the English inputs correctly in every case — the failures are
