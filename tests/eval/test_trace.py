@@ -23,6 +23,8 @@ class TraceSerializationTests(unittest.TestCase):
             provider_count=1,
             html_has_card=True,
             emergency_routed=False,
+            rendered_text="",
+            provider_details=[],
         )
         return Trace(scenario_id="s01-cardiology", language="en", turns=[turn], error=None)
 
@@ -41,6 +43,28 @@ class TraceSerializationTests(unittest.TestCase):
             p_model_a = _cache_path(d, "s01-cardiology", "en", ("cardiology 98101",), "model-a")
             p_model_b = _cache_path(d, "s01-cardiology", "en", ("cardiology 98101",), "model-b")
             self.assertNotEqual(p_model_a, p_model_b)
+
+    def test_new_fields_roundtrip(self):
+        turn = TurnCapture(
+            user_message="cardiology 98101",
+            parsed_specialties=["cardiology"], parsed_preferred_languages=[],
+            parsed_urgency=None, parsed_care_setting=None, parsed_needs_clarification=False,
+            searched=True, request_specialties=["cardiology"], request_preferred_languages=[],
+            provider_states=["CA"], provider_count=1, html_has_card=True, emergency_routed=False,
+            rendered_text="1. Dr. Heart — Cardiology — Santa Clara, CA",
+            provider_details=[{"name": "Dr. Heart", "specialties": ["Cardiology"],
+                               "languages": ["Spanish"], "state": "CA", "city": "Santa Clara"}],
+        )
+        trace = Trace("s01", "en", [turn], None)
+        restored = trace_from_dict(trace_to_dict(trace))
+        self.assertEqual(restored, trace)
+        self.assertEqual(restored.turns[0].provider_details[0]["name"], "Dr. Heart")
+
+    def test_html_to_text_strips_tags_and_unescapes(self):
+        from eval.trace import _html_to_text
+        html = "<div class='provider-card'><span>Dr. Heart &amp; Assoc.</span>  <b>CA</b></div>"
+        self.assertEqual(_html_to_text(html), "Dr. Heart & Assoc. CA")
+        self.assertEqual(_html_to_text(""), "")
 
 
 class TraceLiveTests(unittest.TestCase):
@@ -72,10 +96,14 @@ class TraceLiveTests(unittest.TestCase):
 
 
 class _FakeProvider:
-    def __init__(self, state=None, address=None):
+    def __init__(self, state=None, address=None, name="", specialties=(), languages=(), city=None):
         self.state = state
         self.address = address
         self.location_summary = address
+        self.name = name
+        self.specialties = specialties
+        self.languages = languages
+        self.city = city
 
 
 class _FakeResult:
@@ -159,7 +187,7 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
             service=_FakeService(last_request=request, last_response=response),
             last_navigation_mode="emergency",
         )
-        turn = _capture_turn("cardiology 98101", agent, "<div class='provider-card'>")
+        turn = _capture_turn("cardiology 98101", agent, "<p>Find a doctor</p><div class='provider-card'></div>")
         self.assertTrue(turn.searched)
         self.assertEqual(turn.request_specialties, ["cardiology"])
         self.assertEqual(turn.request_preferred_languages, ["spanish"])
@@ -167,6 +195,9 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
         self.assertEqual(turn.provider_count, 2)
         self.assertTrue(turn.html_has_card)
         self.assertTrue(turn.emergency_routed)
+        # provider_details + rendered_text are captured for the judge
+        self.assertEqual(turn.rendered_text, "Find a doctor")
+        self.assertEqual(turn.provider_details[0]["state"], "CA")
 
     def test_provider_state_falls_back_to_address(self):
         from eval.trace import _provider_state

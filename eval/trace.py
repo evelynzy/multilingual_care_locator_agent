@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import List, Optional, Tuple
 
 from eval.dataset import Scenario
+
+_TRACE_SCHEMA_VERSION = "v2-judge"
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,8 @@ class TurnCapture:
     provider_count: int
     html_has_card: bool
     emergency_routed: bool
+    rendered_text: str = ""
+    provider_details: List[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -50,9 +55,24 @@ def trace_from_dict(data: dict) -> Trace:
 
 
 def _cache_path(cache_dir: str, scenario_id: str, language: str, turns: Tuple[str, ...], model: str) -> str:
-    key_source = json.dumps([scenario_id, language, list(turns), model], ensure_ascii=False)
+    key_source = json.dumps(
+        [scenario_id, language, list(turns), model, _TRACE_SCHEMA_VERSION], ensure_ascii=False
+    )
     digest = hashlib.sha1(key_source.encode("utf-8")).hexdigest()[:16]
     return os.path.join(cache_dir, "{0}.{1}.{2}.json".format(scenario_id, language, digest))
+
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_WS_RE = re.compile(r"\s+")
+
+
+def _html_to_text(raw: str) -> str:
+    """Flatten rendered HTML to the visible text a human evaluator would read."""
+    if not raw:
+        return ""
+    text = _TAG_RE.sub(" ", raw)
+    text = html_lib.unescape(text)
+    return _WS_RE.sub(" ", text).strip()
 
 
 _STATE_RE = re.compile(r"\b([A-Za-z]{2})\s+\d{5}(?:-\d{4})?\b")
@@ -82,13 +102,20 @@ def _capture_turn(user_message: str, agent, html: str) -> TurnCapture:
     response = agent.provider_search_service.last_response
 
     provider_states: List[str] = []
+    provider_details: List[dict] = []
     provider_count = 0
     if response is not None:
         provider_count = len(response.provider_results)
-        provider_states = [
-            _provider_state(r.provider)
-            for r in response.provider_results
-        ]
+        for r in response.provider_results:
+            provider = r.provider
+            provider_states.append(_provider_state(provider))
+            provider_details.append({
+                "name": (getattr(provider, "name", "") or ""),
+                "specialties": list(getattr(provider, "specialties", ()) or ()),
+                "languages": list(getattr(provider, "languages", ()) or ()),
+                "state": _provider_state(provider),
+                "city": (getattr(provider, "city", None) or ""),
+            })
 
     return TurnCapture(
         user_message=user_message,
@@ -104,6 +131,8 @@ def _capture_turn(user_message: str, agent, html: str) -> TurnCapture:
         provider_count=provider_count,
         html_has_card=("provider-card" in (html or "")),
         emergency_routed=(getattr(agent, "last_navigation_mode", None) == "emergency"),
+        rendered_text=_html_to_text(html),
+        provider_details=provider_details,
     )
 
 
