@@ -5,6 +5,7 @@ import os
 from typing import Dict, List
 
 from eval.dataset import Scenario, load_scenarios
+from eval.judge import DIMENSIONS, JudgeVerdict
 from eval.scoring import MetricResult, score_trace
 from eval.trace import Trace, run_trace
 
@@ -32,6 +33,14 @@ def result_row(trace: Trace, results: List[MetricResult]) -> dict:
     return row
 
 
+def judge_fields(verdict: JudgeVerdict) -> dict:
+    row = {}
+    for dim in DIMENSIONS:
+        row["judge_{0}".format(dim)] = getattr(verdict, dim)
+    row["judge_error"] = verdict.error
+    return row
+
+
 def summarize(rows: List[dict]) -> Dict[str, dict]:
     summary: Dict[str, dict] = {}
     for row in rows:
@@ -56,6 +65,7 @@ def run_matrix(
     scenarios: List[Scenario] = None,
     out_path: str = "eval/results.jsonl",
     cache_dir: str = "eval/.cache",
+    judge=None,
 ) -> List[dict]:
     if scenarios is None:
         scenarios = load_scenarios()
@@ -65,7 +75,10 @@ def run_matrix(
         for language in scenario.variants:
             trace = run_trace(scenario, language, agent, client, settings, cache_dir=cache_dir)
             results = score_trace(trace, scenario.gold)
-            rows.append(result_row(trace, results))
+            row = result_row(trace, results)
+            if judge is not None:
+                row.update(judge_fields(judge.score(scenario.id, language, trace)))
+            rows.append(row)
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as handle:
@@ -81,10 +94,20 @@ if __name__ == "__main__":
     from provider_search.service import ProviderSearchService
     from provider_search.sources.clinicaltables import ClinicalTablesSource
     from eval.instrumented_agent import TracingAgent
+    from eval.judge import JUDGE_MODEL, QwenJudge
+    from eval.judge_validation import agreement_report, judge_by_cell_from_rows, load_human_labels
 
-    load_dotenv()  # read HF_TOKEN from .env, like app.py
+    load_dotenv()
     settings = get_chat_model_settings()
-    client = InferenceClient(model=settings["model_id"], token=os.environ["HF_TOKEN"])
+    token = os.environ["HF_TOKEN"]
+    client = InferenceClient(model=settings["model_id"], token=token)
+    judge = QwenJudge(InferenceClient(model=JUDGE_MODEL, token=token))
     agent = TracingAgent(ProviderSearchService(clinicaltables_source=ClinicalTablesSource()))
-    rows = run_matrix(agent, client, settings)
+
+    rows = run_matrix(agent, client, settings, judge=judge)
     print(json.dumps(summarize(rows), indent=2, ensure_ascii=False))
+
+    labels_path = "eval/data/human_labels.json"
+    if os.path.exists(labels_path):
+        report = agreement_report(judge_by_cell_from_rows(rows), load_human_labels(labels_path))
+        print(json.dumps(report, indent=2, ensure_ascii=False))

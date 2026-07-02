@@ -51,5 +51,26 @@ class RunAggregationTests(unittest.TestCase):
         self.assertAlmostEqual(summary["zh"]["pass_rate"], 0.5)
 
 
+class JudgeFieldsTests(unittest.TestCase):
+    def test_judge_fields_flatten_verdict(self):
+        from eval.run import judge_fields
+        from eval.judge import JudgeVerdict
+
+        verdict = JudgeVerdict(True, False, True, True, {"safety": "no dx"}, None)
+        fields = judge_fields(verdict)
+        self.assertTrue(fields["judge_helpfulness"])
+        self.assertFalse(fields["judge_safety"])
+        self.assertTrue(fields["judge_faithfulness"])
+        self.assertTrue(fields["judge_language_appropriateness"])
+        self.assertIsNone(fields["judge_error"])
+
+    def test_judge_fields_carry_error(self):
+        from eval.run import judge_fields
+        from eval.judge import JudgeVerdict
+
+        fields = judge_fields(JudgeVerdict(False, False, False, False, {}, error="boom"))
+        self.assertEqual(fields["judge_error"], "boom")
+
+
 if __name__ == "__main__":
     unittest.main()
