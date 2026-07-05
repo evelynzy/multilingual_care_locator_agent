@@ -144,6 +144,7 @@ _UNKNOWN_LANGUAGE_MARKERS = {
 _DETERMINISTIC_RENDER_COPY = {
     "english": {
         "results_intro": "Here are care navigation results for {summary}.",
+        "language_unverified_note": "⚠️ We could not confirm that any of these providers speak {languages}. Please verify language availability when you contact them.",
         "result_title_fallback": "Result {index}",
         "care_route_label": "Care route",
         "referral_note_label": "Referral note",
@@ -189,6 +190,7 @@ _DETERMINISTIC_RENDER_COPY = {
     },
     "spanish": {
         "results_intro": "Aquí están los resultados de navegación de atención para {summary}.",
+        "language_unverified_note": "⚠️ No pudimos confirmar que alguno de estos proveedores hable {languages}. Verifique la disponibilidad de idioma al contactarlos.",
         "result_title_fallback": "Resultado {index}",
         "care_route_label": "Ruta de atención",
         "referral_note_label": "Nota sobre remisión",
@@ -234,6 +236,7 @@ _DETERMINISTIC_RENDER_COPY = {
     },
     "simplified_chinese": {
         "results_intro": "{summary}的护理导航结果如下。",
+        "language_unverified_note": "⚠️ 我们无法确认这些医疗服务者会说{languages}。请在联系时自行确认语言服务。",
         "result_title_fallback": "结果{index}",
         "care_route_label": "就医路线",
         "referral_note_label": "转诊提示",
@@ -981,6 +984,12 @@ class CareLocatorAgent:
                 search_response.search_trace.total_candidates,
             )
 
+            unverified_languages = self._unverified_preferred_languages(
+                parsed_query.preferred_languages, search_response.provider_results
+            )
+            if unverified_languages and local_results:
+                response_payload["language_unverified"] = unverified_languages
+
             if search_response.fallback_resources:
                 fallback_results = [
                     self._normalize_result_trust_metadata(
@@ -1055,6 +1064,29 @@ class CareLocatorAgent:
         )
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _unverified_preferred_languages(
+        requested_languages: Any, provider_results: Any
+    ) -> List[str]:
+        """Requested preferred languages that no returned provider is confirmed to speak.
+
+        NPI records rarely carry language data, so a requested language usually cannot
+        be confirmed. Returning the unconfirmed languages lets the reply disclose the
+        unmet need instead of silently presenting non-matching providers (finding F6).
+        """
+        requested = [
+            str(lang).strip() for lang in (requested_languages or []) if str(lang).strip()
+        ]
+        if not requested:
+            return []
+        spoken = set()
+        for result in provider_results or []:
+            provider = getattr(result, "provider", None)
+            for lang in getattr(provider, "languages", None) or ():
+                spoken.add(str(lang).strip().casefold())
+        return [lang for lang in requested if lang.casefold() not in spoken]
+
+    # ------------------------------------------------------------------
     def _compose_result_card_response(self, payload: Dict[str, Any]) -> str:
         query = payload.get("query", {})
         response_language = (
@@ -1068,6 +1100,25 @@ class CareLocatorAgent:
         fallback_results = list(payload.get("fallback_results") or [])
 
         lines = [self._render_copy(language_key, "results_intro", summary=summary)]
+
+        unverified_languages = payload.get("language_unverified")
+        if unverified_languages:
+            languages_text = ", ".join(
+                str(lang).strip().title()
+                for lang in unverified_languages
+                if str(lang).strip()
+            )
+            if languages_text:
+                lines.extend(
+                    [
+                        "",
+                        self._render_copy(
+                            language_key,
+                            "language_unverified_note",
+                            languages=languages_text,
+                        ),
+                    ]
+                )
 
         care_setting_guidance = self._translate_deterministic_text(
             payload.get("care_setting_guidance")

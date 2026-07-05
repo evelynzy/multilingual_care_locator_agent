@@ -66,16 +66,19 @@ umbrella map — give each `specialty_families` entry its NPI-taxonomy synonyms
 lift usable coverage from ~14 → 22 families. (These broken specialties are kept
 OUT of the fairness dataset so they don't muddy the cross-language signal.)
 
-### F6 — language-concordance requests silently return non-matching providers (Layer B; disclosure gap)
+### F6 — language-concordance requests silently return non-matching providers (Layer B; disclosure gap, FIXED)
 When the user states a language requirement the app cannot satisfy — `s09` ("Spanish-speaking
 primary care"), `s10` ("Korean-speaking pediatrician") — and no NPI record carries language
-data (`languages` is empty across results), the app returns correctly-specialtied providers
+data (`languages` is empty across results), the app returned correctly-specialtied providers
 **without disclosing that the language requirement was not met**. The reply is *not* unfaithful:
-it never claims a provider speaks the language; it simply drops the stated need silently.
-Fix: when a preferred-language filter is requested but unmet, surface an explicit
-"couldn't verify language-concordant providers" notice instead of returning results as if the
-need were satisfied. **This is the agreed immediate next step** (surfaced by the author during
-judge-validation labeling).
+it never claims a provider speaks the language; it simply dropped the stated need silently.
+**Fixed:** `CareLocatorAgent._unverified_preferred_languages` flags any requested language no
+returned provider is confirmed to speak; `_compose_result_card_response` then renders a localized
+"⚠️ we could not confirm that any of these providers speak {languages}" note (en/es/zh copy; ar/ko
+fall back to English like the rest of the deterministic card). Providers still show — the reply
+just stops implying they meet the language need. Verified by
+`tests/test_language_concordance_disclosure.py`. (Surfaced by the author during judge-validation
+labeling.)
 
 ### F7 — the judge over-flags faithfulness on the F6 cells (judge-calibration; Layer A judge)
 The Qwen judge scored `s09`/`s10` `faithfulness=fail` in every language, conflating the F6
