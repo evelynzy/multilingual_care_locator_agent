@@ -89,6 +89,24 @@ Lesson surfaced by human validation: **faithfulness (are the claims grounded?) a
 aggregate faithfulness score shouldn't be trusted until it does (and until a larger, balanced
 labeled set exists).
 
+### F8 — provider-results reply lost any-language localization (Layer A2 regression, FIXED)
+Commit `df2362c` ("restore clickable examples and provider cards") switched provider-card
+rendering from an LLM pass — which localized the whole reply into the user's detected language
+(e.g. a full Czech reply, per an older author screenshot) — to a deterministic template, for
+reliable/structured/clickable cards. `2823e93` re-added localization but only for **en/es/zh**, so
+**every other language (Czech, Korean, Arabic, Vietnamese, Tagalog, …) silently fell back to an
+English wrapper.** This is a chunk of the A2 `language_appropriateness` misses the judge flagged,
+and a genuine regression (not a design choice — earlier theories in the review thread were wrong).
+**Fixed (hybrid — restores the pre-regression behavior without the old unreliability):** the
+provider table stays deterministic and verbatim; for any non-native language,
+`_reply_localization_target` detects the target and `_localize_reply_via_llm` runs one LLM pass
+that translates the wrapper copy (intro, labels, guidance, safety) while keeping provider names,
+addresses, phones, ZIPs, and URLs exactly as written. Falls back to the original reply on any LLM
+error (never worse than the English fallback). Verified live: a Czech `68502` query now returns a
+fully-Czech reply (incl. the localized "911" line) with the Medicare URL verbatim. Tests:
+`tests/test_reply_localization.py`. (Note: re-running the fairness matrix should now lift the ar/ko
+`language_appropriateness` scores — deferred.)
+
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM
 understood the English inputs correctly in every case — the failures are

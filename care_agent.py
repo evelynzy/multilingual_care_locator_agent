@@ -401,6 +401,24 @@ def _resolved_supported_language_key(response_language: Optional[str]) -> str:
     return language_key
 
 
+def _reply_localization_target(response_language: Optional[str]) -> Optional[str]:
+    """The display language to LLM-localize a results reply into, or None if not needed.
+
+    en/es/zh are rendered natively by the deterministic copy, and English needs nothing.
+    Any other detected language (Czech, Korean, Arabic, ...) currently falls back to
+    English copy — those get an LLM wrapper-translation pass so the reply reaches the
+    user in their language while the provider data stays verbatim. Restores the
+    any-language localization lost when provider cards became deterministic (df2362c).
+    """
+    if _is_unknown_response_language(response_language):
+        return None
+    if _resolved_supported_language_key(response_language) != "english":
+        return None
+    if _lookup_language_alias(_normalize_response_language(response_language)) == "english":
+        return None
+    return str(response_language).strip() or None
+
+
 def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     normalized_messages: List[Dict[str, Any]] = []
     for message in messages:
@@ -1047,7 +1065,15 @@ class CareLocatorAgent:
             )
 
         if parsed_query.medical_need and (local_results or fallback_results) and not missing_location_hint:
-            return self._compose_result_card_response(response_payload)
+            card_reply = self._compose_result_card_response(response_payload)
+            target_language = _reply_localization_target(
+                parsed_query.response_language or parsed_query.detected_language
+            )
+            if target_language:
+                card_reply = self._localize_reply_via_llm(
+                    client, card_reply, target_language, max_tokens, temperature, top_p
+                )
+            return card_reply
 
         if missing_location_hint:
             template_key = "response_template_location_needed"
@@ -1085,6 +1111,59 @@ class CareLocatorAgent:
             for lang in getattr(provider, "languages", None) or ():
                 spoken.add(str(lang).strip().casefold())
         return [lang for lang in requested if lang.casefold() not in spoken]
+
+    # ------------------------------------------------------------------
+    def _localize_reply_via_llm(
+        self,
+        client,
+        reply_text: str,
+        target_language: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+    ) -> str:
+        """Translate the wrapper copy of a rendered results reply into target_language,
+        keeping provider data (names, addresses, phones, ZIPs, URLs) verbatim.
+
+        Returns the original reply unchanged on any failure, so an unsupported language
+        is never worse off than the current English fallback.
+        """
+        source = str(reply_text or "").strip()
+        if not source or not str(target_language).strip():
+            return reply_text
+
+        system = "You are a professional translator for a healthcare navigation assistant."
+        instructions = (
+            "Translate the care-navigation reply below into {language}.\n"
+            "Keep every provider name, street address, phone number, ZIP code, URL, and "
+            "email address EXACTLY as written — do not translate or transliterate them.\n"
+            "Translate all other text: headings, labels, guidance, and safety notes.\n"
+            "Preserve the Markdown structure and line breaks.\n"
+            "Return ONLY the translated reply, with no preamble.\n\n"
+            "Reply:\n{reply}"
+        ).format(language=str(target_language).strip(), reply=source)
+
+        try:
+            completion = client.chat_completion(
+                normalize_chat_messages(
+                    [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": instructions},
+                    ]
+                ),
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+            )
+            choices = getattr(completion, "choices", None) or []
+            if not choices:
+                return reply_text
+            message = getattr(choices[0], "message", None)
+            translated = (getattr(message, "content", "") or "").strip() if message else ""
+            return translated or reply_text
+        except Exception as exc:  # noqa: BLE001 - never make the reply worse than English
+            logger.warning("Reply localization to %s failed: %s", target_language, exc)
+            return reply_text
 
     # ------------------------------------------------------------------
     def _compose_result_card_response(self, payload: Dict[str, Any]) -> str:
