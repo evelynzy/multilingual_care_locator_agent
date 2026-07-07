@@ -1525,9 +1525,8 @@ class CareLocatorAgent:
         )
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _clean_subtitle_fragment(value: Any, kind: str) -> str:
-        cleaned_value = CareLocatorAgent._clean_card_value(value)
+    def _clean_subtitle_fragment(self, value: Any, kind: str) -> str:
+        cleaned_value = self._clean_card_value(value)
         if not cleaned_value:
             return ""
 
@@ -1582,8 +1581,8 @@ class CareLocatorAgent:
         return self._render_copy(language_key, "matched_available_result")
 
     # ------------------------------------------------------------------
-    @staticmethod
     def _verification_status_label(
+        self,
         value: Any,
         default: str,
         language_key: str = "english",
@@ -1591,23 +1590,22 @@ class CareLocatorAgent:
         if isinstance(value, dict):
             status = str(value.get("status") or default)
             basis = value.get("basis")
-            localized_status = CareLocatorAgent._translate_status_value(
+            localized_status = self._translate_status_value(
                 status,
                 language_key,
             )
             if basis:
-                return f"{localized_status} ({CareLocatorAgent._translate_deterministic_text(str(basis), language_key)})"
+                return f"{localized_status} ({self._translate_deterministic_text(str(basis), language_key)})"
             return localized_status
-        return CareLocatorAgent._translate_status_value(str(default), language_key)
+        return self._translate_status_value(str(default), language_key)
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _translate_status_value(status: str, language_key: str) -> str:
+    def _translate_status_value(self, status: str, language_key: str) -> str:
         normalized_status = str(status).strip().lower().replace("_", " ")
         if normalized_status == "unverified":
-            return CareLocatorAgent._render_copy(language_key, "status_unverified")
+            return self._render_copy(language_key, "status_unverified")
         if normalized_status == "unknown":
-            return CareLocatorAgent._render_copy(language_key, "status_unknown")
+            return self._render_copy(language_key, "status_unknown")
         return str(status)
 
     # ------------------------------------------------------------------
@@ -1646,34 +1644,33 @@ class CareLocatorAgent:
         return translations.get(language_key, cleaned_text)
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _translate_trust_label(label: str, language_key: str) -> str:
+    def _translate_trust_label(self, label: str, language_key: str) -> str:
         cleaned_label = str(label).strip()
         if not cleaned_label:
             return ""
         if cleaned_label.startswith("Source: "):
             source_value = cleaned_label[len("Source: ") :]
-            return CareLocatorAgent._render_copy(
+            return self._render_copy(
                 language_key,
                 "trust_label_source",
                 value=source_value,
             )
         if cleaned_label.startswith("Insurance/network: "):
             insurance_value = cleaned_label[len("Insurance/network: ") :]
-            return CareLocatorAgent._render_copy(
+            return self._render_copy(
                 language_key,
                 "trust_label_insurance",
-                value=CareLocatorAgent._translate_status_value(
+                value=self._translate_status_value(
                     insurance_value,
                     language_key,
                 ),
             )
         if cleaned_label.startswith("New patients: "):
             new_patient_value = cleaned_label[len("New patients: ") :]
-            return CareLocatorAgent._render_copy(
+            return self._render_copy(
                 language_key,
                 "trust_label_new_patients",
-                value=CareLocatorAgent._translate_status_value(
+                value=self._translate_status_value(
                     new_patient_value,
                     language_key,
                 ),
@@ -1681,16 +1678,16 @@ class CareLocatorAgent:
         if cleaned_label.startswith("Medicare opt-out: "):
             medicare_value = cleaned_label[len("Medicare opt-out: ") :]
             localized_value = {
-                "opted out": CareLocatorAgent._render_copy(language_key, "medicare_opted_out"),
-                "no opt-out record found": CareLocatorAgent._render_copy(language_key, "medicare_no_record"),
-                "unknown": CareLocatorAgent._render_copy(language_key, "medicare_unknown"),
+                "opted out": self._render_copy(language_key, "medicare_opted_out"),
+                "no opt-out record found": self._render_copy(language_key, "medicare_no_record"),
+                "unknown": self._render_copy(language_key, "medicare_unknown"),
             }.get(medicare_value, medicare_value)
-            return CareLocatorAgent._render_copy(
+            return self._render_copy(
                 language_key,
                 "trust_label_medicare_opt_out",
                 value=localized_value,
             )
-        return CareLocatorAgent._translate_deterministic_text(cleaned_label, language_key)
+        return self._translate_deterministic_text(cleaned_label, language_key)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -2594,11 +2591,10 @@ class CareLocatorAgent:
         return " ".join(part for part in parts if part).lower()
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _contains_any(text: str, patterns: Tuple[str, ...]) -> bool:
+    def _contains_any(self, text: str, patterns: Tuple[str, ...]) -> bool:
         normalized_text = text.lower()
         return any(
-            CareLocatorAgent._contains_phrase(normalized_text, pattern)
+            self._contains_phrase(normalized_text, pattern)
             for pattern in patterns
         )
 
@@ -2625,13 +2621,12 @@ class CareLocatorAgent:
         return re.search(pattern, text) is not None
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _contains_emergency_signal(text: str) -> bool:
+    def _contains_emergency_signal(self, text: str) -> bool:
         if re.search(r"(?<!\d)911(?!\d)", text):
             return True
         if re.search(r"\b9[\s-]*1[\s-]*1\b", text):
             return True
-        return CareLocatorAgent._contains_any(text, _EMERGENCY_PATTERNS)
+        return self._contains_any(text, _EMERGENCY_PATTERNS)
 
     # ------------------------------------------------------------------
     def _query_signals_emergency(self, query: ParsedCareQuery) -> bool:
@@ -2733,27 +2728,24 @@ class CareLocatorAgent:
                 family_ids.add(family_id)
         return family_ids
 
-    @staticmethod
-    def _append_follow_up_focus(values: Any, focus: str) -> List[str]:
-        return CareLocatorAgent._dedupe_preserve_order(
-            CareLocatorAgent._ensure_list(values) + [focus]
+    def _append_follow_up_focus(self, values: Any, focus: str) -> List[str]:
+        return self._dedupe_preserve_order(
+            self._ensure_list(values) + [focus]
         )
 
-    @staticmethod
-    def _remove_follow_up_focus(values: Any, focus: str) -> List[str]:
+    def _remove_follow_up_focus(self, values: Any, focus: str) -> List[str]:
         normalized_focus = focus.strip().casefold()
         return [
             value
-            for value in CareLocatorAgent._ensure_list(values)
+            for value in self._ensure_list(values)
             if value.strip().casefold() != normalized_focus
         ]
 
-    @staticmethod
-    def _requires_specialty_clarification(values: Any) -> bool:
+    def _requires_specialty_clarification(self, values: Any) -> bool:
         normalized_focus = _SPECIALTY_CLARIFICATION_FOCUS.casefold()
         return any(
             value.strip().casefold() == normalized_focus
-            for value in CareLocatorAgent._ensure_list(values)
+            for value in self._ensure_list(values)
         )
 
     # ------------------------------------------------------------------
@@ -3413,8 +3405,7 @@ class CareLocatorAgent:
         return f"{content}\n\n{trust_guidance}"
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _safe_json_parse(content: str) -> Optional[dict]:
+    def _safe_json_parse(self, content: str) -> Optional[dict]:
         if not content:
             return None
 
@@ -3428,7 +3419,7 @@ class CareLocatorAgent:
         try:
             return json.loads(trimmed)
         except json.JSONDecodeError as exc:
-            repaired = CareLocatorAgent._repair_json(trimmed)
+            repaired = self._repair_json(trimmed)
             if repaired and repaired != trimmed:
                 try:
                     return json.loads(repaired)
