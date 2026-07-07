@@ -13,9 +13,6 @@ FLIGHTDECK_HANDOFF.md
 coverage.xml
 htmlcov/
 
-# local scratch dir (never commit)
-
-
 # local working notes — keep local, never push
 docs/specs/
 docs/plans/

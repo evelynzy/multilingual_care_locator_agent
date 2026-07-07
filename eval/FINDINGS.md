@@ -96,7 +96,8 @@ rendering from an LLM pass — which localized the whole reply into the user's d
 reliable/structured/clickable cards. `2823e93` re-added localization but only for **en/es/zh**, so
 **every other language (Czech, Korean, Arabic, Vietnamese, Tagalog, …) silently fell back to an
 English wrapper.** This is a chunk of the A2 `language_appropriateness` misses the judge flagged,
-and a genuine regression (not a design choice — earlier theories in the review thread were wrong).
+and a genuine regression (not a design choice — confirmed by `git log -S` archaeology and a
+dated screenshot of the earlier behavior).
 **Fixed (hybrid — restores the pre-regression behavior without the old unreliability):** the
 provider table stays deterministic and verbatim; for any non-native language,
 `_reply_localization_target` detects the target and `_localize_reply_via_llm` runs one LLM pass
