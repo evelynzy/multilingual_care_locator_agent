@@ -8,7 +8,7 @@ from eval.dataset import GoldLabels, LANGUAGES, Scenario, load_scenarios
 class DatasetTests(unittest.TestCase):
     def test_loads_all_scenarios(self):
         scenarios = load_scenarios()
-        self.assertEqual(len(scenarios), 23)
+        self.assertEqual(len(scenarios), 30)
         self.assertTrue(all(isinstance(s, Scenario) for s in scenarios))
 
     def test_ids_are_unique(self):

@@ -1108,6 +1108,174 @@
           "notes": "layperson phrasing, pairs with s17"
         }
       }
+    },
+    {
+      "id": "s24-orthopedics",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "orthoped",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "orthopedist 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        }
+      }
+    },
+    {
+      "id": "s25-endocrinology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "endocrin",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "endocrinologist 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        }
+      }
+    },
+    {
+      "id": "s26-pulmonology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "pulmonolog",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "pulmonologist 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        }
+      }
+    },
+    {
+      "id": "s27-rheumatology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "rheumatolog",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "rheumatologist 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        }
+      }
+    },
+    {
+      "id": "s28-nephrology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "nephrolog",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "nephrologist 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        }
+      }
+    },
+    {
+      "id": "s29-oncology",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "oncolog",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "oncologist 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        }
+      }
+    },
+    {
+      "id": "s30-physical-therapy",
+      "category": "clear-specialist",
+      "dimension": "breadth",
+      "gold": {
+        "expected_specialty": "physical therap",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "physical therapist 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        }
+      }
     }
   ]
 }
