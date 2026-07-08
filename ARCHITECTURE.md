@@ -97,10 +97,10 @@ A self-contained package with single-purpose modules:
   thin (including nearby-location retries) → field-level dedupe/merge → rank → trace.
 - **`sources/clinicaltables.py`** — the NPI ClinicalTables adapter. Includes the
   umbrella-taxonomy map: NPI has no taxonomy for terms like "primary care" (those providers
-  file under Family Medicine) or bare subspecialty names like "rheumatology" (filed under
-  "Internal Medicine, Rheumatology"), so query terms are rewritten to live-verified
-  NPI-recognized taxonomies before search (`eval/FINDINGS.md` F1, generalized to every
-  specialty family by F5).
+  file under Family Medicine), bare subspecialty names like "rheumatology" (filed under
+  "Internal Medicine, Rheumatology"), or practitioner forms like "cardiologist", so query
+  terms are rewritten to live-verified NPI-recognized taxonomies before search
+  (`eval/FINDINGS.md` F1, generalized to every specialty family by F5).
 - **`sources/nppes.py`** — NPPES registry enrichment per provider (addresses, taxonomies,
   Medicare opt-out).
 - **`ranking.py`** — weighted scoring. Specialty alignment dominates (4.0 per match);

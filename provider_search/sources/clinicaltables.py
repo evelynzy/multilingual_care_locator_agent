@@ -127,6 +127,27 @@ _UMBRELLA_TAXONOMY_TERMS = {
     "physical therapy": "physical therapist",
     "rehabilitation": "physical medicine & rehabilitation",
     "physical medicine and rehabilitation": "physical medicine & rehabilitation",
+    # Practitioner forms (-ist/-ician): the LLM parse usually normalizes these
+    # to field names, but real traces show leaks (an "allergist" parse), and
+    # NPI's suggest endpoint does not convert them — a leaked form returned
+    # zero providers. Values live-verified 2026-07-08 at ZIP 94110.
+    "pediatrician": "pediatrics",
+    "dermatologist": "dermatology",
+    "cardiologist": "cardiovascular disease",
+    "gastroenterologist": "gastroenterology",
+    "neurologist": "neurology",
+    "psychiatrist": "psychiatry",
+    "otolaryngologist": "otolaryngology",
+    "ophthalmologist": "ophthalmology",
+    "optometrist": "optometry",
+    "urologist": "urology",
+    "allergist": "allergy & immunology",
+    "immunologist": "allergy & immunology",
+    "radiologist": "radiology",
+    "gynecologist": "gynecology",
+    "obstetrician": "obstetrics",
+    "hematologist": "internal medicine, hematology",
+    "physiatrist": "physical medicine & rehabilitation",
 }
 
 logger = logging.getLogger(__name__)

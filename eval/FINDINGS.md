@@ -84,6 +84,22 @@ live before/after probe through the real service at ZIP 94110:
   0 → 5; oncology 2 → 5; physical therapy 3 → 5; controls unchanged at 5.
   Mapping and classification pinned by `tests/test_specialty_umbrella_terms.py`
   and `tests/test_provider_search_foundation.py`.
+- Coverage sweep (2026-07-08): all 22 specialty families probed live through
+  the real service at ZIP 94110 (dense) and 68508 (low-density). The sweep
+  caught a second gap class: practitioner forms ("orthopedist",
+  "pulmonologist", "urologist", …) failed either at retrieval (not in the
+  umbrella map, and NPI's suggest endpoint does not convert them) or at the
+  ranking gate (term missing from the family-alias catalog — even
+  "primary care physician", an original F1 map key, had this gap). The LLM
+  parse usually normalizes practitioner forms to field names, but captured
+  traces show leaks (an "allergist" parse). Fixed: 17 practitioner-form
+  entries added to the umbrella map (values live-verified) plus 15
+  family-catalog aliases; two invariant tests now pin that every umbrella key
+  classifies to a family, and to the same family as its value. After: every
+  core phrasing nonzero at 94110. Known limitations recorded: colloquial
+  forms ("eye doctor", "cancer doctor") rely on the LLM parse; low-density
+  ZIPs (68508) return sparse-to-zero results at exact-ZIP granularity
+  regardless of specialty — a location-handling behavior, not a mapping gap.
 
 ### F6 — language-concordance requests silently return non-matching providers (Layer B; disclosure gap, FIXED)
 When the user states a language requirement the app cannot satisfy — `s09` ("Spanish-speaking

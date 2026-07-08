@@ -4,6 +4,7 @@ from provider_search.sources.clinicaltables import (
     _UMBRELLA_TAXONOMY_TERMS,
     ClinicalTablesSource,
 )
+from provider_search.specialty_families import normalize_specialty_family_id
 
 
 class UmbrellaSpecialtyTermTests(unittest.TestCase):
@@ -77,6 +78,25 @@ class UmbrellaMapCoversBrokenFamiliesTests(unittest.TestCase):
     def test_rewrites_are_casefolded_keys(self):
         for key in _UMBRELLA_TAXONOMY_TERMS:
             self.assertEqual(key, key.casefold(), key)
+
+    def test_every_umbrella_key_classifies_to_a_family(self):
+        # The ranking gate derives family ids from the REQUESTED term; a dict
+        # key with no family alias fetches providers that are then all dropped
+        # as specialty_mismatch (the "orthopedist" gap found 2026-07-08).
+        for key in _UMBRELLA_TAXONOMY_TERMS:
+            self.assertIsNotNone(normalize_specialty_family_id(key), key)
+
+    def test_every_umbrella_key_and_value_share_a_family(self):
+        # Retrieval searches the VALUE; the gate classifies providers by what
+        # the value's taxonomy maps to and the request by what the KEY maps
+        # to. If those differ, retrieval and gating disagree and results
+        # silently vanish.
+        for key, value in _UMBRELLA_TAXONOMY_TERMS.items():
+            self.assertEqual(
+                normalize_specialty_family_id(key),
+                normalize_specialty_family_id(value),
+                f"{key!r} -> {value!r}",
+            )
 
 
 if __name__ == "__main__":

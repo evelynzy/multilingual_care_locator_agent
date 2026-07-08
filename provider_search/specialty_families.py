@@ -33,6 +33,8 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "general practice",
             "adult medicine",
             "pcp",
+            "primary care physician",
+            "primary care doctor",
         ),
     ),
     SpecialtyFamily(
@@ -102,6 +104,8 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "207vx0000x",
             "gynecologic oncology",
             "gynecology",
+            "gynecologist",
+            "obstetrician",
             "maternal and fetal medicine",
             "maternal fetal medicine",
             "obstetrics",
@@ -160,7 +164,13 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="ent",
         label="ENT / Otolaryngology",
-        aliases=("ent", "otolaryngology", "otorhinolaryngology", "ear nose throat"),
+        aliases=(
+            "ent",
+            "otolaryngology",
+            "otolaryngologist",
+            "otorhinolaryngology",
+            "ear nose throat",
+        ),
     ),
     SpecialtyFamily(
         family_id="psychiatry-behavioral-health",
@@ -186,13 +196,21 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "orthopaedic",
             "orthopedic surgery",
             "orthopaedic surgery",
+            "orthopedist",
             "sports medicine",
         ),
     ),
     SpecialtyFamily(
         family_id="eye-care",
         label="Eye Care",
-        aliases=("ophthalmology", "optometry", "eye care", "vision care"),
+        aliases=(
+            "ophthalmology",
+            "ophthalmologist",
+            "optometry",
+            "optometrist",
+            "eye care",
+            "vision care",
+        ),
     ),
     SpecialtyFamily(
         family_id="urology",
@@ -202,13 +220,19 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="nephrology",
         label="Nephrology",
-        aliases=("nephrology", "kidney care", "internal medicine, nephrology"),
+        aliases=(
+            "nephrology",
+            "nephrologist",
+            "kidney care",
+            "internal medicine, nephrology",
+        ),
     ),
     SpecialtyFamily(
         family_id="pulmonology",
         label="Pulmonology",
         aliases=(
             "pulmonology",
+            "pulmonologist",
             "pulmonary",
             "lung care",
             "pulmonary disease",
@@ -218,7 +242,14 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="allergy-immunology",
         label="Allergy & Immunology",
-        aliases=("allergy", "allergies", "immunology", "allergy immunology"),
+        aliases=(
+            "allergy",
+            "allergies",
+            "allergist",
+            "immunology",
+            "immunologist",
+            "allergy immunology",
+        ),
     ),
     SpecialtyFamily(
         family_id="rheumatology",
@@ -232,6 +263,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "oncology",
             "oncologist",
             "hematology",
+            "hematologist",
             "cancer care",
             "hematology & oncology",
             "medical oncology",
@@ -246,6 +278,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
         aliases=(
             "physical therapy",
             "physiatry",
+            "physiatrist",
             "pm and r",
             "rehabilitation",
             "physical therapist",
@@ -255,7 +288,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="radiology-imaging",
         label="Radiology / Imaging",
-        aliases=("radiology", "diagnostic radiology", "imaging"),
+        aliases=("radiology", "radiologist", "diagnostic radiology", "imaging"),
     ),
 )
 
