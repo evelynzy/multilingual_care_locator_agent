@@ -2,9 +2,11 @@
 
 CI installs only ``requirements-test.txt`` and intentionally omits the heavy
 runtime deps. Some eval tests import ``eval.instrumented_agent`` ->
-``care``, which imports ``huggingface_hub`` at module level. Stub it here
-**only when it is genuinely not installed**, so the offline suite collects in CI
-while local development and gated live tests keep using the real client.
+``care``, which historically imported ``huggingface_hub`` at module level
+(the split ``care`` package now references it only in type annotations).
+Keep the stub as a guard **only when it is genuinely not installed**, so the
+offline suite collects in CI while local development and gated live tests
+keep using the real client.
 """
 import sys
 import types
