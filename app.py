@@ -98,9 +98,9 @@ def respond(
             temperature=chat_settings.get("temperature", 0.3),
             top_p=chat_settings.get("top_p", 0.9),
         )
-    except Exception as exc:  # noqa: BLE001 - surface error to end user
+    except Exception:  # noqa: BLE001 - user gets a generic reply; details go to the server log only
         logger.exception("Unexpected error while processing request")
-        return f"⚠️ {ERROR_MESSAGE} Details for debugging: {exc}"
+        return f"⚠️ {ERROR_MESSAGE}"
 
     return reply
 

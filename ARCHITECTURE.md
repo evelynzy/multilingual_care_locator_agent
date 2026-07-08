@@ -187,8 +187,6 @@ attributable to a specific layer. Results, findings (F1–F8), and the case stud
   provenance explicit.
 - **Native-numeral locations**: Arabic-Indic ZIP digits (e.g. `٠٢١٣٩`) are not yet normalized
   (`eval/CASE_STUDY.md` §4) — open.
-- **Error hygiene**: user-facing error replies will stop including raw exception details
-  (already fully logged server-side).
 
 ## Repository layout
 

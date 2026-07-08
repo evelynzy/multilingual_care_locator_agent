@@ -174,5 +174,22 @@ class AppLoggingTests(unittest.TestCase):
         self.assertNotIn("儿科 10013", app.chatbot.kwargs["examples"])
 
 
+class AppErrorReplyTests(unittest.TestCase):
+    def test_error_reply_omits_exception_details(self) -> None:
+        app = importlib.import_module("app")
+
+        secret = "SECRET boom at /Users/private/thing.py:42"
+        with patch.dict(os.environ, {"HF_TOKEN": "test-token"}), patch.object(
+            app.care_locator_agent,
+            "handle_request",
+            side_effect=RuntimeError(secret),
+        ), patch.object(app, "InferenceClient", return_value=Mock()):
+            reply = app.respond("primary care 94110", [])
+
+        self.assertIn(app.ERROR_MESSAGE, reply)
+        self.assertNotIn(secret, reply)
+        self.assertNotIn("Details for debugging", reply)
+
+
 if __name__ == "__main__":
     unittest.main()
