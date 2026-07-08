@@ -80,7 +80,7 @@ if "llama_index" not in sys.modules:
     sys.modules["llama_index.embeddings.huggingface"] = llama_hf_stub
 
 
-from care_agent import CareLocatorAgent, ParsedCareQuery
+from care import CareLocatorAgent, ParsedCareQuery
 from provider_search.models import ProviderSearchRequest, ProviderSearchResponse, SearchTrace
 
 

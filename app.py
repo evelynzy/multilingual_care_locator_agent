@@ -6,7 +6,7 @@ import gradio as gr
 from huggingface_hub import InferenceClient
 from dotenv import load_dotenv
 
-from care_agent import CareLocatorAgent, normalize_chat_messages
+from care import CareLocatorAgent, normalize_chat_messages
 from config_loader import (
     get_chat_model_settings,
     get_message,

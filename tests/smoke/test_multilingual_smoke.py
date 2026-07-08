@@ -19,7 +19,7 @@ class MultilingualSmokeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from huggingface_hub import InferenceClient
-        from care_agent import CareLocatorAgent
+        from care import CareLocatorAgent
         from provider_search.service import ProviderSearchService
         from provider_search.sources.clinicaltables import ClinicalTablesSource
         from config_loader import get_chat_model_settings

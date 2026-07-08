@@ -30,7 +30,7 @@ English-only and **language-invariant by construction**. This is what makes cros
 failures attributable to a specific layer — the basis of the fairness evaluation in `eval/`
 (see `eval/CASE_STUDY.md`).
 
-## Stage A1 — input understanding (`care_agent.py`)
+## Stage A1 — input understanding (`care/intent.py`, `care/language.py`)
 
 **Intent extraction** (`_interpret_user_need`). One LLM call with a `care_intent` json_schema
 forcing structured output (summary, English specialties, location, insurance, preferred
@@ -66,7 +66,7 @@ overrides "respond in English" whenever a non-English input was detected (small 
 toward English). Downstream, an NFKD-normalized alias map (`"中文"`, `"한국어"`, `"es"`, …)
 resolves the language for each rendering subsystem.
 
-## Routing and guidance (`care_agent.py`)
+## Routing and guidance (`care/guidance.py`, `care/safety.py`)
 
 `_build_navigation_guidance` decides the reply mode — `emergency`, `search`, or
 `clarification` — via a priority ladder in `_classify_care_setting`:
@@ -117,7 +117,7 @@ e.g. Medicare Care Compare) is offered instead; source failures and missing-loca
 explicit explanatory notes. The service-level `fallback_resources` field is a reserved seam —
 currently always empty (see the comment in `service.py`).
 
-## Stage A2 — output (`care_agent.py`, `app.py`)
+## Stage A2 — output (`care/rendering.py`, `app.py`)
 
 **Deterministic card renderer.** Provider results render without an LLM: intro, care-route and
 referral notes, one HTML provider card per result (address, phone, source, why-matched), and a
@@ -195,12 +195,11 @@ attributable to a specific layer. Results, findings (F1–F8), and the case stud
 | Path | Role |
 |---|---|
 | `app.py` | Gradio shell (Spaces entry point) |
-| `care_agent.py` | A1 + routing + A2: intent, trust boundaries, guidance, rendering |
+| `care/` | A1 + routing + A2 package: language, safety, intent, guidance, rendering, agent |
 | `provider_search/` | B: retrieval package (service, sources, ranking, families, cache) |
 | `eval/` | fairness-evaluation harness (dataset, tracing, scoring, judge, κ) |
 | `config/settings.yaml` | prompts, UI copy, fallback resources, search settings |
 | `retriever.py`, `config_loader.py` | legacy retrieval helpers / config access |
 | `tests/` | unit + gated live tests (`RUN_EVAL=1`) |
 
-`care_agent.py` currently concentrates the A1/routing/A2 stages in one module; splitting it
-into a `care/` package with single-purpose modules (mirroring `provider_search/`) is planned.
+The A1/routing/A2 stages are now split into the `care/` package with single-purpose modules (mirroring `provider_search/`).

@@ -25,7 +25,7 @@ if "huggingface_hub" not in sys.modules:
     sys.modules["huggingface_hub"] = _hf
 
 
-from care_agent import CareLocatorAgent
+from care import CareLocatorAgent
 
 
 class CjkZipExtractionTests(unittest.TestCase):

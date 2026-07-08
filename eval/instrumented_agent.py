@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from care_agent import CareLocatorAgent, ParsedCareQuery
+from care import CareLocatorAgent, ParsedCareQuery
 from provider_search.models import ProviderSearchRequest, ProviderSearchResponse
 
 

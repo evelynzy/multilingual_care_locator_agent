@@ -200,7 +200,7 @@ class ProviderSearchService:
             provider_results=tuple(display_results),
             # Always empty today: neither current source (ClinicalTables/NPPES) has a
             # fallback-resource concept. The real fallback is agent-side
-            # (care_agent._trusted_resource_fallback, config-driven). Seam reserved for
+            # (care.rendering._trusted_resource_fallback, config-driven). Seam reserved for
             # future sources that suggest their own resources.
             fallback_resources=(),
             missing_location_hint=missing_location_hint,

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import unittest
 
-from care_agent import CareLocatorAgent, _reply_localization_target
+from care import CareLocatorAgent, _reply_localization_target
 
 
 class ReplyLocalizationTargetTests(unittest.TestCase):

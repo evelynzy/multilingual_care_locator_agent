@@ -16,7 +16,7 @@ if "huggingface_hub" not in sys.modules:
     _hf.InferenceClient = _StubInferenceClient
     sys.modules["huggingface_hub"] = _hf
 
-from care_agent import CareLocatorAgent, INTERPRET_MAX_TOKENS
+from care import CareLocatorAgent, INTERPRET_MAX_TOKENS
 
 
 def _completion(content: str):

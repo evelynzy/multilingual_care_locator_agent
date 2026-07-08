@@ -14,7 +14,7 @@ import types
 import unittest
 
 
-# Match the existing test convention: stub the heavy deps so care_agent imports.
+# Match the existing test convention: stub the heavy deps so care imports.
 if "huggingface_hub" not in sys.modules:
     _hf = types.ModuleType("huggingface_hub")
 
@@ -26,7 +26,7 @@ if "huggingface_hub" not in sys.modules:
     sys.modules["huggingface_hub"] = _hf
 
 
-from care_agent import (
+from care import (
     _REQUIRED_TRUST_GUIDANCE,
     _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE,
     _get_prewritten_required_trust_guidance,

@@ -15,7 +15,7 @@ if "huggingface_hub" not in sys.modules:
     _hf.InferenceClient = _StubInferenceClient
     sys.modules["huggingface_hub"] = _hf
 
-from care_agent import CareLocatorAgent, ParsedCareQuery
+from care import CareLocatorAgent, ParsedCareQuery
 
 
 def _query(**overrides) -> ParsedCareQuery:

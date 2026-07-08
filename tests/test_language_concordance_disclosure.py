@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import unittest
 
-from care_agent import CareLocatorAgent
+from care import CareLocatorAgent
 
 
 class _FakeProvider:

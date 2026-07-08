@@ -79,7 +79,7 @@ if "llama_index" not in sys.modules:
     sys.modules["llama_index.embeddings.huggingface"] = llama_hf_stub
 
 
-from care_agent import normalize_chat_messages
+from care import normalize_chat_messages
 
 
 class ChatMessageMetadataTests(unittest.TestCase):
