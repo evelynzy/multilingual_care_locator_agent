@@ -720,7 +720,7 @@ class IntentMixin:
             return
 
         logger.info(
-            "care_agent_local_debug_interpret detected_language=%s response_language=%s medical_need=%s location_present=%s location_shape=%s specialties=%s insurance_count=%s preferred_language_count=%s keyword_count=%s needs_clarification=%s care_setting=%s urgency=%s summary_length=%s",
+            "care_local_debug_interpret detected_language=%s response_language=%s medical_need=%s location_present=%s location_shape=%s specialties=%s insurance_count=%s preferred_language_count=%s keyword_count=%s needs_clarification=%s care_setting=%s urgency=%s summary_length=%s",
             parsed_query.detected_language,
             parsed_query.response_language,
             parsed_query.medical_need,

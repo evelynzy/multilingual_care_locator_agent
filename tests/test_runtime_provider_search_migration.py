@@ -621,11 +621,11 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                     )
 
         single_gate_logs = "\n".join(captured_single_gate.output)
-        self.assertNotIn("care_agent_local_debug_interpret", single_gate_logs)
-        self.assertNotIn("care_agent_local_debug_handoff", single_gate_logs)
+        self.assertNotIn("care_local_debug_interpret", single_gate_logs)
+        self.assertNotIn("care_local_debug_handoff", single_gate_logs)
         self.assertNotIn("provider_search_debug_plan", single_gate_logs)
         self.assertNotIn("provider_search_debug_gate_drop", single_gate_logs)
-        self.assertNotIn("care_agent_result_debug", single_gate_logs)
+        self.assertNotIn("care_result_debug", single_gate_logs)
 
         dual_gate_client = _ScriptedChatClient(
             [
@@ -658,13 +658,13 @@ class CareLocatorAgentProviderSearchRuntimeTests(unittest.TestCase):
                     )
 
         dual_gate_logs = "\n".join(captured_dual_gate.output)
-        self.assertIn("care_agent_local_debug_interpret", dual_gate_logs)
-        self.assertIn("care_agent_local_debug_handoff", dual_gate_logs)
+        self.assertIn("care_local_debug_interpret", dual_gate_logs)
+        self.assertIn("care_local_debug_handoff", dual_gate_logs)
         self.assertIn("provider_search_debug_plan", dual_gate_logs)
         self.assertIn("provider_search_debug_variant", dual_gate_logs)
         self.assertIn("provider_search_debug_candidate", dual_gate_logs)
         self.assertIn("provider_search_debug_gate_drop", dual_gate_logs)
-        self.assertIn("care_agent_result_debug", dual_gate_logs)
+        self.assertIn("care_result_debug", dual_gate_logs)
         self.assertNotIn("provider_search_debug_candidate_detail", dual_gate_logs)
         self.assertNotIn("Cupertino OB/GYN Associates", dual_gate_logs)
         self.assertNotIn("1619271780", dual_gate_logs)

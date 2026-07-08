@@ -276,7 +276,7 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
                 )
             if self._local_debug_enabled():
                 logger.info(
-                    "care_agent_result_debug request_fingerprint=%s local_results=%s fallback_results=%s final_visible=%s had_source_failures=%s missing_location_hint=%s",
+                    "care_result_debug request_fingerprint=%s local_results=%s fallback_results=%s final_visible=%s had_source_failures=%s missing_location_hint=%s",
                     search_response.search_trace.request_fingerprint,
                     len(local_results),
                     len(fallback_results),
@@ -349,7 +349,7 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
             return
 
         logger.info(
-            "care_agent_local_debug_handoff medical_need=%s location_present=%s location_shape=%s specialties=%s insurance_count=%s preferred_language_count=%s keyword_count=%s",
+            "care_local_debug_handoff medical_need=%s location_present=%s location_shape=%s specialties=%s insurance_count=%s preferred_language_count=%s keyword_count=%s",
             parsed_query.medical_need,
             bool(provider_request.location),
             self._debug_location_shape(provider_request.location),
