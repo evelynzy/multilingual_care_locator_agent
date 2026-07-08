@@ -83,7 +83,7 @@ resolves the language for each rendering subsystem.
    plan, preferred language, plan type), each with a deterministic trigger. Clarifying replies
    are LLM-composed so the questions render in the user's language.
 
-**Location parsing** uses dedicated assets: US state code and full-name tables, a noise-token
+**Location parsing** uses dedicated assets in `care/intent.py`: US state code and full-name tables, a noise-token
 list (words like "plan"/"find"/"area" can never become city names), specialty-word rejection
 ("dermatology, CA" does not invent a city), and city/state regexes shared with the trust
 boundary above.
@@ -125,7 +125,7 @@ trust-badge row that never over-claims ("Informational", "Network unverified", "
 unknown", "Appointments unverified"). Provider data is inserted verbatim.
 
 **Localization.** Card template copy is pre-written in English/Spanish/Chinese; for any other
-detected language a single LLM pass translates the wrapper text (headings, labels, guidance,
+detected language a single LLM pass (`care/language.py`) translates the wrapper text (headings, labels, guidance,
 safety notes) while keeping provider names, addresses, phones, ZIPs, and URLs exactly as
 written, falling back to the original reply on any failure. This restores full any-language
 replies (`eval/FINDINGS.md` F8) on top of reliable structured cards.
@@ -135,10 +135,10 @@ and no returned record confirms it (NPI rarely carries language data), the reply
 explicitly — "we could not confirm that any of these providers speak X" — instead of silently
 implying the need was met (`eval/FINDINGS.md` F6).
 
-**Safety footer.** Every reply, on every composition path, ends with the safety block (care
-navigation only, nothing verified unless stated, call to confirm, don't share personal health
-information, 911 guidance), pre-written in seven languages (en/es/zh/vi/tl/ar/ko) with
-double-append guards.
+**Safety footer.** Every reply, on every composition path, ends with the safety block from
+`care/safety.py` (care navigation only, nothing verified unless stated, call to confirm, don't
+share personal health information, 911 guidance), pre-written in seven languages
+(en/es/zh/vi/tl/ar/ko) with double-append guards.
 
 **App shell (`app.py`).** A thin Gradio `ChatInterface`: builds the inference client, prepends
 the configured system message, delegates to `CareLocatorAgent.handle_request`, and hosts the
