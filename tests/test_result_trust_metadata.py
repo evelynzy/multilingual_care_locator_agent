@@ -818,7 +818,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
             "verification_guidance": "Call the provider and insurer to confirm network status.",
         }
 
-        with self.assertLogs("care_agent", level="DEBUG") as captured_logs:
+        with self.assertLogs("care.agent", level="DEBUG") as captured_logs:
             self.agent._compose_response(
                 client,
                 payload,
