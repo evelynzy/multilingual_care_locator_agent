@@ -126,6 +126,41 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
         self.assertEqual(normalize_specialty_family_id("oncologist"), "oncology-hematology")
         self.assertEqual(normalize_specialty_family_id("dentista"), "dentistry")
 
+    def test_normalize_specialty_family_id_covers_npi_taxonomy_display_names(self) -> None:
+        # NPI records carry NUCC display names ("Orthopaedic Surgery",
+        # "Internal Medicine, Rheumatology"). Without these aliases the ranking
+        # gate classified such providers as no-family or primary-care (the
+        # comma head) and dropped them as specialty_mismatch — the F5 gap.
+        self.assertEqual(normalize_specialty_family_id("Orthopaedic Surgery"), "orthopedics")
+        self.assertEqual(
+            normalize_specialty_family_id("Internal Medicine, Endocrinology, Diabetes & Metabolism"),
+            "endocrinology",
+        )
+        self.assertEqual(
+            normalize_specialty_family_id("Internal Medicine, Pulmonary Disease"),
+            "pulmonology",
+        )
+        self.assertEqual(
+            normalize_specialty_family_id("Internal Medicine, Rheumatology"),
+            "rheumatology",
+        )
+        self.assertEqual(
+            normalize_specialty_family_id("Internal Medicine, Nephrology"),
+            "nephrology",
+        )
+        self.assertEqual(
+            normalize_specialty_family_id("Internal Medicine, Hematology & Oncology"),
+            "oncology-hematology",
+        )
+        self.assertEqual(
+            normalize_specialty_family_id("Physical Therapist"),
+            "physical-therapy-rehab",
+        )
+        self.assertEqual(
+            normalize_specialty_family_id("Physical Medicine & Rehabilitation"),
+            "physical-therapy-rehab",
+        )
+
     def test_query_specialty_family_matching_is_narrower_than_provider_alias_catalog(
         self,
     ) -> None:

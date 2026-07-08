@@ -97,9 +97,10 @@ A self-contained package with single-purpose modules:
   thin (including nearby-location retries) → field-level dedupe/merge → rank → trace.
 - **`sources/clinicaltables.py`** — the NPI ClinicalTables adapter. Includes the
   umbrella-taxonomy map: NPI has no taxonomy for terms like "primary care" (those providers
-  file under Family Medicine), so umbrella terms are rewritten to NPI-recognized taxonomies
-  before search (`eval/FINDINGS.md` F1; generalizing this map to all specialty families is
-  planned — F5).
+  file under Family Medicine) or bare subspecialty names like "rheumatology" (filed under
+  "Internal Medicine, Rheumatology"), so query terms are rewritten to live-verified
+  NPI-recognized taxonomies before search (`eval/FINDINGS.md` F1, generalized to every
+  specialty family by F5).
 - **`sources/nppes.py`** — NPPES registry enrichment per provider (addresses, taxonomies,
   Medicare opt-out).
 - **`ranking.py`** — weighted scoring. Specialty alignment dominates (4.0 per match);
@@ -107,7 +108,9 @@ A self-contained package with single-purpose modules:
   (requested state ≠ provider state → zero); small bonuses for verified-trust metadata.
 - **`specialty_families.py`** — the canonical catalog of 22 specialty families and aliases,
   shared by request normalization, message-evidence scanning, and provider gating (see
-  `docs/specialty-resolution-architecture.md`).
+  `docs/specialty-resolution-architecture.md`). Family aliases include the NUCC taxonomy
+  display names providers actually carry ("Orthopaedic Surgery", "Internal Medicine,
+  Rheumatology"), so the provider gate classifies rewritten-search candidates correctly (F5).
 - **`cache.py`** — PHI-free response cache keyed by request fingerprint, storing provider IDs
   only.
 
@@ -169,9 +172,6 @@ attributable to a specific layer. Results, findings (F1–F8), and the case stud
 
 ## Known limitations and planned work
 
-- **Specialty coverage** (F5): several advertised specialties still lack NPI-taxonomy synonym
-  mappings and return no providers; generalizing the umbrella map to every specialty family is
-  the highest-impact planned fix.
 - **Ambiguity clarification** (F3): umbrella queries like "mental health" are searched (and
   return nothing) instead of triggering a clarifying question; the curated ambiguity list that
   already handles "child allergy" is planned to grow, matching on the language-invariant

@@ -1,6 +1,9 @@
 import unittest
 
-from provider_search.sources.clinicaltables import ClinicalTablesSource
+from provider_search.sources.clinicaltables import (
+    _UMBRELLA_TAXONOMY_TERMS,
+    ClinicalTablesSource,
+)
 
 
 class UmbrellaSpecialtyTermTests(unittest.TestCase):
@@ -39,6 +42,41 @@ class UmbrellaSpecialtyTermTests(unittest.TestCase):
     def test_unmapped_term_falls_back_to_literal(self):
         src = self._source_without_npi_suggestion()
         self.assertEqual(src.suggest_specialty_terms(("dermatology",)), ("dermatology",))
+
+
+class UmbrellaMapCoversBrokenFamiliesTests(unittest.TestCase):
+    """Every specialty family NPI files under a different taxonomy name (F5)
+    must be rewritten by the umbrella map; the mapped values are live-verified
+    against the real service (probe at ZIP 94110, 2026-07-08)."""
+
+    def test_every_f5_family_term_is_rewritten(self):
+        for term in (
+            "orthopedics", "endocrinology", "pulmonology", "rheumatology",
+            "nephrology", "oncology", "physical therapy",
+        ):
+            self.assertIn(term, _UMBRELLA_TAXONOMY_TERMS, term)
+            self.assertNotEqual(_UMBRELLA_TAXONOMY_TERMS[term], term, term)
+
+    def test_internal_medicine_subspecialties_use_full_display_names(self):
+        # Bare subspecialty names ("pulmonary disease", "hematology & oncology")
+        # return zero from NPI; only the full "internal medicine, ..." display
+        # form matches. Pin the three values a plainer name would silently break.
+        self.assertEqual(
+            _UMBRELLA_TAXONOMY_TERMS["endocrinology"],
+            "internal medicine, endocrinology, diabetes & metabolism",
+        )
+        self.assertEqual(
+            _UMBRELLA_TAXONOMY_TERMS["pulmonology"],
+            "internal medicine, pulmonary disease",
+        )
+        self.assertEqual(
+            _UMBRELLA_TAXONOMY_TERMS["oncology"],
+            "internal medicine, hematology & oncology",
+        )
+
+    def test_rewrites_are_casefolded_keys(self):
+        for key in _UMBRELLA_TAXONOMY_TERMS:
+            self.assertEqual(key, key.casefold(), key)
 
 
 if __name__ == "__main__":

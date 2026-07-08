@@ -150,7 +150,12 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="endocrinology",
         label="Endocrinology",
-        aliases=("endocrinology", "endocrinologist"),
+        aliases=(
+            "endocrinology",
+            "endocrinologist",
+            "endocrinology, diabetes & metabolism",
+            "internal medicine, endocrinology, diabetes & metabolism",
+        ),
     ),
     SpecialtyFamily(
         family_id="ent",
@@ -180,6 +185,7 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
             "orthopedic",
             "orthopaedic",
             "orthopedic surgery",
+            "orthopaedic surgery",
             "sports medicine",
         ),
     ),
@@ -196,12 +202,18 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="nephrology",
         label="Nephrology",
-        aliases=("nephrology", "kidney care"),
+        aliases=("nephrology", "kidney care", "internal medicine, nephrology"),
     ),
     SpecialtyFamily(
         family_id="pulmonology",
         label="Pulmonology",
-        aliases=("pulmonology", "pulmonary", "lung care"),
+        aliases=(
+            "pulmonology",
+            "pulmonary",
+            "lung care",
+            "pulmonary disease",
+            "internal medicine, pulmonary disease",
+        ),
     ),
     SpecialtyFamily(
         family_id="allergy-immunology",
@@ -211,17 +223,34 @@ SPECIALTY_FAMILY_CATALOG: tuple[SpecialtyFamily, ...] = (
     SpecialtyFamily(
         family_id="rheumatology",
         label="Rheumatology",
-        aliases=("rheumatology", "rheumatologist"),
+        aliases=("rheumatology", "rheumatologist", "internal medicine, rheumatology"),
     ),
     SpecialtyFamily(
         family_id="oncology-hematology",
         label="Oncology / Hematology",
-        aliases=("oncology", "oncologist", "hematology", "cancer care"),
+        aliases=(
+            "oncology",
+            "oncologist",
+            "hematology",
+            "cancer care",
+            "hematology & oncology",
+            "medical oncology",
+            "internal medicine, hematology & oncology",
+            "internal medicine, medical oncology",
+            "internal medicine, hematology",
+        ),
     ),
     SpecialtyFamily(
         family_id="physical-therapy-rehab",
         label="Physical Therapy / Rehab",
-        aliases=("physical therapy", "physiatry", "pm and r", "rehabilitation"),
+        aliases=(
+            "physical therapy",
+            "physiatry",
+            "pm and r",
+            "rehabilitation",
+            "physical therapist",
+            "physical medicine & rehabilitation",
+        ),
     ),
     SpecialtyFamily(
         family_id="radiology-imaging",

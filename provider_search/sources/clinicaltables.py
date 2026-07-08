@@ -104,6 +104,29 @@ _UMBRELLA_TAXONOMY_TERMS = {
     "primary care physician": "family medicine",
     "primary care doctor": "family medicine",
     "pcp": "family medicine",
+    # F5 generalization: NPI files these under different taxonomy names, so the
+    # literal query term returns zero (or near-zero) results. Internal-medicine
+    # subspecialties only match under their full "internal medicine, ..." display
+    # name. Values are live-verified against the real service (see
+    # tests/test_specialty_umbrella_terms.py for the pinned mapping).
+    "orthopedics": "orthopaedic surgery",
+    "orthopedic": "orthopaedic surgery",
+    "orthopedic surgery": "orthopaedic surgery",
+    "orthopedist": "orthopaedic surgery",
+    "endocrinology": "internal medicine, endocrinology, diabetes & metabolism",
+    "endocrinologist": "internal medicine, endocrinology, diabetes & metabolism",
+    "pulmonology": "internal medicine, pulmonary disease",
+    "pulmonologist": "internal medicine, pulmonary disease",
+    "rheumatology": "internal medicine, rheumatology",
+    "rheumatologist": "internal medicine, rheumatology",
+    "nephrology": "internal medicine, nephrology",
+    "nephrologist": "internal medicine, nephrology",
+    "oncology": "internal medicine, hematology & oncology",
+    "oncologist": "internal medicine, hematology & oncology",
+    "hematology": "internal medicine, hematology",
+    "physical therapy": "physical therapist",
+    "rehabilitation": "physical medicine & rehabilitation",
+    "physical medicine and rehabilitation": "physical medicine & rehabilitation",
 }
 
 logger = logging.getLogger(__name__)

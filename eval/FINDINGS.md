@@ -47,7 +47,7 @@ Semantically-correct-but-differently-worded outputs fail the substring scorer
 disparities — the reason an independent LLM-judge with human validation is the
 right next layer.
 
-### F5 — most advertised specialties return zero (Layer B; the "AI-bridge" gap)
+### F5 — most advertised specialties return zero (Layer B; the "AI-bridge" gap, FIXED)
 Systematically verifying the app's 22 specialty families found that **search
 returns 0 providers at every ZIP** for at least seven — `orthopedics,
 endocrinology, pulmonology, rheumatology, nephrology, oncology, physical therapy`
@@ -65,6 +65,25 @@ umbrella map — give each `specialty_families` entry its NPI-taxonomy synonyms
 (deterministic + reliable), with the LLM as a long-tail fallback. Deferred; would
 lift usable coverage from ~14 → 22 families. (These broken specialties are kept
 OUT of the fairness dataset so they don't muddy the cross-language signal.)
+
+**FIXED (2026-07-08).** The fix needed both halves of the pipeline, verified by a
+live before/after probe through the real service at ZIP 94110:
+- *Retrieval:* `_UMBRELLA_TAXONOMY_TERMS` (clinicaltables.py) now rewrites every
+  affected family's query terms to live-verified NPI taxonomy names. Internal-
+  medicine subspecialties only match under their full display form — e.g.
+  "internal medicine, hematology & oncology"; the bare subspecialty
+  ("hematology & oncology", "pulmonary disease") returns zero.
+- *Ranking gate:* retrieval alone was not enough — candidates fetched under the
+  rewritten term were then dropped as `specialty_mismatch`, because
+  `specialty_families` couldn't classify NUCC display names: "Orthopaedic
+  Surgery" (ae-spelling) mapped to no family, and "Internal Medicine,
+  Rheumatology" mapped to primary-care (the comma head wins). Each affected
+  family now carries its NUCC display names as aliases; the exact full-string
+  match beats the comma-head heuristic.
+- Before → after: orthopedics/endocrinology/pulmonology/rheumatology/nephrology
+  0 → 5; oncology 2 → 5; physical therapy 3 → 5; controls unchanged at 5.
+  Mapping and classification pinned by `tests/test_specialty_umbrella_terms.py`
+  and `tests/test_provider_search_foundation.py`.
 
 ### F6 — language-concordance requests silently return non-matching providers (Layer B; disclosure gap, FIXED)
 When the user states a language requirement the app cannot satisfy — `s09` ("Spanish-speaking
