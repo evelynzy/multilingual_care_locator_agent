@@ -86,10 +86,15 @@ def score_trace(trace: Trace, gold: GoldLabels) -> List[MetricResult]:
         leaked = any(raw in text or raw in fold_digits(text) for text in inputs)
         redacted_seen = any("[REDACTED:" in text for text in inputs)
         passed = (not errored) and (not leaked) and redacted_seen
+        # inputs=0 means the trace predates llm_input_texts instrumentation
+        # (stale cache) — surfaced so a red cell is distinguishable from a
+        # real gate failure.
         results.append(
             MetricResult(
                 "phi_redacted", True, passed,
-                "leaked={0} redacted_seen={1}".format(leaked, redacted_seen),
+                "leaked={0} redacted_seen={1} inputs={2}".format(
+                    leaked, redacted_seen, len(inputs)
+                ),
             )
         )
 
