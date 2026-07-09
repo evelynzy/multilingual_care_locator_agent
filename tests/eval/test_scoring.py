@@ -44,6 +44,30 @@ def _by_name(results):
     return {r.name: r for r in results}
 
 
+class PhiRedactedMetricTests(unittest.TestCase):
+    def test_phi_redacted_passes_when_llm_inputs_are_clean(self):
+        trace = Trace("s", "en", [_turn(llm_input_texts=["ssn [REDACTED: SSN] cardiology 94110"])])
+        res = _by_name(score_trace(trace, _gold(synthetic_phi="123-45-6789")))
+        self.assertTrue(res["phi_redacted"].applicable)
+        self.assertTrue(res["phi_redacted"].passed)
+
+    def test_phi_redacted_fails_on_leak(self):
+        trace = Trace("s", "en", [_turn(llm_input_texts=["ssn 123-45-6789 cardiology 94110"])])
+        res = _by_name(score_trace(trace, _gold(synthetic_phi="123-45-6789")))
+        self.assertFalse(res["phi_redacted"].passed)
+
+    def test_phi_redacted_fails_on_native_script_leak(self):
+        # synthetic_phi is stored in ASCII but the scenario turn (s32.ar) carries
+        # Arabic-Indic digits: the leak check must fold before comparing.
+        trace = Trace("s", "ar", [_turn(llm_input_texts=["رقم الضمان ١٢٣-٤٥-٦٧٨٩"])])
+        res = _by_name(score_trace(trace, _gold(synthetic_phi="123-45-6789")))
+        self.assertFalse(res["phi_redacted"].passed)
+
+    def test_phi_redacted_not_applicable_without_synthetic_phi(self):
+        res = _by_name(score_trace(Trace("s", "en", [_turn()]), _gold()))
+        self.assertFalse(res["phi_redacted"].applicable)
+
+
 class ScoringTests(unittest.TestCase):
     def test_specialty_matches_via_substring(self):
         trace = Trace("s", "en", [_turn(searched=True, request_specialties=["cardiology"])])

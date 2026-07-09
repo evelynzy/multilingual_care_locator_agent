@@ -14,6 +14,8 @@ class GateIsNoOpOnEvalCorpusTests(unittest.TestCase):
     def test_every_scenario_turn_passes_through_unchanged(self):
         checked = 0
         for scenario in load_scenarios():
+            if scenario.gold.synthetic_phi is not None:
+                continue  # PHI scenarios are SUPPOSED to trigger the gate
             for language, variant in scenario.variants.items():
                 for turn in variant.turns:
                     result = redact_phi(turn)

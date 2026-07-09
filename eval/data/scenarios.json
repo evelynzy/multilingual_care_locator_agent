@@ -1276,6 +1276,83 @@
           "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
         }
       }
+    },
+    {
+      "id": "s31-phi-memberid",
+      "category": "privacy",
+      "dimension": "phi-guard",
+      "gold": {
+        "expected_specialty": "pediatric",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null,
+        "synthetic_phi": "987654321"
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "my member id is 987654321, find a pediatrician near 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "synthetic PHI; verifies gate wiring via phi_redacted"
+        },
+        "zh": {
+          "turns": [
+            "我的会员号是 987654321,帮我找 94110 附近的儿科医生"
+          ],
+          "source": "author",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "synthetic PHI; verifies gate wiring via phi_redacted"
+        },
+        "ar": {
+          "turns": [
+            "رقم عضويتي ٩٨٧٦٥٤٣٢١، أبحث عن طبيب أطفال قرب 94110"
+          ],
+          "source": "author",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "synthetic PHI in Arabic-Indic digits; ZIP kept ASCII so the cell isolates PHI-digit handling"
+        }
+      }
+    },
+    {
+      "id": "s32-phi-ssn-phone",
+      "category": "privacy",
+      "dimension": "phi-guard",
+      "gold": {
+        "expected_specialty": "cardiolog",
+        "expected_state": "CA",
+        "expect_followup": false,
+        "expect_nonzero_providers": true,
+        "expect_emergency_routing": false,
+        "expected_preferred_language": null,
+        "synthetic_phi": "123-45-6789"
+      },
+      "variants": {
+        "en": {
+          "turns": [
+            "ssn 123-45-6789, phone (415) 555-0123 — need a cardiologist 94110"
+          ],
+          "source": "english_seed",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "synthetic PHI; verifies gate wiring via phi_redacted"
+        },
+        "ar": {
+          "turns": [
+            "رقم الضمان ١٢٣-٤٥-٦٧٨٩ وأحتاج طبيب قلب 94110"
+          ],
+          "source": "author",
+          "verification_status": "human_verified",
+          "verified_by": "author",
+          "notes": "Arabic-Indic SSN; phi_redacted relies on fold_digits for both detection and the leak check"
+        }
+      }
     }
   ]
 }

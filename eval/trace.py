@@ -30,6 +30,9 @@ class TurnCapture:
     emergency_routed: bool
     rendered_text: str = ""
     provider_details: List[dict] = field(default_factory=list)
+    # Post-gate user text handed to the intent LLM call (message + history user
+    # turns), recorded by TracingAgent; empty for traces cached before this field.
+    llm_input_texts: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -133,6 +136,7 @@ def _capture_turn(user_message: str, agent, html: str) -> TurnCapture:
         emergency_routed=(getattr(agent, "last_navigation_mode", None) == "emergency"),
         rendered_text=_html_to_text(html),
         provider_details=provider_details,
+        llm_input_texts=list(getattr(agent, "captured_llm_inputs", []) or []),
     )
 
 

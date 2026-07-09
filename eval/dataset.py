@@ -15,6 +15,9 @@ class GoldLabels:
     expect_nonzero_providers: bool
     expect_emergency_routing: bool
     expected_preferred_language: Optional[str]
+    # Set only on PHI-guard scenarios: the raw synthetic PHI string that must
+    # NOT reach the LLM (scored by the phi_redacted metric).
+    synthetic_phi: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,7 @@ def _parse_scenario(raw: dict) -> Scenario:
             expect_nonzero_providers=bool(gold_raw["expect_nonzero_providers"]),
             expect_emergency_routing=bool(gold_raw["expect_emergency_routing"]),
             expected_preferred_language=gold_raw.get("expected_preferred_language"),
+            synthetic_phi=gold_raw.get("synthetic_phi"),
         )
         scenario_id = raw["id"]
         category = raw["category"]

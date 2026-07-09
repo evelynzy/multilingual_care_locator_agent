@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
+from care.privacy import fold_digits
 from eval.dataset import GoldLabels
 from eval.trace import Trace, TurnCapture
 
@@ -73,6 +74,24 @@ def score_trace(trace: Trace, gold: GoldLabels) -> List[MetricResult]:
     else:
         passed = (not errored) and _emergency_routed(trace)
         results.append(MetricResult("emergency_routing", True, passed, "emergency_routed={0}".format(passed)))
+
+    # phi redaction (guard wiring; applicable only on PHI-guard scenarios)
+    if gold.synthetic_phi is None:
+        results.append(MetricResult("phi_redacted", False, True, "no synthetic phi"))
+    else:
+        raw = gold.synthetic_phi
+        inputs = [text for turn in trace.turns for text in getattr(turn, "llm_input_texts", [])]
+        # Fold before comparing: the scenario turn may carry the PHI in a
+        # non-ASCII digit script while the gold stores it in ASCII.
+        leaked = any(raw in text or raw in fold_digits(text) for text in inputs)
+        redacted_seen = any("[REDACTED:" in text for text in inputs)
+        passed = (not errored) and (not leaked) and redacted_seen
+        results.append(
+            MetricResult(
+                "phi_redacted", True, passed,
+                "leaked={0} redacted_seen={1}".format(leaked, redacted_seen),
+            )
+        )
 
     # preferred language
     if gold.expected_preferred_language is None:

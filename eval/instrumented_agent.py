@@ -42,10 +42,18 @@ class TracingAgent(CareLocatorAgent):
         super().__init__(provider_search_service=RecordingSearchService(provider_search_service))
         self.last_parsed_query: Optional[ParsedCareQuery] = None
         self.last_navigation_mode: Optional[str] = None
+        self.captured_llm_inputs: List[str] = []
 
     def _interpret_user_need(
         self, client, message: str, history: List[dict]
     ) -> ParsedCareQuery:
+        # These arguments are exactly the post-gate user text the intent LLM
+        # call receives (handle_request redacts before calling) — recorded so
+        # the phi_redacted metric can verify no raw PHI reaches the wire.
+        self.captured_llm_inputs.append(message)
+        for turn in history or []:
+            if isinstance(turn, dict) and turn.get("role") == "user":
+                self.captured_llm_inputs.append(str(turn.get("content") or ""))
         parsed = super()._interpret_user_need(client, message, history)
         self.last_parsed_query = parsed
         return parsed
@@ -58,4 +66,5 @@ class TracingAgent(CareLocatorAgent):
     def reset_capture(self) -> None:
         self.last_parsed_query = None
         self.last_navigation_mode = None
+        self.captured_llm_inputs = []
         self.provider_search_service.reset()
