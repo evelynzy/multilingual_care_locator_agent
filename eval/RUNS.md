@@ -92,3 +92,124 @@ s15-multiturn-children          OK  OK  OK  OK  OK
 - Small subset (15 cells); three of four dimensions have no author-label variance → κ is degenerate there (a known property of κ, not a judge verdict). A larger, deliberately-adversarial labeling set is future work.
 - The judge (Qwen) is also the translation model → mild entanglement on language-appropriateness; disclosed.
 - The author saw aggregate judge stats before labeling (minor anchoring on the s09/s10 faithfulness call); disclosed.
+
+---
+
+## 2026-07-09 — full fresh re-run at main (post F6/F8/W3/W5; harness fidelity fixed mid-run)
+
+- **System under test:** `openai/gpt-oss-20b` (HF Inference) at commit `77dde6d`.
+- **Judge:** `Qwen/Qwen2.5-72B-Instruct`, same four binary dimensions as 2026-07-02.
+- **Dataset:** 32 scenarios / 103 cells (s01–s15 ×5; s16–s26/s28/s30 en-only; s27/s29 ×5
+  with new mt_only variants; s31/s32 PHI scenarios ×3/×2). All cells captured FRESH —
+  the prior cache is archived as the before-state, because trace-cache keys do not
+  include code state and a mixed-cache run would silently replay stale traces.
+- **Raw cells:** `eval/runs/2026-07-09-multilingual-judged-v2.jsonl`.
+
+### The run found two harness bugs before it produced numbers (F10)
+
+The first capture zeroed all seven umbrella-family scenarios that the service
+verifiably handles. Counterfactual isolation (the byte-identical request replayed
+against two service builds: 5 results vs 0) showed `eval/run.py` was constructing a
+bare `ProviderSearchService` — no NPPES enrichment, no YAML dataset config — **a
+configuration the app never runs**, present since Milestone 1 and invisible until
+these scenarios exercised the differing path. One layer deeper, the trace capture's
+state parser assumed the bare source's address format and returned empty states for
+every NPPES-enriched record (their ZIP+4 is unhyphenated: `CA 981015173`). Both
+fixed and pinned by tests (`build_matrix_agent`, `_provider_state`); the matrix now
+measures the app's real service. **Consequence for history: the 2026-07-01/02
+baselines were measured on the bare configuration — all deltas below are
+cross-config comparisons and are labeled as such.**
+
+### Per-language rates (deterministic checks)
+
+| lang | all cells | core-15 | core-15 on 2026-07-01 (bare config, recomputed at the same rounding) |
+|------|-----------|---------|--------------------------------------|
+| en   | 96% (91/95) | **93%** (39/42) | 93% (39/42) |
+| es   | 94% (45/48) | **93%** (39/42) | 93% (39/42) |
+| zh   | 83% (43/52) | **83%** (35/42) | 83% (35/42) |
+| ar   | 82% (46/56) | **81%** (34/42) | 69% (29/42) |
+| ko   | 81% (39/48) | **79%** (33/42) | 86% (36/42) |
+
+**Headline (cross-config caveat applies): the Arabic equity gap narrowed from
+−24 pts to −12 pts vs English** (+5 checks, the only language that moved up) —
+consistent with the shipped fixes that specifically targeted Arabic failure modes
+(Arabic-Indic digit folding in ZIP extraction and the PHI guard, any-language
+reply localization, specialty-coverage generalization). en/es/zh core-15 fractions
+are identical between the runs. Korean moved −7 (86→79): the three lost checks
+are the flaky s02 cell and s14/ko (whose second turn parses cardiology + ZIP but
+never reaches a search — the multi-turn routing cluster), not a systematic
+ko-specific mechanism.
+
+### Judge dimensions (per language, all judged cells)
+
+| lang | helpfulness | safety | faithfulness | language-appropriateness |
+|------|------------|--------|--------------|--------------------------|
+| ar | 18/19 | 19/19 | 19/19 | 18/19 |
+| en | 31/32 | 32/32 | 32/32 | 31/32 |
+| es | 17/17 | 17/17 | 17/17 | 16/17 |
+| ko | 17/17 | 17/17 | 17/17 | 14/17 |
+| zh | 18/18 | 18/18 | 18/18 | 17/18 |
+
+### Movements vs 2026-07-02 (common cells; cross-config)
+
+- **F6 (concordance disclosure): confirmed 10/10** — `judge_faithfulness` flipped
+  False→True on every s09/s10 cell in every language. The disclosure line resolved
+  the judge's objection exactly as predicted (and largely dissolves the F7
+  calibration divergence at its source).
+- **W3 (PHI guard): first live wiring proof** — `phi_redacted` passes in all 5
+  cells, including the Arabic-Indic member-ID and SSN variants; no raw synthetic
+  PHI reached the intent LLM in any capture.
+- **W5 (specialty coverage):** s24–s28 pass; s27-rheumatology passes in all five
+  languages. s29-oncology passes en/es/ko but failed zh and ar in this capture via
+  a newly diagnosed chain: the non-English parse sometimes returns the ZIP as a
+  city name (`location: "San Francisco"` for `肿瘤科医生 94110`; non-numeric, so the
+  numeric trust boundary stays silent), and the city-path retrieval returns zero
+  for umbrella families where the ZIP path returns 5. This is the same
+  location-handling cluster as s07/s08 (below) — counterfactual layer attribution
+  is exactly Milestone 3's job.
+- **F8 (any-language localization): partial.** Single-turn language-appropriateness
+  improved broadly (ar 18/19, zh 17/18 overall), but all four `s15` multi-turn
+  cells still render English: the turn-2 location-only parse ("94110") resets
+  `response_language` to English before rendering. This is the known multi-turn
+  language-context loss — a distinct open gap, not an F8 regression.
+- **s03 still fails followup in every language — EXPECTED** (the curated ambiguity
+  detector, W4, is not built). **s12 is unchanged between the judged runs**: its
+  followup metric is not applicable (the gold never expected a clarifying
+  question), and it still fails state + nonzero_providers in en/zh/es/ar with ko
+  passing — metric-for-metric identical to 2026-07-02, English control included.
+- **Unexpected regressions: one cell.** `s02-pediatrics-gluedzip/ko` (state +
+  nonzero_providers) returned 0 providers in three of five captures during this
+  cycle, 10 in the other two (including a live instrumented reproduction) — with a
+  correct parse every time. Documented as capture nondeterminism (retrieval-side
+  flake), deliberately NOT re-rolled until green.
+
+### Judge-vs-human agreement: labels are stale by construction
+
+Every one of the 15 human-labeled cells renders differently under the new snapshot
+(the PHI-guard notice, NPPES-enriched provider data, and the F6/F8 reply changes
+touched them all), so the 2026-07-02 labels no longer describe these replies. No
+valid κ subset survives; the agreement report auto-printed by `eval.run` compares
+against stale labels and is void. **B4 follow-up: re-label a fresh stratified
+subset against `2026-07-09-multilingual-judged-v2.jsonl`.**
+
+### Language selection: rationale and limits
+
+The matrix pairs identical scenarios across five languages so score gaps are
+attributable to language handling, not task difficulty; the English column is a
+control that excludes app bugs (s03, and s12's zero-result colloquial searches —
+both fail the English control too) from the fairness signal.
+The five languages were chosen for mechanism coverage, not population coverage:
+es/zh exercise the deterministic table-rendering path, ko/ar the LLM-localization
+fallback; scripts span Latin/CJK/Hangul/Arabic and two digit systems (ASCII,
+Arabic-Indic). Three limits are disclosed rather than hidden: all five are
+high-resource languages, so measured disparities are plausibly a floor, not a
+ceiling; only en+zh are author-verifiable (other variants are `mt_only`); and the
+judge model is also the translation model (entanglement).
+
+### Caveats
+- Live-API nondeterminism is real: this cycle needed cell-eviction re-runs for
+  transient zero-result captures, one hung capture process (killed, resumed from
+  cache), and produced one honestly-flaky cell (s02/ko). The cache-resume design
+  made every recovery cheap.
+- Cross-config deltas (bare → real service) as flagged above; within-run
+  comparisons across languages are config-consistent.

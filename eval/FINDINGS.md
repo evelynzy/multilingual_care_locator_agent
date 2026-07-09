@@ -114,6 +114,9 @@ fall back to English like the rest of the deterministic card). Providers still s
 just stops implying they meet the language need. Verified by
 `tests/test_language_concordance_disclosure.py`. (Surfaced by the author during judge-validation
 labeling.)
+**Matrix-confirmed (2026-07-09 run):** `judge_faithfulness` flipped fail→pass on all
+10 s09/s10 cells across every language — the disclosure resolved the judge's
+objection exactly as predicted (see RUNS.md).
 
 ### F7 — the judge over-flags faithfulness on the F6 cells (judge-calibration; Layer A judge)
 The Qwen judge scored `s09`/`s10` `faithfulness=fail` in every language, conflating the F6
@@ -142,6 +145,11 @@ error (never worse than the English fallback). Verified live: a Czech `68502` qu
 fully-Czech reply (incl. the localized "911" line) with the Medicare URL verbatim. Tests:
 `tests/test_reply_localization.py`. (Note: re-running the fairness matrix should now lift the ar/ko
 `language_appropriateness` scores — deferred.)
+**Matrix-confirmed, partially (2026-07-09 run):** single-turn language-appropriateness
+is now high everywhere (ar 18/19, zh 17/18 overall), but all four s15 multi-turn cells
+still render English — the turn-2 location-only parse ("94110") resets
+`response_language` to English before rendering. That is a distinct, still-open
+multi-turn language-context gap, not an F8 regression (see RUNS.md).
 
 ### F9 — PHI redaction misses Arabic-script dates: the gap hides in ASCII literals (guard fairness, FIXED)
 The new deterministic PHI input guard (`care/privacy.py`) was evaluated offline over a
@@ -177,6 +185,34 @@ issue on both of its paths: message-side extraction (`_extract_zip_code` now ret
 the English-only provider API). Folding is deliberately limited to decimal digits —
 superscript/circled characters never matched `\d`, and folding them would have
 created false positives that never existed.
+**Matrix-confirmed (2026-07-09 run):** `phi_redacted` passed in all 5 live cells,
+including the Arabic-Indic member-ID and SSN variants — no raw synthetic PHI reached
+the intent LLM in any capture.
+
+### F10 — the harness measured a service the app never runs (Layer: the eval itself, FIXED)
+The 2026-07-09 matrix re-run's first capture zeroed all seven umbrella-family
+scenarios — families the service verifiably handles. Counterfactual isolation
+(the byte-identical `ProviderSearchRequest` replayed against two service builds:
+5 results vs 0) located the fault in the harness, not the app: `eval/run.py`
+constructed a bare `ProviderSearchService(clinicaltables_source=ClinicalTablesSource())`
+— no NPPES enrichment, no YAML dataset configuration — so umbrella-family
+candidates carried too little taxonomy evidence for the ranking gate and every
+such cell silently zeroed. A second, subtler instance sat one layer deeper: the
+trace capture's state parser assumed the bare source's address format and
+returned empty states for every NPPES-enriched record (enriched addresses embed
+the ZIP+4 unhyphenated — `CA 981015173` — which the old regex could not
+terminate on), mass-failing the `state` metric including on English control
+cells. The gap dated to Milestone 1 and stayed invisible for one reason: no
+earlier scenario exercised a code path where the two configurations differ.
+
+**FIXED (2026-07-09).** `eval/run.py::build_matrix_agent` now wraps the service
+the app itself constructs (config-driven datasets, NPPES enrichment, cache), and
+`eval/trace.py::_provider_state` reads the enriched record shapes; both are
+pinned by tests so the drift cannot silently return. Lessons recorded: an eval
+harness is part of the system under test — instrument the REAL object, not a
+lookalike; and every historical number carries its harness's configuration
+(the 2026-07-01/02 baselines are bare-config and all comparisons against them
+are labeled cross-config in RUNS.md).
 
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM
