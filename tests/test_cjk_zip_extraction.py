@@ -48,6 +48,15 @@ class CjkZipExtractionTests(unittest.TestCase):
     def test_zip_plus_four_still_extracted(self):
         self.assertEqual(self.agent._extract_zip_code("zip 10013-1234"), "10013")
 
+    # --- native digit scripts (FINDINGS F9 / CASE_STUDY §4): the Unicode regex
+    # already MATCHED these, but returned the native-script string, which the
+    # English-only provider API cannot use. Extraction must return ASCII. ---
+    def test_zip_extraction_folds_arabic_indic_digits(self):
+        self.assertEqual(self.agent._extract_zip_code("طبيب أطفال ٩٤١١٠"), "94110")
+
+    def test_zip_extraction_folds_fullwidth_digits(self):
+        self.assertEqual(self.agent._extract_zip_code("儿科１００１３"), "10013")
+
     def test_six_digit_number_not_treated_as_zip(self):
         # A longer run of digits must not be mistaken for a 5-digit ZIP.
         self.assertIsNone(self.agent._extract_zip_code("code 100135"))

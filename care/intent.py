@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from care.language import normalize_chat_messages
+from care.privacy import fold_digits
 from provider_search.specialty_families import (
     QUERY_SPECIALTY_FAMILY_ALIASES_BY_ID,
     SPECIALTY_FAMILY_BY_ID,
@@ -1036,7 +1037,10 @@ class IntentMixin:
         # regex treats CJK characters as word characters, so "\b\d{5}\b" fails to
         # match a ZIP glued to CJK text (e.g. "儿科10013"). Lookarounds still
         # reject digits that are part of a longer number (e.g. "100135").
-        match = re.search(r"(?<!\d)(\d{5})(?:-\d{4})?(?!\d)", value)
+        # Fold non-ASCII digit scripts first (Arabic-Indic ٩٤١١٠, fullwidth
+        # １００１３): Unicode \d already MATCHED them, but the extracted value
+        # must be ASCII for the English-only provider API (FINDINGS F9).
+        match = re.search(r"(?<!\d)(\d{5})(?:-\d{4})?(?!\d)", fold_digits(value))
         if match:
             return match.group(1)
         return None

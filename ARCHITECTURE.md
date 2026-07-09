@@ -189,8 +189,6 @@ attributable to a specific layer. Results, findings (F1–F8), and the case stud
 - **Intent schema cleanup**: the model-supplied `needs_clarification` field will be removed
   from the schema (it is already ignored); the app-computed signal will be renamed to make its
   provenance explicit.
-- **Native-numeral locations**: Arabic-Indic ZIP digits (e.g. `٠٢١٣٩`) are not yet normalized
-  (`eval/CASE_STUDY.md` §4) — open.
 
 ## Repository layout
 
