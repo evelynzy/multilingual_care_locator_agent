@@ -162,8 +162,10 @@ SSR reachability check that crash-loops inside Spaces.
   dates of birth, member/record numbers) with `[REDACTED: …]` placeholders before any
   text reaches the inference service — applied every turn to the new message and all
   prior user turns (the app is stateless and re-sends the transcript). ZIP codes are
-  never redacted. A localized notice tells the user what was removed. Free-text names
-  and alphanumeric member IDs are out of scope (v1).
+  never redacted. A notice tells the user what was removed — localized natively for
+  en/es/zh, and via the LLM wrapper pass on results replies for other languages
+  (non-results paths fall back to English until the uniform language policy lands).
+  Free-text names and alphanumeric member IDs are out of scope (v1).
 - Model self-reports (like `needs_clarification`) are validated behaviorally before being
   trusted — and rejected when they prove unreliable.
 
