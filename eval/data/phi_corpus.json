@@ -1,0 +1,48 @@
+{
+  "entries": [
+    {"language": "en", "phi_type": "ssn", "text": "my ssn is 123-45-6789, need cardiology 94110", "expected_detected": true},
+    {"language": "en", "phi_type": "phone", "text": "call me at (415) 555-0123 about a dermatologist", "expected_detected": true},
+    {"language": "en", "phi_type": "phone", "text": "my number is 4155550123", "expected_detected": true},
+    {"language": "en", "phi_type": "email", "text": "email jane.doe@example.org, looking for a pediatrician 10013", "expected_detected": true},
+    {"language": "en", "phi_type": "date", "text": "dob 01/02/1985, need an endocrinologist", "expected_detected": true},
+    {"language": "en", "phi_type": "id_number", "text": "member id 12345678, find urology 94110", "expected_detected": true},
+    {"language": "en", "phi_type": null, "text": "primary care 10001", "expected_detected": false},
+    {"language": "en", "phi_type": null, "text": "dermatologist 94110-1234 please", "expected_detected": false},
+
+    {"language": "zh", "phi_type": "ssn", "text": "我的社安号是 123-45-6789,帮我找 94110 的心脏科", "expected_detected": true},
+    {"language": "zh", "phi_type": "phone", "text": "我的手机是 13812345678,找儿科医生", "expected_detected": true},
+    {"language": "zh", "phi_type": "phone", "text": "电话 １３８１２３４５６７８,找皮肤科", "expected_detected": true},
+    {"language": "zh", "phi_type": "email", "text": "邮箱 zhang.wei@example.cn,找 10013 的儿科", "expected_detected": true},
+    {"language": "zh", "phi_type": "date", "text": "出生日期 1985-01-02,需要内分泌科", "expected_detected": true},
+    {"language": "zh", "phi_type": "id_number", "text": "会员号 987654321,找 94110 的骨科", "expected_detected": true},
+    {"language": "zh", "phi_type": null, "text": "儿科10013", "expected_detected": false},
+    {"language": "zh", "phi_type": null, "text": "找 94110 附近的牙医", "expected_detected": false},
+
+    {"language": "es", "phi_type": "ssn", "text": "mi seguro social es 123-45-6789, busco cardiología 94110", "expected_detected": true},
+    {"language": "es", "phi_type": "phone", "text": "mi teléfono es 415-555-0123, busco un dermatólogo", "expected_detected": true},
+    {"language": "es", "phi_type": "phone", "text": "llámame al +1 415 555 0123", "expected_detected": true},
+    {"language": "es", "phi_type": "email", "text": "correo maria.garcia@example.mx, busco pediatra 10013", "expected_detected": true},
+    {"language": "es", "phi_type": "date", "text": "fecha de nacimiento 02/01/1985, necesito endocrinólogo", "expected_detected": true},
+    {"language": "es", "phi_type": "id_number", "text": "número de miembro 12345678, busco urología 94110", "expected_detected": true},
+    {"language": "es", "phi_type": null, "text": "atención primaria 10001", "expected_detected": false},
+    {"language": "es", "phi_type": null, "text": "dentista cerca de 33012", "expected_detected": false},
+
+    {"language": "ar", "phi_type": "ssn", "text": "رقم الضمان الاجتماعي ١٢٣-٤٥-٦٧٨٩ وأبحث عن طبيب قلب 94110", "expected_detected": true},
+    {"language": "ar", "phi_type": "phone", "text": "هاتفي ٠١٢٣٤٥٦٧٨٩ وأحتاج طبيب جلدية", "expected_detected": true},
+    {"language": "ar", "phi_type": "phone", "text": "اتصل بي على ٤١٥-٥٥٥-٠١٢٣", "expected_detected": true},
+    {"language": "ar", "phi_type": "email", "text": "بريدي omar.hassan@example.net وأبحث عن طبيب أطفال 10013", "expected_detected": true},
+    {"language": "ar", "phi_type": "date", "text": "تاريخ الميلاد ١٩٨٥-٠١-٠٢ وأحتاج غدد صماء", "expected_detected": true},
+    {"language": "ar", "phi_type": "id_number", "text": "رقم العضوية ٩٨٧٦٥٤٣٢١ وأبحث عن مسالك بولية 94110", "expected_detected": true},
+    {"language": "ar", "phi_type": null, "text": "طبيب أطفال بالقرب من ٩٤١١٠", "expected_detected": false},
+    {"language": "ar", "phi_type": null, "text": "طبيب أسنان 10001", "expected_detected": false},
+
+    {"language": "ko", "phi_type": "ssn", "text": "제 SSN은 123-45-6789이고 94110 심장내과를 찾아요", "expected_detected": true},
+    {"language": "ko", "phi_type": "phone", "text": "제 전화번호는 010-1234-5678입니다, 피부과 찾아요", "expected_detected": true},
+    {"language": "ko", "phi_type": "phone", "text": "01012345678로 연락주세요", "expected_detected": true},
+    {"language": "ko", "phi_type": "email", "text": "이메일 minji.kim@example.kr, 10013 소아과 찾아요", "expected_detected": true},
+    {"language": "ko", "phi_type": "date", "text": "생년월일 1985-01-02, 내분비내과 필요해요", "expected_detected": true},
+    {"language": "ko", "phi_type": "id_number", "text": "회원번호 12345678, 94110 비뇨기과 찾아요", "expected_detected": true},
+    {"language": "ko", "phi_type": null, "text": "소아과 10013", "expected_detected": false},
+    {"language": "ko", "phi_type": null, "text": "94110 근처 치과", "expected_detected": false}
+  ]
+}

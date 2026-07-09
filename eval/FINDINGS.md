@@ -143,6 +143,26 @@ fully-Czech reply (incl. the localized "911" line) with the Medicare URL verbati
 `tests/test_reply_localization.py`. (Note: re-running the fairness matrix should now lift the ar/ko
 `language_appropriateness` scores — deferred.)
 
+### F9 — PHI redaction misses Arabic-script dates: the gap hides in ASCII literals (guard fairness)
+The new deterministic PHI input guard (`care/privacy.py`) was evaluated offline over a
+synthetic multilingual corpus (`eval/data/phi_corpus.json`, en/zh/es/ar/ko × five PHI
+types plus per-language negatives; `eval/phi_guard_eval.py`). The headline is a
+double surprise:
+- **Most cross-script detection came free**: Python's `\d` is Unicode-aware, so
+  Arabic-Indic SSNs (`١٢٣-٤٥-٦٧٨٩`), phones, member IDs, and fullwidth-digit Chinese
+  phones all matched the ASCII-authored patterns — 1/1, 2/2, 1/1 for ar; 2/2 for the
+  zh fullwidth phone variant.
+- **The residual gap is exactly where an ASCII literal snuck into a pattern**: the
+  date detector anchors plausible years with the literal `(?:19|20)`, which cannot
+  match `١٩` — ar date detection 0/1 while every other language scored 1/1. The same
+  failure class caused the known Arabic-Indic ZIP issue (`eval/CASE_STUDY.md` §4):
+  there, Unicode `\d` *matched* the ZIP but returned the Arabic-Indic string, which
+  the English-only provider API cannot use.
+The lesson generalizes: digit-class regexes are script-neutral in Python, but any
+literal digit inside a pattern — and any consumer of the *matched value* — silently
+reintroduces an ASCII assumption. Negatives were 0 false positives in every language
+(including the Arabic-Indic ZIP `٩٤١١٠`).
+
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM
 understood the English inputs correctly in every case — the failures are
