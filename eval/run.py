@@ -88,13 +88,26 @@ def run_matrix(
     return rows
 
 
+def build_matrix_agent():
+    """TracingAgent wrapping the SAME provider-search service the app builds.
+
+    The service must come from CareLocatorAgent's own constructor (config-driven
+    dataset settings, NPPES enrichment, cache): a bare
+    ProviderSearchService(clinicaltables_source=ClinicalTablesSource()) measures
+    a configuration the app never runs — without NPPES enrichment the
+    umbrella-family candidates carry too little taxonomy evidence for the
+    ranking gate and every such cell silently zeroes (FINDINGS F10).
+    """
+    from care import CareLocatorAgent
+    from eval.instrumented_agent import TracingAgent
+
+    return TracingAgent(CareLocatorAgent().provider_search_service)
+
+
 if __name__ == "__main__":
     from dotenv import load_dotenv
     from huggingface_hub import InferenceClient
     from config_loader import get_chat_model_settings
-    from provider_search.service import ProviderSearchService
-    from provider_search.sources.clinicaltables import ClinicalTablesSource
-    from eval.instrumented_agent import TracingAgent
     from eval.judge import JUDGE_MODEL, QwenJudge
     from eval.judge_validation import agreement_report, judge_by_cell_from_rows, load_human_labels
 
@@ -103,7 +116,7 @@ if __name__ == "__main__":
     token = os.environ["HF_TOKEN"]
     client = InferenceClient(model=settings["model_id"], token=token)
     judge = QwenJudge(InferenceClient(model=JUDGE_MODEL, token=token))
-    agent = TracingAgent(ProviderSearchService(clinicaltables_source=ClinicalTablesSource()))
+    agent = build_matrix_agent()
 
     rows = run_matrix(agent, client, settings, judge=judge)
     print(json.dumps(summarize(rows), indent=2, ensure_ascii=False))

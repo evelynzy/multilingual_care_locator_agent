@@ -56,6 +56,18 @@ class RunAggregationTests(unittest.TestCase):
         names = {r.name for r in score_trace(Trace("s", "en", []), gold)}
         self.assertEqual(names, set(_METRIC_NAMES))
 
+    def test_matrix_agent_uses_the_apps_service_configuration(self):
+        # The harness must measure the service the APP actually runs. A bare
+        # ProviderSearchService(clinicaltables_source=ClinicalTablesSource())
+        # lacks NPPES enrichment and the YAML dataset config, and silently
+        # zeroed the umbrella-family scenarios (F10).
+        from eval.run import build_matrix_agent
+
+        agent = build_matrix_agent()
+        inner = agent.provider_search_service._inner
+        self.assertIsNotNone(inner.cache)
+        self.assertIsNotNone(inner.clinicaltables_source.nppes_source)
+
     def test_summarize_counts_applicable_passes_per_language(self):
         rows = [
             {"language": "en", "specialty_applicable": True, "specialty_passed": True,
