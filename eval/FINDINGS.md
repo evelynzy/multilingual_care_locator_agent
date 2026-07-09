@@ -170,8 +170,13 @@ shows `[REDACTED: …]` in place of `١٩٨٥-٠١-٠٢`, everything else untouc
 after on the committed corpus: ar date 0/1 → 1/1; every other cell was already
 complete; negatives (including the Arabic-Indic ZIP `٩٤١١٠`) 0 false positives both
 before and after. Full per-language parity is pinned by
-`tests/eval/test_phi_guard_eval.py`. The same helper now normalizes ZIP extraction so
-`٩٤١١٠` reaches the provider API as `94110` (the CASE_STUDY §4 issue).
+`tests/eval/test_phi_guard_eval.py`. The same helper closes the CASE_STUDY §4 ZIP
+issue on both of its paths: message-side extraction (`_extract_zip_code` now returns
+`94110` for `٩٤١١٠`) and the LLM-returned `location` field (folded at the
+`ParsedCareQuery` seam, since that value bypasses extraction entirely and flows to
+the English-only provider API). Folding is deliberately limited to decimal digits —
+superscript/circled characters never matched `\d`, and folding them would have
+created false positives that never existed.
 
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM

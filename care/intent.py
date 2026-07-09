@@ -364,12 +364,16 @@ class IntentMixin:
         ):
             response_language = detected_language
 
+        # Fold native digit scripts in the LLM-returned location: this field
+        # bypasses message-side ZIP extraction and flows to the English-only
+        # provider API (CASE_STUDY §4 / FINDINGS F9).
+        raw_location = parsed_payload.get("location")
         parsed_query = ParsedCareQuery(
             detected_language=detected_language,
             response_language=str(response_language or "English"),
             summary=str(parsed_payload.get("summary", "")),
             medical_need=bool(parsed_payload.get("medical_need", True)),
-            location=parsed_payload.get("location"),
+            location=fold_digits(raw_location) if isinstance(raw_location, str) else raw_location,
             specialties=self._ensure_list(parsed_payload.get("specialties")),
             insurance=self._ensure_list(parsed_payload.get("insurance")),
             preferred_languages=self._ensure_list(parsed_payload.get("preferred_languages")),

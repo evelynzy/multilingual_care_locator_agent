@@ -60,12 +60,14 @@ def fold_digits(text: str) -> str:
     already matches these, but ASCII digit literals inside patterns (e.g. the
     date detector's ``(?:19|20)`` year anchor) and consumers of matched VALUES
     (e.g. ZIP extraction feeding an English-only API) do not — folding closes
-    both gaps (FINDINGS F9). Non-digit characters and unmappable oddities pass
-    through unchanged — never raises.
+    both gaps (FINDINGS F9). Deliberately limited to DECIMAL digits
+    (``isdecimal``, Unicode Nd): superscripts/circled digits never matched
+    ``\\d``, so folding them would create false positives that never existed.
+    Everything else passes through unchanged — never raises.
     """
     out = []
     for ch in str(text or ""):
-        if ch.isdigit() and not ("0" <= ch <= "9"):
+        if ch.isdecimal() and not ("0" <= ch <= "9"):
             value = unicodedata.digit(ch, None)
             out.append(str(value) if value is not None else ch)
         else:

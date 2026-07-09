@@ -108,6 +108,14 @@ class FoldDigitsTests(unittest.TestCase):
         source = "رقم ٩٨٧٦٥٤٣٢١"
         self.assertEqual(len(fold_digits(source)), len(source))
 
+    def test_non_decimal_number_characters_not_folded(self):
+        # Superscripts/circled digits are isdigit() but NOT decimal digits;
+        # Python's \d never matched them, so folding them would CREATE a new
+        # false-positive surface (e.g. "①②③④⑤⑥" becoming an id_number).
+        self.assertEqual(fold_digits("vitamin B¹²"), "vitamin B¹²")
+        self.assertEqual(fold_digits("steps ①②③④⑤⑥"), "steps ①②③④⑤⑥")
+        self.assertEqual(scan_phi("steps ①②③④⑤⑥"), ())
+
 
 class ScanPhiFoldedDigitTests(unittest.TestCase):
     def test_arabic_indic_date_detected(self):

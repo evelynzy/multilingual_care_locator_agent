@@ -77,6 +77,20 @@ class InterpretStructuredOutputTests(unittest.TestCase):
         self.assertEqual(result.specialties, ["pediatrics"])
         self.assertEqual(result.location, "10013")
 
+    def test_interpret_folds_native_digit_location_from_llm(self):
+        # CASE_STUDY §4 (s13.ar): the LLM itself returns the location in
+        # Arabic-Indic digits. That value bypasses message-side ZIP extraction,
+        # so it must be folded to ASCII at the ParsedCareQuery seam or the
+        # English-only provider API receives an unusable string.
+        payload = json.loads(_VALID)
+        payload["location"] = "٠٢١٣٩"
+        client = Mock()
+        client.chat_completion.return_value = _completion(json.dumps(payload))
+
+        result = self.agent._interpret_user_need(client, "طبيب عيون ٠٢١٣٩", [])
+
+        self.assertEqual(result.location, "02139")
+
 
 class InterpretGracefulDegradationTests(unittest.TestCase):
     """Provider rejects response_format → must fall back to plain call, not raise."""
