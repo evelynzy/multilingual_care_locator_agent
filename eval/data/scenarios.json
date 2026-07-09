@@ -1202,6 +1202,42 @@
           "verification_status": "human_verified",
           "verified_by": "author",
           "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        },
+        "zh": {
+          "turns": [
+            "风湿病医生 94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "reumatólogo 94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "طبيب الروماتيزم 94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "류마티스 전문의 94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
         }
       }
     },
@@ -1250,6 +1286,42 @@
           "verification_status": "human_verified",
           "verified_by": "author",
           "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+        },
+        "zh": {
+          "turns": [
+            "肿瘤科医生 94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Chinese speaker"
+        },
+        "es": {
+          "turns": [
+            "oncólogo 94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Spanish speaker"
+        },
+        "ar": {
+          "turns": [
+            "أخصائي السرطان 94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Arabic speaker"
+        },
+        "ko": {
+          "turns": [
+            "항암의학 전문의 94110"
+          ],
+          "source": "mt",
+          "verification_status": "mt_only",
+          "verified_by": null,
+          "notes": "machine-translated; not verified by a Korean speaker"
         }
       }
     },
