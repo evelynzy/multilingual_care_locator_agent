@@ -157,6 +157,13 @@ SSR reachability check that crash-loops inside Spaces.
 - Numbers are only trusted from the user, never from the model (the numeric trust boundary).
 - Search requests are PHI-lean by design: only specialty/location/insurance/language/keyword
   fields ever reach the retrieval layer or its cache.
+- **Input privacy guard** (`care/privacy.py`): a deterministic pre-LLM redaction pass
+  replaces structured identifiers users shouldn't share (SSNs, phone numbers, emails,
+  dates of birth, member/record numbers) with `[REDACTED: …]` placeholders before any
+  text reaches the inference service — applied every turn to the new message and all
+  prior user turns (the app is stateless and re-sends the transcript). ZIP codes are
+  never redacted. A localized notice tells the user what was removed. Free-text names
+  and alphanumeric member IDs are out of scope (v1).
 - Model self-reports (like `needs_clarification`) are validated behaviorally before being
   trusted — and rejected when they prove unreliable.
 
@@ -179,9 +186,6 @@ attributable to a specific layer. Results, findings (F1–F8), and the case stud
 - **Localization consolidation**: template copy currently lives in three hand-written language
   tables plus a seven-language footer; consolidating to a single English source with generated,
   clearly-labeled translations (shipped as locale files) is planned.
-- **Input privacy guard**: a deterministic pre-LLM redaction pass for identifiers users
-  shouldn't share (SSNs, member IDs, phone numbers) is planned, including a multilingual
-  evaluation of the guard itself.
 - **Intent schema cleanup**: the model-supplied `needs_clarification` field will be removed
   from the schema (it is already ignored); the app-computed signal will be renamed to make its
   provenance explicit.
@@ -193,7 +197,7 @@ attributable to a specific layer. Results, findings (F1–F8), and the case stud
 | Path | Role |
 |---|---|
 | `app.py` | Gradio shell (Spaces entry point) |
-| `care/` | A1 + routing + A2 package: language, safety, intent, guidance, rendering, agent |
+| `care/` | A1 + routing + A2 package: language, safety, privacy, intent, guidance, rendering, agent |
 | `provider_search/` | B: retrieval package (service, sources, ranking, families, cache) |
 | `eval/` | fairness-evaluation harness (dataset, tracing, scoring, judge, κ) |
 | `config/settings.yaml` | prompts, UI copy, fallback resources, search settings |

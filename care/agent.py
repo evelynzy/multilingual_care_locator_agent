@@ -27,8 +27,10 @@ from care.intent import (
     _US_STATE_NAMES,
 )
 from care.language import LanguageMixin, normalize_chat_messages
+from care.privacy import redact_phi
 from care.rendering import (
     RenderingMixin,
+    _phi_notice_line,
     _reply_localization_target,
     _resolved_supported_language_key,
 )
@@ -137,11 +139,36 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
         top_p: float,
     ) -> str:
         logger.info("Handling request. message_length=%s history_turns=%s", len(message), len(history))
+        # PHI gate: redact the new message and every prior user turn BEFORE any
+        # text reaches the inference service. The app is stateless and re-sends
+        # the visible transcript each turn, so history must be re-redacted every
+        # time (redaction is idempotent). Assistant turns are app-generated and
+        # cannot carry raw PHI.
+        redaction = redact_phi(message)
+        message = redaction.text
+        history = [
+            {**turn, "content": redact_phi(str(turn.get("content") or "")).text}
+            if turn.get("role") == "user"
+            else turn
+            for turn in (history or [])
+        ]
+
         parsed_query = self._interpret_user_need(client, message, history)
 
         if history:
             latest_only_query = self._interpret_user_need(client, message, [])
             parsed_query = self._merge_parsed_queries(parsed_query, latest_only_query)
+
+        # Notice covers only PHI found in the CURRENT message — history was
+        # already noticed on the turn it arrived.
+        phi_notice = ""
+        if redaction.matches:
+            phi_notice = _phi_notice_line(
+                [m.phi_type for m in redaction.matches],
+                _resolved_supported_language_key(
+                    parsed_query.response_language or parsed_query.detected_language
+                ),
+            ) + "\n\n"
 
         has_emergency_signal = self._contains_emergency_signal(message.lower())
         navigation_guidance = (
@@ -187,7 +214,7 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
 
         if navigation_guidance.get("mode") == "emergency":
             response_payload["emergency_guidance"] = navigation_guidance.get("care_setting_guidance")
-            return self._compose_response(
+            return phi_notice + self._compose_response(
                 client,
                 response_payload,
                 max_tokens,
@@ -202,7 +229,7 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
                 if navigation_guidance.get("location_only")
                 else "response_template_clarification_needed"
             )
-            return self._compose_response(
+            return phi_notice + self._compose_response(
                 client,
                 response_payload,
                 max_tokens,
@@ -316,6 +343,10 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
 
         if parsed_query.medical_need and (local_results or fallback_results) and not missing_location_hint:
             card_reply = self._compose_result_card_response(response_payload)
+            if phi_notice:
+                # Prepend BEFORE localization so the LLM pass translates the
+                # notice along with the rest of the wrapper copy.
+                card_reply = phi_notice + card_reply
             target_language = _reply_localization_target(
                 parsed_query.response_language or parsed_query.detected_language
             )
@@ -330,7 +361,7 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
         else:
             template_key = "response_template_fallback_only"
 
-        return self._compose_response(
+        return phi_notice + self._compose_response(
             client,
             response_payload,
             max_tokens,

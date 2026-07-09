@@ -59,6 +59,14 @@ _DETERMINISTIC_RENDER_COPY = {
         "medicare_opted_out": "opted out",
         "medicare_no_record": "no opt-out record found",
         "medicare_unknown": "unknown",
+        "phi_notice": "🔒 I removed what looked like {types} from your message — I don't need it to help you find care.",
+        "phi_type_labels": {
+            "ssn": "a Social Security number",
+            "phone": "a phone number",
+            "email": "an email address",
+            "date": "a date of birth",
+            "id_number": "an ID number",
+        },
     },
     "spanish": {
         "results_intro": "Aquí están los resultados de navegación de atención para {summary}.",
@@ -105,6 +113,14 @@ _DETERMINISTIC_RENDER_COPY = {
         "medicare_opted_out": "excluido",
         "medicare_no_record": "sin registro de exclusión",
         "medicare_unknown": "desconocido",
+        "phi_notice": "🔒 Eliminé lo que parecía ser {types} de su mensaje — no lo necesito para ayudarle a encontrar atención médica.",
+        "phi_type_labels": {
+            "ssn": "un número de Seguro Social",
+            "phone": "un número de teléfono",
+            "email": "una dirección de correo electrónico",
+            "date": "una fecha de nacimiento",
+            "id_number": "un número de identificación",
+        },
     },
     "simplified_chinese": {
         "results_intro": "{summary}的护理导航结果如下。",
@@ -151,6 +167,14 @@ _DETERMINISTIC_RENDER_COPY = {
         "medicare_opted_out": "已退出",
         "medicare_no_record": "未找到退出记录",
         "medicare_unknown": "未知",
+        "phi_notice": "🔒 我已从您的消息中移除疑似{types}的内容——找医生不需要这些信息。",
+        "phi_type_labels": {
+            "ssn": "社会安全号码(SSN)",
+            "phone": "电话号码",
+            "email": "电子邮箱地址",
+            "date": "出生日期",
+            "id_number": "证件或会员号码",
+        },
     },
 }
 
@@ -222,6 +246,19 @@ def _resolved_supported_language_key(response_language: Optional[str]) -> str:
     if language_key not in _DETERMINISTIC_RENDER_COPY:
         return "english"
     return language_key
+
+
+def _phi_notice_line(phi_types, language_key):
+    """One-line notice naming the redacted PHI types, in the resolved copy language."""
+    copy = _DETERMINISTIC_RENDER_COPY.get(language_key) or _DETERMINISTIC_RENDER_COPY["english"]
+    labels_map = copy.get("phi_type_labels") or _DETERMINISTIC_RENDER_COPY["english"]["phi_type_labels"]
+    seen = []
+    for phi_type in phi_types:
+        label = labels_map.get(phi_type) or _DETERMINISTIC_RENDER_COPY["english"]["phi_type_labels"].get(phi_type, phi_type)
+        if label not in seen:
+            seen.append(label)
+    template = copy.get("phi_notice") or _DETERMINISTIC_RENDER_COPY["english"]["phi_notice"]
+    return template.format(types=", ".join(seen))
 
 
 def _reply_localization_target(response_language: Optional[str]) -> Optional[str]:
