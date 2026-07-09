@@ -16,6 +16,7 @@ _METRIC_NAMES = (
     "nonzero_providers",
     "emergency_routing",
     "preferred_language",
+    "phi_redacted",
 )
 
 

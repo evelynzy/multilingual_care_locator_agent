@@ -27,6 +27,7 @@ class RunAggregationTests(unittest.TestCase):
             MetricResult("nonzero_providers", True, True, ""),
             MetricResult("emergency_routing", False, True, ""),
             MetricResult("preferred_language", False, True, ""),
+            MetricResult("phi_redacted", False, True, ""),
         ]
         row = result_row(trace, results)
         self.assertEqual(row["scenario_id"], "s01")
@@ -35,6 +36,25 @@ class RunAggregationTests(unittest.TestCase):
         self.assertTrue(row["specialty_applicable"])
         self.assertTrue(row["specialty_passed"])
         self.assertFalse(row["followup_applicable"])
+
+    def test_metric_names_cover_every_score_trace_metric(self):
+        # result_row serializes only _METRIC_NAMES; a metric added to
+        # score_trace but not listed here silently vanishes from run rows
+        # (this happened to phi_redacted). Pin the two in lockstep.
+        from eval.dataset import GoldLabels
+        from eval.run import _METRIC_NAMES
+        from eval.scoring import score_trace
+
+        gold = GoldLabels(
+            expected_specialty=None,
+            expected_state=None,
+            expect_followup=False,
+            expect_nonzero_providers=False,
+            expect_emergency_routing=False,
+            expected_preferred_language=None,
+        )
+        names = {r.name for r in score_trace(Trace("s", "en", []), gold)}
+        self.assertEqual(names, set(_METRIC_NAMES))
 
     def test_summarize_counts_applicable_passes_per_language(self):
         rows = [
