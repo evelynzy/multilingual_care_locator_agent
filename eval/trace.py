@@ -78,19 +78,26 @@ def _html_to_text(raw: str) -> str:
     return _WS_RE.sub(" ", text).strip()
 
 
-_STATE_RE = re.compile(r"\b([A-Za-z]{2})\s+\d{5}(?:-\d{4})?\b")
+# ZIP may be 5 digits, hyphenated ZIP+4, or — in NPPES-enriched addresses —
+# the ZIP+4 concatenated without a hyphen ('CA 981015173').
+_STATE_RE = re.compile(r"\b([A-Za-z]{2})\s+\d{5}(?:-?\d{4})?\b")
 
 
 def _provider_state(provider) -> str:
     """Best-effort 2-letter state code.
 
-    Uses the structured field when present, else parses it from the address:
-    the ClinicalTables source leaves state/city unpopulated and embeds them in
-    the address string (e.g. '710 LAWRENCE EXPY, SANTA CLARA, CA 98101').
+    Order: structured .state field; the raw ClinicalTables practice-address
+    state (present on NPPES-enriched records); finally parsed from the
+    address string (e.g. '710 LAWRENCE EXPY, SANTA CLARA, CA 98101').
     """
     state = (getattr(provider, "state", None) or "").strip().upper()
     if state:
         return state
+    raw = getattr(provider, "raw", None)
+    if isinstance(raw, dict):
+        raw_state = str(raw.get("addr_practice.state") or "").strip().upper()
+        if raw_state:
+            return raw_state
     for field in (getattr(provider, "address", None), getattr(provider, "location_summary", None)):
         if field:
             match = _STATE_RE.search(field)

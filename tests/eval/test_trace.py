@@ -211,6 +211,26 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
         # No usable location at all -> empty string.
         self.assertEqual(_provider_state(_FakeProvider(state=None, address=None)), "")
 
+    def test_provider_state_reads_enriched_record_shapes(self):
+        from eval.trace import _provider_state
+
+        # NPPES-enriched records embed the ZIP+4 UNHYPHENATED in the address
+        # ("CA 981015173"), which the old regex could not terminate on, and
+        # carry the state in the structured raw field. Both must work — the
+        # app's real (enriched) service is what the harness measures now.
+        enriched = _FakeProvider(state=None, address="710 LAWRENCE EXPY, SANTA CLARA, CA 981015173")
+        enriched.raw = {"addr_practice.state": "CA"}
+        self.assertEqual(_provider_state(enriched), "CA")
+
+        # Raw structured field alone (no parseable address) is sufficient.
+        raw_only = _FakeProvider(state=None, address=None)
+        raw_only.raw = {"addr_practice.state": "ny"}
+        self.assertEqual(_provider_state(raw_only), "NY")
+
+        # Unhyphenated ZIP+4 address with NO raw field still parses.
+        addr_only = _FakeProvider(state=None, address="1 MAIN ST, LINCOLN, NE 685081234")
+        self.assertEqual(_provider_state(addr_only), "NE")
+
     def test_errored_run_is_not_cached(self):
         from eval.dataset import GoldLabels, LanguageVariant, Scenario
 
