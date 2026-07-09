@@ -2,7 +2,7 @@
 
 import unittest
 
-from care.privacy import PHIMatch, RedactionResult, redact_phi, scan_phi
+from care.privacy import PHIMatch, RedactionResult, fold_digits, redact_phi, scan_phi
 
 
 class ScanPhiDetectorTests(unittest.TestCase):
@@ -91,6 +91,43 @@ class RedactPhiTests(unittest.TestCase):
 
     def test_empty_and_none_safe(self):
         self.assertEqual(redact_phi("").text, "")
+
+
+class FoldDigitsTests(unittest.TestCase):
+    def test_arabic_indic_digits_fold(self):
+        self.assertEqual(fold_digits("١٢٣-٤٥-٦٧٨٩"), "123-45-6789")
+
+    def test_fullwidth_digits_fold(self):
+        self.assertEqual(fold_digits("１３８１２３４５６７８"), "13812345678")
+
+    def test_ascii_and_non_digits_untouched(self):
+        text = "primary care 10001 — 儿科"
+        self.assertEqual(fold_digits(text), text)
+
+    def test_length_preserved(self):
+        source = "رقم ٩٨٧٦٥٤٣٢١"
+        self.assertEqual(len(fold_digits(source)), len(source))
+
+
+class ScanPhiFoldedDigitTests(unittest.TestCase):
+    def test_arabic_indic_date_detected(self):
+        # The date pattern's year anchor is the ASCII literal (?:19|20) — the
+        # one place Unicode \d does not save us (FINDINGS F9).
+        matches = scan_phi("تاريخ الميلاد ١٩٨٥-٠١-٠٢")
+        self.assertEqual([m.phi_type for m in matches], ["date"])
+        # matched_text preserves the ORIGINAL script:
+        self.assertEqual(matches[0].matched_text, "١٩٨٥-٠١-٠٢")
+
+    def test_arabic_indic_ssn_detected(self):
+        matches = scan_phi("رقم الضمان ١٢٣-٤٥-٦٧٨٩")
+        self.assertEqual([m.phi_type for m in matches], ["ssn"])
+        self.assertEqual(matches[0].matched_text, "١٢٣-٤٥-٦٧٨٩")
+
+    def test_arabic_indic_zip_still_exempt(self):
+        self.assertEqual(scan_phi("طبيب أطفال ٩٤١١٠"), ())
+
+    def test_fullwidth_phone_detected(self):
+        self.assertEqual([m.phi_type for m in scan_phi("１３８１２３４５６７８")], ["phone"])
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ needs them for provider search.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
@@ -52,6 +53,26 @@ _DETECTORS = (
 )
 
 
+def fold_digits(text: str) -> str:
+    """Fold every Unicode decimal digit to its ASCII equivalent (length-preserving).
+
+    Arabic-Indic ٠-٩, Extended Arabic ۰-۹, fullwidth ０-９, etc. Python's ``\\d``
+    already matches these, but ASCII digit literals inside patterns (e.g. the
+    date detector's ``(?:19|20)`` year anchor) and consumers of matched VALUES
+    (e.g. ZIP extraction feeding an English-only API) do not — folding closes
+    both gaps (FINDINGS F9). Non-digit characters and unmappable oddities pass
+    through unchanged — never raises.
+    """
+    out = []
+    for ch in str(text or ""):
+        if ch.isdigit() and not ("0" <= ch <= "9"):
+            value = unicodedata.digit(ch, None)
+            out.append(str(value) if value is not None else ch)
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 @dataclass(frozen=True)
 class PHIMatch:
     phi_type: str
@@ -70,7 +91,7 @@ def scan_phi(text: str) -> Tuple[PHIMatch, ...]:
     source = str(text or "")
     if not source:
         return ()
-    shadow = source  # Task 5 folds non-ASCII digits here (length-preserving).
+    shadow = fold_digits(source)  # length-preserving: spans map back to the original
     matches: List[PHIMatch] = []
     for phi_type, pattern in _DETECTORS:
         for found in pattern.finditer(shadow):

@@ -143,7 +143,7 @@ fully-Czech reply (incl. the localized "911" line) with the Medicare URL verbati
 `tests/test_reply_localization.py`. (Note: re-running the fairness matrix should now lift the ar/ko
 `language_appropriateness` scores — deferred.)
 
-### F9 — PHI redaction misses Arabic-script dates: the gap hides in ASCII literals (guard fairness)
+### F9 — PHI redaction misses Arabic-script dates: the gap hides in ASCII literals (guard fairness, FIXED)
 The new deterministic PHI input guard (`care/privacy.py`) was evaluated offline over a
 synthetic multilingual corpus (`eval/data/phi_corpus.json`, en/zh/es/ar/ko × five PHI
 types plus per-language negatives; `eval/phi_guard_eval.py`). The headline is a
@@ -162,6 +162,16 @@ The lesson generalizes: digit-class regexes are script-neutral in Python, but an
 literal digit inside a pattern — and any consumer of the *matched value* — silently
 reintroduces an ASCII assumption. Negatives were 0 false positives in every language
 (including the Arabic-Indic ZIP `٩٤١١٠`).
+
+**FIXED (2026-07-09).** `fold_digits` (care/privacy.py) folds every Unicode decimal
+digit to ASCII before pattern matching. The fold is length-preserving, so match spans
+map back to the original text and redaction preserves the user's script (the reply
+shows `[REDACTED: …]` in place of `١٩٨٥-٠١-٠٢`, everything else untouched). Before →
+after on the committed corpus: ar date 0/1 → 1/1; every other cell was already
+complete; negatives (including the Arabic-Indic ZIP `٩٤١١٠`) 0 false positives both
+before and after. Full per-language parity is pinned by
+`tests/eval/test_phi_guard_eval.py`. The same helper now normalizes ZIP extraction so
+`٩٤١١٠` reaches the provider API as `94110` (the CASE_STUDY §4 issue).
 
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM
