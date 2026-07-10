@@ -124,11 +124,10 @@ def _phi_notice_line(phi_types, language_key):
 def _reply_localization_target(response_language: Optional[str]) -> Optional[str]:
     """The display language to LLM-localize a results reply into, or None if not needed.
 
-    en/es/zh are rendered natively by the deterministic copy, and English needs nothing.
-    Any other detected language (Czech, Korean, Arabic, ...) currently falls back to
-    English copy — those get an LLM wrapper-translation pass so the reply reaches the
-    user in their language while the provider data stays verbatim. Restores the
-    any-language localization lost when provider cards became deterministic (df2362c).
+    All seven known languages (English natively; es/zh/ar/ko/vi/tl from committed
+    locale files) render deterministically and need nothing. Only long-tail
+    languages (Czech, ...) get the LLM wrapper-translation pass, so the reply
+    still reaches the user in their language while provider data stays verbatim.
     """
     if _is_unknown_response_language(response_language):
         return None

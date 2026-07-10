@@ -39,7 +39,7 @@
     "appointments_unverified_badge": "Citas no verificadas",
     "status_unverified": "no verificado",
     "status_unknown": "desconocido",
-    "trust_label_source": "{value}",
+    "trust_label_source": "Fuente: {value}",
     "trust_label_insurance": "Seguro/red: {value}",
     "trust_label_new_patients": "Nuevos pacientes: {value}",
     "trust_label_medicare_opt_out": "Renuncia a Medicare: {value}",

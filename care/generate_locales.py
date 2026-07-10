@@ -81,6 +81,12 @@ def _translate_string(text: str, language_name: str, client, model: str) -> str:
         raise ValueError("placeholder mismatch for: {0!r}".format(text[:60]))
     if text.count("\n") != translated.count("\n"):
         raise ValueError("line-structure mismatch for: {0!r}".format(text[:60]))
+    # A translation must not reduce to placeholders alone when the source has
+    # real text around them ("Source: {value}" must not become "{value}").
+    if _PLACEHOLDER_RE.sub("", text).strip(" :：.,;—-") and not _PLACEHOLDER_RE.sub(
+        "", translated
+    ).strip(" :：.,;—-"):
+        raise ValueError("label text lost for: {0!r}".format(text[:60]))
     return translated
 
 

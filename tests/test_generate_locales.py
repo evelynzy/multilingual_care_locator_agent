@@ -60,6 +60,11 @@ class TranslateStringTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _translate_string("line one\nline two", "Spanish", client, "m")
 
+    def test_lost_label_text_raises(self):
+        client = _mock_client("{value}")
+        with self.assertRaises(ValueError):
+            _translate_string("Source: {value}", "Spanish", client, "m")
+
 
 class GenerateLocaleTests(unittest.TestCase):
     def test_locale_mirrors_master_keys(self):

@@ -74,7 +74,10 @@ def _get_prewritten_required_trust_guidance(response_language: Optional[str]) ->
     language_key = _lookup_language_alias(_normalize_response_language(response_language))
     if language_key is None:
         return None
-    return _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key]
+    # .get, not []: the alias table is static but the footer dict is populated
+    # from locale files — a missing file must degrade to the English fallback
+    # (None -> caller appends _REQUIRED_TRUST_GUIDANCE), never raise.
+    return _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE.get(language_key)
 
 
 class SafetyMixin:

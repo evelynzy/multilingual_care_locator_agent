@@ -39,7 +39,7 @@
     "appointments_unverified_badge": "未验证的预约",
     "status_unverified": "未验证",
     "status_unknown": "未知",
-    "trust_label_source": "{value}",
+    "trust_label_source": "源: {value}",
     "trust_label_insurance": "保险/网络: {value}",
     "trust_label_new_patients": "新患者: {value}",
     "trust_label_medicare_opt_out": "Medicare 退出: {value}",

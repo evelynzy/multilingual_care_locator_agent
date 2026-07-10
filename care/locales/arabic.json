@@ -39,7 +39,7 @@
     "appointments_unverified_badge": "المواعيد غير مؤكد",
     "status_unverified": "غير متحقق منه",
     "status_unknown": "غير معروف",
-    "trust_label_source": "{value}",
+    "trust_label_source": "مصدر: {value}",
     "trust_label_insurance": "التأمين/الشبكة: {value}",
     "trust_label_new_patients": "المرضى الجدد: {value}",
     "trust_label_medicare_opt_out": "الانسحاب من ميديكير: {value}",

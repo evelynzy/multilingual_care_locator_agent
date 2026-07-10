@@ -756,6 +756,10 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
 
                 self.assertIn("Model-rendered answer.", response)
                 self.assertIn(_REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key], response)
+                # the footer must appear exactly once (dedup guard)
+                self.assertEqual(
+                    response.count(_REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key]), 1
+                )
 
 
     def test_compose_response_uses_same_deterministic_supported_language_note_each_time(self) -> None:

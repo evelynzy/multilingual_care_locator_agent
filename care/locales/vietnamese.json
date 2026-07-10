@@ -39,7 +39,7 @@
     "appointments_unverified_badge": "Các cuộc hẹn chưa được xác minh",
     "status_unverified": "chưa xác minh",
     "status_unknown": "không xác định",
-    "trust_label_source": "{value}",
+    "trust_label_source": "Nguồn: {value}",
     "trust_label_insurance": "Bảo hiểm/mạng lưới: {value}",
     "trust_label_new_patients": "Bệnh nhân mới: {value}",
     "trust_label_medicare_opt_out": "Bỏ qua Medicare: {value}",

@@ -112,6 +112,49 @@ class LocaleWiringTests(unittest.TestCase):
             _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE["korean"],
         )
 
+    def test_filipino_alias_resolves_to_tagalog_render(self):
+        from care.rendering import _resolved_supported_language_key
+
+        self.assertEqual(_resolved_supported_language_key("Filipino"), "tagalog")
+
+    def test_footer_lookup_degrades_to_none_when_locale_missing(self):
+        # The alias table is static; the footer dict is file-populated. If a
+        # locale file vanished, the lookup must return None (English fallback
+        # at the caller), never raise KeyError.
+        from unittest.mock import patch
+
+        from care.safety import (
+            _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE,
+            _get_prewritten_required_trust_guidance,
+        )
+
+        pruned = {
+            k: v for k, v in _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE.items() if k != "korean"
+        }
+        with patch.dict(
+            "care.safety._REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE", pruned, clear=True
+        ):
+            self.assertIsNone(_get_prewritten_required_trust_guidance("Korean"))
+
+
+class LocaleLoaderErrorTests(unittest.TestCase):
+    def test_missing_directory_returns_empty(self):
+        import tempfile
+        from pathlib import Path
+
+        self.assertEqual(load_locales(Path(tempfile.gettempdir()) / "no-such-locales-dir"), {})
+
+    def test_missing_section_raises(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "korean.json"
+            bad.write_text(json.dumps({"copy": {}}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_locales(Path(tmp))
+
 
 if __name__ == "__main__":
     unittest.main()

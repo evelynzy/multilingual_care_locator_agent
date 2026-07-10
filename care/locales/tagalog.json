@@ -39,7 +39,7 @@
     "appointments_unverified_badge": "Mga appointment na hindi pa tinatawag",
     "status_unverified": "hindi nakumpirma",
     "status_unknown": "unknown",
-    "trust_label_source": "{value}",
+    "trust_label_source": "Source: {value}",
     "trust_label_insurance": "Insurance/network: {value}",
     "trust_label_new_patients": "Bagong mga pasyente: {value}",
     "trust_label_medicare_opt_out": "Pagsisisi sa Medicare: {value}",
