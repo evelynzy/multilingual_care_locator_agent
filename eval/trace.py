@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple
 
 from eval.dataset import Scenario
 
-_TRACE_SCHEMA_VERSION = "v2-judge"
+_TRACE_SCHEMA_VERSION = "v3-locale"
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,9 @@ class TurnCapture:
     # Post-gate user text handed to the intent LLM call (message + history user
     # turns), recorded by TracingAgent; empty for traces cached before this field.
     llm_input_texts: List[str] = field(default_factory=list)
+    # Language the long-tail localization pass fell back to English for
+    # (None = no fallback); None for traces cached before this field.
+    localization_fallback: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -144,6 +147,7 @@ def _capture_turn(user_message: str, agent, html: str) -> TurnCapture:
         rendered_text=_html_to_text(html),
         provider_details=provider_details,
         llm_input_texts=list(getattr(agent, "captured_llm_inputs", []) or []),
+        localization_fallback=getattr(agent, "last_localization_fallback", None),
     )
 
 

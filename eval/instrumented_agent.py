@@ -67,4 +67,5 @@ class TracingAgent(CareLocatorAgent):
         self.last_parsed_query = None
         self.last_navigation_mode = None
         self.captured_llm_inputs = []
+        self.last_localization_fallback = None
         self.provider_search_service.reset()

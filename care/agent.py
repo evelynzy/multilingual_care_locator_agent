@@ -139,6 +139,9 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
         top_p: float,
     ) -> str:
         logger.info("Handling request. message_length=%s history_turns=%s", len(message), len(history))
+        # Telemetry: set by _localize_reply_via_llm when the long-tail
+        # translation pass falls back to English; reset per request.
+        self.last_localization_fallback = None
         # PHI gate: redact the new message and every prior user turn BEFORE any
         # text reaches the inference service. The app is stateless and re-sends
         # the visible transcript each turn, so history must be re-redacted every

@@ -172,12 +172,21 @@ class LanguageMixin:
         """Translate the wrapper copy of a rendered results reply into target_language,
         keeping provider data (names, addresses, phones, ZIPs, URLs) verbatim.
 
-        Returns the original reply unchanged on any failure, so an unsupported language
-        is never worse off than the current English fallback.
+        One retry on failure; an empty completion or an English echo of the
+        source counts as failure. Returns the original reply unchanged when
+        both attempts fail (never worse than the English fallback) and records
+        the fallback on the agent so traces can measure it.
         """
+        from care.generate_locales import AUTO_TRANSLATED_MARK_EN
+
         source = str(reply_text or "").strip()
         if not source or not str(target_language).strip():
             return reply_text
+
+        # The mark travels INSIDE the source so it is translated with the rest;
+        # on fallback the untranslated original (without the mark) is returned,
+        # so an English reply never falsely claims to be auto-translated.
+        source_with_mark = source + "\n\n- " + AUTO_TRANSLATED_MARK_EN
 
         system = "You are a professional translator for a healthcare navigation assistant."
         instructions = (
@@ -188,26 +197,37 @@ class LanguageMixin:
             "Preserve the Markdown structure and line breaks.\n"
             "Return ONLY the translated reply, with no preamble.\n\n"
             "Reply:\n{reply}"
-        ).format(language=str(target_language).strip(), reply=source)
+        ).format(language=str(target_language).strip(), reply=source_with_mark)
 
-        try:
-            completion = client.chat_completion(
-                normalize_chat_messages(
-                    [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": instructions},
-                    ]
-                ),
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-            )
-            choices = getattr(completion, "choices", None) or []
-            if not choices:
-                return reply_text
-            message = getattr(choices[0], "message", None)
-            translated = (getattr(message, "content", "") or "").strip() if message else ""
-            return translated or reply_text
-        except Exception as exc:  # noqa: BLE001 - never make the reply worse than English
-            logger.warning("Reply localization to %s failed: %s", target_language, exc)
-            return reply_text
+        for attempt in (1, 2):
+            try:
+                completion = client.chat_completion(
+                    normalize_chat_messages(
+                        [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": instructions},
+                        ]
+                    ),
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                )
+                choices = getattr(completion, "choices", None) or []
+                message = getattr(choices[0], "message", None) if choices else None
+                translated = (getattr(message, "content", "") or "").strip() if message else ""
+                if translated and translated not in (source, source_with_mark):
+                    return translated
+                logger.warning(
+                    "Reply localization to %s returned no translation (attempt %s)",
+                    target_language,
+                    attempt,
+                )
+            except Exception as exc:  # noqa: BLE001 - never make the reply worse than English
+                logger.warning(
+                    "Reply localization to %s failed (attempt %s): %s",
+                    target_language,
+                    attempt,
+                    exc,
+                )
+        self.last_localization_fallback = str(target_language).strip()
+        return reply_text
