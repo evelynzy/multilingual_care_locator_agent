@@ -328,3 +328,109 @@ unstable between runs — quantified motivation for the B4 human re-label.
   during this cycle (s15/zh, s01/ko); both recaptures reproduced the original
   verdicts, reclassifying them as the stable behaviors documented above. No cell
   in this snapshot carries a verdict different from its first fresh capture.
+
+---
+
+## 2026-07-10 — multi-turn language retention + locale pipeline (v4)
+
+- **System under test:** `openai/gpt-oss-20b` (HF Inference) at commit `3855c1e`.
+- **Judge:** `Qwen/Qwen2.5-72B-Instruct`, same four binary dimensions.
+- **Dataset:** unchanged (32 scenarios / 103 cells). All cells captured fresh.
+- **Raw cells:** `eval/runs/2026-07-10-multilingual-judged-v4.jsonl`.
+- **What changed since v3** (one branch, measured together):
+  1. **Conversation-language contract**: the interpret prompt now defines
+     `detected_language` as the user's conversation-level language with a fixed
+     vocabulary and sentinel; the merge judges language absence
+     case/variant-tolerantly; a deterministic script backstop
+     (Han/Hangul/Arabic majority over the user's own messages) overrides the
+     parse when a signal-less turn (bare ZIP) would have reset the language.
+  2. **Locale-file localization**: all six non-English known languages
+     (es/zh/ar/ko/vi/tl) now render replies from locale files committed to the
+     repo and generated from the English masters
+     (`python -m care.generate_locales`) — no runtime translation call, and
+     every non-English reply's safety footer carries a localized
+     "auto-translated from English" mark. The files are machine-translated and
+     not native-reviewed (same disclosure standard as the dataset's `mt_only`
+     variants; the zh file is the one author-verifiable exception). One string
+     per file (`trust_label_source`) was derived mechanically from that file's
+     own translated `source_label` after the translation model persistently
+     dropped the label text (18/18 attempts) — disclosed here rather than
+     hidden.
+  3. **Long-tail translation hardening**: languages outside the seven get the
+     LLM wrapper-translation pass with one retry, an English-echo check, and a
+     new `localization_fallback` trace field — silent English fallbacks are now
+     measurable. This run recorded ZERO fallback events.
+  4. **Location contract** (added mid-cycle; see the two-regression note
+     below): a ZIP code is extracted verbatim (never replaced by a city name);
+     a city name is normalized to standard English "City, ST".
+
+### Per-language rates (deterministic checks; same harness config as v3)
+
+| lang | all cells | core-15 | v3 core-15 |
+|------|-----------|---------|------------|
+| en   | 96% (91/95) | **93%** (39/42) | 93% |
+| es   | 94% (45/48) | **93%** (39/42) | 93% |
+| zh   | 94% (49/52) | **93%** (39/42) | 83% |
+| ko   | 92% (44/48) | **90%** (38/42) | 86% |
+| ar   | 91% (51/56) | **88%** (37/42) | 74% |
+
+**Headline: the Arabic−English core-15 gap is now −5 points** (July 1: −24;
+v2: −12; v3: −19 after a location move exposed new cells). Chinese ties
+English and Spanish at 93%. Every movement is accounted for: +18 checks, all
+from the **ZIP city-ification / city-normalization cluster closing** (s01/ko,
+s07 zh/ar, s08 zh/ar/ko, s29 zh/ar, s12/ar — the location contract fixed the
+class first diagnosed on s29 in the 2026-07-09 run); −2 checks on s12/ko,
+inside the ambiguity cluster that fails the English control too
+(language-independent, excluded from the fairness signal; s12/ar moved up in
+exchange).
+
+### Judge dimensions (per language, all judged cells)
+
+Every judge dimension passes every judged cell in every language —
+helpfulness, safety, faithfulness, and language-appropriateness are all at
+100% (ar 19/19, en 32/32, es 17/17, ko 17/17, zh 18/18 on each dimension).
+All five judge movements vs v3 are False→True; none moved down.
+
+### The multi-turn fix, measured as stability (not a single pass)
+
+s15 `language_appropriateness` is True in all five languages, including zh —
+the cell documented as bistable in the v3 entry. Because a bistable bug cannot
+be declared fixed by one green run, the acceptance bar was repeated sampling:
+**20/20 fresh two-turn captures render localized** (s15 × zh/es/ar/ko × 5
+each) at the shipped commit — and an earlier 20/20 at a mid-branch commit,
+40 consecutive localized renders in total. The deterministic backstop makes
+the zh/ar/ko outcome mathematically independent of the parse's language guess;
+es rides the hardened contract (Latin script is indistinguishable from English
+at the script layer — disclosed limit).
+
+### Two self-inflicted regressions, caught by the harness's own gates
+
+Honest process note: this cycle burned two full captures before the archived
+one. The first capture (all other gates green) failed the English-parity gate:
+the rewritten language contract had silently changed LOCATION parsing —
+"cardiology 19103" began resolving to a (wrong) city name, deterministically,
+where the old prompt kept the ZIP (A/B: 4/4 vs 4/4). The fix ("ZIP stays
+verbatim") then over-corrected: the second capture regressed the city-name
+scenarios (s07/s08) because cities now stayed in the user's script or kept
+neighborhood qualifiers the English-only API cannot search. The final contract
+is asymmetric — ZIP verbatim, city normalized to English — and was verified in
+both directions (20/20 probes across five languages) before the archived
+capture. Lesson recorded: a prompt edit is a behavior change to EVERY field
+the prompt governs; A/B the fields you did not touch, on both the full-history
+and latest-only parses.
+
+### Remaining known failures (all pre-existing, none from this branch)
+
+- s11/ar: colloquial heart phrase over-triages to emergency (documented in the
+  v3 entry; counterfactual attribution work).
+- s12 cluster: ambiguous colloquial query fails the English control too
+  (app-level ambiguity handling, the curated-clarifier work item).
+- s03: expected followup never asked, all languages (same work item).
+
+### Notes
+
+- The pending human re-labeling (B4) now targets THIS run's replies; the
+  blinded worksheet regenerates from this run's caches.
+- `localization_fallback` is now part of every trace; zero events this run
+  means the seven known languages never touched the LLM translation pass, as
+  designed.

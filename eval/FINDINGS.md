@@ -156,6 +156,16 @@ now sources the conversation language from the full-history parse
 localized render) and in ar/ko (with a caveat: those replies still render the English
 wrapper, which the judge passed anyway — see RUNS.md). The residual s15/zh failure is
 upstream of the merge and is its own finding: F11.
+**CLOSED (2026-07-10, v4).** The remaining coverage asymmetry F8 hid (3-language
+in-code copy / 7-language footer / LLM-for-the-rest) is gone: all six non-English
+known languages now render from locale files committed to the repo and generated
+from the English masters (`care/generate_locales.py` → `care/locales/*.json`,
+machine-translated and disclosed as such; zh is the one author-verifiable file;
+each non-English footer carries a localized "auto-translated from English" mark).
+The long-tail LLM pass (Czech, …) now retries once, rejects English echoes, and
+records a `localization_fallback` trace field — the v4 matrix recorded zero
+fallback events. English is the single hardcoded copy source; editing it and
+re-running the generator regenerates every language.
 
 ### F9 — PHI redaction misses Arabic-script dates: the gap hides in ASCII literals (guard fairness, FIXED)
 The new deterministic PHI input guard (`care/privacy.py`) was evaluated offline over a
@@ -240,6 +250,52 @@ fixed value set and sentinel — then re-measure s15 stability across repeated
 captures. Related judge observation: on the ar/ko s15 cells the judge passed
 English-rendered replies (multi-turn leniency), so the B4 re-label deliberately
 includes multi-turn cells.
+
+**FIXED (2026-07-10, v4).** Three layers, because the prompt alone could not be
+trusted (the F2 lesson): (a) the interpret prompt now defines
+`detected_language` as the USER's conversation-level language with an
+English-name vocabulary and an exact lowercase `unknown` sentinel, plus an
+explicit rule that numeric/ZIP-only messages carry no language signal; (b) the
+merge judges language absence case/variant-tolerantly
+(`_is_unknown_response_language`, catching "Unknown"/"N/A"/"undetected"); (c) a
+deterministic script backstop overrides the parse when a multi-turn
+conversation's latest message has no letters and the merged language resolved
+to English/unknown — Han/Hangul/Arabic majority over the user's own messages
+decides, so zh/ar/ko retention no longer depends on the parse at all. Measured
+as stability, not a single pass: 20/20 fresh s15 captures render localized at
+the shipped commit (40/40 including a mid-branch gate). Latin-script languages
+(es/vi/tagalog) cannot be distinguished from English by script and ride the
+hardened contract — disclosed limit.
+
+### F12 — the location field's contract was underspecified in both directions (Layer A1, FIXED)
+The interpret prompt's original location comment ("city/region or null") left
+the model free to transform what the user wrote, and it failed in BOTH
+directions, each exposed by a different scenario family:
+- **ZIP → city ("city-ification", first diagnosed on s29 in the 2026-07-09
+  run):** the parse sometimes returned a ZIP as a city name — sometimes the
+  wrong city entirely ("cardiology 19103" → "Upper Darby, PA") — and the
+  bare-city search path returns zero where the ZIP returns results. Which
+  cells hit it shifted with unrelated prompt edits: this branch's
+  conversation-language rewrite deterministically flipped s14 into the failure
+  (old prompt kept the ZIP 4/4; new prompt city-ified 4/4) — caught by the
+  matrix's English-parity gate, since s14/en regressed.
+- **City → verbatim (over-correction, caught one capture later):** fixing the
+  first direction with "exactly as the user wrote it" made city names stay in
+  the user's script (or keep neighborhood qualifiers like "downtown …"), which
+  the English-only provider API cannot search — s07/s08 regressed across
+  languages including the English control.
+
+**FIXED (2026-07-10, v4)** with an asymmetric contract: a ZIP code is
+extracted verbatim and never replaced by a city or neighborhood name; a city
+name is normalized to standard English "City, ST" (translated, abbreviations
+expanded, qualifiers dropped). Verified in both directions before capture
+(20/20 probes across five languages), then measured: +18 checks — the entire
+city-ification cluster closed (s01/ko, s07 zh/ar, s08 zh/ar/ko, s29 zh/ar,
+s12/ar). Two lessons recorded: a prompt edit is a behavior change to EVERY
+field the prompt governs, so A/B the untouched fields too (on both the
+full-history and latest-only parses); and an English-control parity gate in
+the eval is what turned both regressions from silent production drift into
+same-day diagnoses.
 
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM
