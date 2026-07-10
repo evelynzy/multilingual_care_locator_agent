@@ -50,15 +50,28 @@ class TranslateStringTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _translate_string("Results.", "Spanish", client, "m")
 
+    def test_dropped_duplicate_placeholder_raises(self):
+        client = _mock_client("X {value} Y")
+        with self.assertRaises(ValueError):
+            _translate_string("{value} and {value}", "Spanish", client, "m")
+
+    def test_lost_line_structure_raises(self):
+        client = _mock_client("one line only")
+        with self.assertRaises(ValueError):
+            _translate_string("line one\nline two", "Spanish", client, "m")
+
 
 class GenerateLocaleTests(unittest.TestCase):
     def test_locale_mirrors_master_keys(self):
         def _echo_placeholders(messages, **kwargs):
             # Return a fake translation that carries EXACTLY the source's
-            # placeholders, so the per-string guard passes for every template.
+            # placeholders AND newline count, so every guard passes for every
+            # template (incl. the multi-line trust footer).
             source = messages[-1]["content"]
             tokens = " ".join(re.findall(r"\{[a-z_]+\}", source))
-            return Mock(choices=[Mock(message=Mock(content=("T " + tokens).strip()))])
+            # "\nx" (not bare "\n") so the newlines survive _extract_text's strip()
+            content = ("T " + tokens).strip() + "\nx" * source.count("\n")
+            return Mock(choices=[Mock(message=Mock(content=content))])
 
         client = Mock()
         client.chat_completion.side_effect = _echo_placeholders

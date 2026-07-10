@@ -75,8 +75,12 @@ def _translate_string(text: str, language_name: str, client, model: str) -> str:
     translated = _extract_text(completion)
     if not translated:
         raise ValueError("empty translation for: {0!r}".format(text[:60]))
-    if set(_PLACEHOLDER_RE.findall(text)) != set(_PLACEHOLDER_RE.findall(translated)):
+    # Multiset comparison: a duplicate placeholder dropped from the
+    # translation must fail even when the set of distinct tokens matches.
+    if sorted(_PLACEHOLDER_RE.findall(text)) != sorted(_PLACEHOLDER_RE.findall(translated)):
         raise ValueError("placeholder mismatch for: {0!r}".format(text[:60]))
+    if text.count("\n") != translated.count("\n"):
+        raise ValueError("line-structure mismatch for: {0!r}".format(text[:60]))
     return translated
 
 
