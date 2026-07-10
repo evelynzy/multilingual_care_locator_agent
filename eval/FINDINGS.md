@@ -150,6 +150,12 @@ is now high everywhere (ar 18/19, zh 17/18 overall), but all four s15 multi-turn
 still render English — the turn-2 location-only parse ("94110") resets
 `response_language` to English before rendering. That is a distinct, still-open
 multi-turn language-context gap, not an F8 regression (see RUNS.md).
+**Update (2026-07-10 run):** the merge-layer reset is fixed — `_merge_parsed_queries`
+now sources the conversation language from the full-history parse
+(regression-tested), and s15 language-appropriateness flipped True in es (a genuinely
+localized render) and in ar/ko (with a caveat: those replies still render the English
+wrapper, which the judge passed anyway — see RUNS.md). The residual s15/zh failure is
+upstream of the merge and is its own finding: F11.
 
 ### F9 — PHI redaction misses Arabic-script dates: the gap hides in ASCII literals (guard fairness, FIXED)
 The new deterministic PHI input guard (`care/privacy.py`) was evaluated offline over a
@@ -213,6 +219,27 @@ harness is part of the system under test — instrument the REAL object, not a
 lookalike; and every historical number carries its harness's configuration
 (the 2026-07-01/02 baselines are bare-config and all comparisons against them
 are labeled cross-config in RUNS.md).
+
+### F11 — the full-history parse misdetects conversation language when the last turn is language-neutral (Layer A1, open)
+With the merge fixed (F8 update), the conversation language comes from the
+full-history interpret call — which turns out to be unreliable in exactly the
+scenario the fix targets: a follow-up turn that is a bare ZIP code. Payload-level
+instrumentation of the interpret call (identical parameters and prompts,
+temperature 0) shows `detected_language` flipping between `zh` and `en` for the
+same two user turns, depending only on the wording of the assistant's intervening
+reply — which is itself sampled at temperature 0.3, so the s15/zh cell is
+bistable from run to run (see RUNS.md 2026-07-10). Two contract gaps compound
+here: (a) the interpret prompt never states that `detected_language` means the
+*user's* conversation-level language, so nothing anchors it against a
+language-neutral final turn; (b) the parse emits inconsistent language spellings
+("zh", "Chinese", "en", "English") while the merge's absent-value sentinel is the
+lowercase literal `"unknown"` only, so a differently-spelled sentinel would pass
+as a real language. Candidate fix (deferred, W-item): harden the interpret prompt
+contract — define `detected_language` as the user-conversation language with a
+fixed value set and sentinel — then re-measure s15 stability across repeated
+captures. Related judge observation: on the ar/ko s15 cells the judge passed
+English-rendered replies (multi-turn leniency), so the B4 re-label deliberately
+includes multi-turn cells.
 
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM

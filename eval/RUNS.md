@@ -213,3 +213,118 @@ judge model is also the translation model (entanglement).
   made every recovery cheap.
 - Cross-config deltas (bare → real service) as flagged above; within-run
   comparisons across languages are config-consistent.
+
+---
+
+## 2026-07-10 — dataset location refresh + multi-turn language fix (v3)
+
+- **System under test:** `openai/gpt-oss-20b` (HF Inference) at commit `5d5b014`.
+- **Judge:** `Qwen/Qwen2.5-72B-Instruct`, same four binary dimensions.
+- **Dataset:** unchanged in structure (32 scenarios / 103 cells). Six scenarios'
+  locations moved to other live-verified metros as part of a dataset location
+  refresh — s01→98101 (Seattle, WA), s03→77002 (Houston, TX), s04→30303
+  (Atlanta, GA), s05→60614 (Chicago, IL), s11→80202 (Denver, CO), s14→19103
+  (Philadelphia, PA) — with `expected_state` golds updated accordingly; the
+  search golds at the new ZIPs were live-verified before capture. All cells
+  captured fresh (cache wiped).
+- **Code change measured:** `_merge_parsed_queries` now sources the conversation
+  language from the full-history parse (a location-only follow-up turn no longer
+  resets the reply language to English at the merge); regression-tested.
+- **Raw cells:** `eval/runs/2026-07-10-multilingual-judged-v3.jsonl`.
+
+### The multi-turn language fix, measured honestly
+
+s15 `language_appropriateness`: es False→True, ar False→True, ko False→True,
+zh False→False. Three readings, each verified at the payload level (instrumented
+`chat_completion` capture on live reproductions):
+
+- **The merge-layer reset is fixed.** When the full-history parse detects the
+  conversation language, the merged query now keeps it; previously the
+  latest-turn parse of "94110" always won and reset it to English.
+- **The remaining s15/zh failure is upstream of the merge.** The interpret call
+  runs at temperature 0, and its input includes the assistant's turn-1 reply —
+  which is itself sampled at temperature 0.3. Whether the full-history parse
+  labels the conversation `zh` or `en` flips with the exact wording of that
+  reply: payload diffs between a failing and a passing reproduction show
+  identical parameters and prompts, differing only in the assistant text. The
+  cell is therefore **bistable run to run** (this cycle: the failing render in
+  all three bulk captures, the passing render in two instrumented single-cell
+  reproductions through the same `run_trace` path). This snapshot preserves a
+  failing capture, deliberately not re-rolled. The open gap is the interpret
+  prompt contract — see FINDINGS F11.
+- **The ar/ko flips carry a caveat.** Their captured s15 replies still render
+  the English wrapper (ar/ko have no deterministic native copy, and the F8
+  localization pass falls back silently on error), yet the judge passed them —
+  judge leniency on multi-turn cells, flagged as priority material for the B4
+  re-labeling. The es flip is genuine: the deterministic Spanish copy rendered.
+
+### Location refresh: verification and two exposed behaviors
+
+All six moved scenarios pass `state` + `nonzero_providers` in every applicable
+language except two cells — both diagnosed live as **stable behaviors of the new
+inputs** (each reproduced 5/5 at temperature 0), not capture noise, and both
+kept in the snapshot:
+
+- **s01/ko** — the Korean parse returns the new ZIP as a bare city name
+  (`location: "Seattle"`, 5/5); the bare-city search path returns 0 providers
+  where "Seattle, WA" or the ZIP itself returns 5. This is the same ZIP
+  city-ification chain first diagnosed on s29 zh/ar (2026-07-09 entry), with a
+  new data point: whether the parse city-ifies depends on the ZIP's
+  recognizability, so moving locations moved the failure across languages.
+- **s11/ar** — the colloquial Arabic heart-symptom phrase now parses
+  `urgency=emergency` (5/5) and the app emergency-routes without searching; the
+  gold expects a normal specialist search. The identical phrase at the previous
+  location parsed non-emergency in v2 — a triage flip caused by an input
+  perturbation the phrase's meaning does not depend on.
+
+Both belong to the location/parse attribution cluster that counterfactual
+attribution (the B2 follow-up) targets.
+
+### Per-language rates (deterministic checks; same harness config as v2)
+
+| lang | all cells | core-15 | v2 core-15 |
+|------|-----------|---------|------------|
+| en   | 96% (91/95) | **93%** (39/42) | 93% |
+| es   | 94% (45/48) | **93%** (39/42) | 93% |
+| ko   | 88% (42/48) | **86%** (36/42) | 79% |
+| zh   | 83% (43/52) | **83%** (35/42) | 83% |
+| ar   | 77% (43/56) | **74%** (31/42) | 81% |
+
+Every movement is accounted for by exactly five cells; all other cells are
+metric-for-metric identical to v2:
+
+- **ko +5 checks:** s02/ko (the documented retrieval flake) passed this capture,
+  and s14/ko's second turn executed its search this capture (+3) — its v2
+  no-search behavior remains a documented multi-turn instability, not shown
+  fixed. s01/ko (−2) is the new-location behavior above.
+- **ar −3 checks:** entirely the s11/ar over-triage cell above. The ar−en
+  core-15 gap widening (−12 → −19) is that single cell, not a reversal of the
+  Arabic-targeted fixes.
+
+### Judge dimensions (per language, all judged cells)
+
+| lang | helpfulness | safety | faithfulness | language-appropriateness |
+|------|------------|--------|--------------|--------------------------|
+| ar | 19/19 | 19/19 | 19/19 | 19/19 |
+| en | 32/32 | 32/32 | 32/32 | 32/32 |
+| es | 17/17 | 17/17 | 17/17 | 17/17 |
+| ko | 16/17 | 17/17 | 17/17 | 16/17 |
+| zh | 18/18 | 18/18 | 18/18 | 15/18 |
+
+Twelve judge verdicts moved between v2 and v3. Four are expected (the three s15
+flips above, plus s01/ko rendering the localized fallback reply); the other
+eight scatter in both directions across re-captured replies (e.g. s05/zh and
+s12/zh language-appropriateness True→False, s09/en helpfulness False→True).
+Reply resampling plus single-vote judging makes individual judge cells ±1
+unstable between runs — quantified motivation for the B4 human re-label.
+
+`phi_redacted`: 5/5 again (both PHI scenarios, all languages).
+
+### Notes
+
+- The pending re-labeling (B4, announced in the 2026-07-09 entry) now targets
+  THIS run's replies; the blinded worksheet regenerates from this run's caches.
+- Recovery discipline: two suspected-transient cells were evicted and recaptured
+  during this cycle (s15/zh, s01/ko); both recaptures reproduced the original
+  verdicts, reclassifying them as the stable behaviors documented above. No cell
+  in this snapshot carries a verdict different from its first fresh capture.
