@@ -606,7 +606,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_org",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Clinic/Center",
             specialties=("Clinic/Center",),
             specialty_family_ids=("cardiology",),
@@ -617,7 +617,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Cardiology",
             specialties=("Cardiology",),
         )
@@ -663,7 +663,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="207V00000X",
             specialties=("207V00000X",),
         )
@@ -673,7 +673,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_org",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Diagnostic Radiology",
             specialties=("Diagnostic Radiology",),
         )
@@ -706,7 +706,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="207VC0200X",
             specialties=("207VC0200X",),
         )
@@ -716,7 +716,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="207VM0101X",
             specialties=("207VM0101X",),
         )
@@ -726,7 +726,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_org",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Diagnostic Radiology",
             specialties=("Diagnostic Radiology",),
         )
@@ -1125,7 +1125,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_org",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Clinic/Center",
             specialties=("Clinic/Center",),
             specialty_family_ids=("obstetrics-gynecology",),
@@ -1136,7 +1136,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Physician/Obstetrics & Gynecology",
             specialties=("Physician/Obstetrics & Gynecology",),
         )
@@ -1204,7 +1204,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Physician/Interventional Cardiology",
             specialties=(
                 "Clinic/Center",
@@ -2095,7 +2095,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 source_name="ClinicalTables",
                 dataset="npi_idv",
                 city="Seattle",
-                state="CA",
+                state="WA",
                 specialties=(),
                 taxonomy=None,
             )
@@ -2106,7 +2106,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),
         )
@@ -2152,7 +2152,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 source_name="ClinicalTables",
                 dataset="npi_idv",
                 city="Seattle",
-                state="CA",
+                state="WA",
                 specialties=(),
                 taxonomy=None,
             )
@@ -2163,7 +2163,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),
         )
@@ -2243,7 +2243,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),
             raw={"addr_practice.zip": "98101"},
@@ -2407,7 +2407,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Diagnostic Radiology",
             specialties=("Diagnostic Radiology",),
         )
@@ -2417,7 +2417,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             city="Seattle",
-            state="CA",
+            state="WA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),
         )

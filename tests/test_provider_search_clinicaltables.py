@@ -218,13 +218,13 @@ class ClinicalTablesSourceTests(unittest.TestCase):
 
         result = source.search_dataset(
             "npi_idv",
-            SourceSearchRequest(search_terms="family medicine pittsburgh", limit=1),
+            SourceSearchRequest(search_terms="family medicine denver", limit=1),
         )
 
         session.get.assert_called_once()
         _, kwargs = session.get.call_args
         self.assertEqual(kwargs["timeout"], 6)
-        self.assertEqual(kwargs["params"]["terms"], "family medicine pittsburgh")
+        self.assertEqual(kwargs["params"]["terms"], "family medicine denver")
         self.assertEqual(kwargs["params"]["maxList"], "1")
         self.assertIn("df", kwargs["params"])
 
@@ -512,11 +512,11 @@ class ClinicalTablesSourceTests(unittest.TestCase):
 
         first_result = source.search_dataset(
             "npi_idv",
-            SourceSearchRequest(search_terms="family medicine pittsburgh", limit=1),
+            SourceSearchRequest(search_terms="family medicine denver", limit=1),
         )
         second_result = source.search_dataset(
             "npi_idv",
-            SourceSearchRequest(search_terms="family medicine pittsburgh", limit=1),
+            SourceSearchRequest(search_terms="family medicine denver", limit=1),
         )
 
         first_provider_id = first_result.providers[0].provider_id

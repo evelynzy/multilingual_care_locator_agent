@@ -51,9 +51,9 @@ class TraceSerializationTests(unittest.TestCase):
             parsed_urgency=None, parsed_care_setting=None, parsed_needs_clarification=False,
             searched=True, request_specialties=["cardiology"], request_preferred_languages=[],
             provider_states=["CA"], provider_count=1, html_has_card=True, emergency_routed=False,
-            rendered_text="1. Dr. Heart — Cardiology — Seattle, CA",
+            rendered_text="1. Dr. Heart — Cardiology — Seattle, WA",
             provider_details=[{"name": "Dr. Heart", "specialties": ["Cardiology"],
-                               "languages": ["Spanish"], "state": "CA", "city": "Seattle"}],
+                               "languages": ["Spanish"], "state": "WA", "city": "Seattle"}],
         )
         trace = Trace("s01", "en", [turn], None)
         restored = trace_from_dict(trace_to_dict(trace))

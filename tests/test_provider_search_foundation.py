@@ -235,8 +235,8 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             address="123 Main St",
-            city="Pittsburgh",
-            state="PA",
+            city="Denver",
+            state="CO",
             taxonomy="Family Medicine",
         )
         right = build_canonical_provider(
@@ -245,8 +245,8 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
             source_name="ClinicalTables",
             dataset="npi_idv",
             address=" 123 Main St ",
-            city=" Pittsburgh ",
-            state="PA",
+            city=" Denver ",
+            state="CO",
             taxonomy="Family Medicine",
         )
 
@@ -296,8 +296,8 @@ class ProviderSearchNormalizationTests(unittest.TestCase):
                 "name": "Harmony Family Clinic",
                 "source": "ClinicalTables",
                 "provenance": {"dataset": "npi_idv"},
-                "city": "Pittsburgh",
-                "state": "PA",
+                "city": "Denver",
+                "state": "CO",
             }
         )
 

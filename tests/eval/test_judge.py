@@ -16,9 +16,9 @@ def _turn(**overrides):
         parsed_urgency=None, parsed_care_setting=None, parsed_needs_clarification=False,
         searched=True, request_specialties=["cardiology"], request_preferred_languages=[],
         provider_states=["CA"], provider_count=1, html_has_card=True, emergency_routed=False,
-        rendered_text="1. Dr. Heart — Cardiology — Seattle, CA",
+        rendered_text="1. Dr. Heart — Cardiology — Seattle, WA",
         provider_details=[{"name": "Dr. Heart", "specialties": ["Cardiology"],
-                           "languages": [], "state": "CA", "city": "Seattle"}],
+                           "languages": [], "state": "WA", "city": "Seattle"}],
     )
     base.update(overrides)
     return TurnCapture(**base)

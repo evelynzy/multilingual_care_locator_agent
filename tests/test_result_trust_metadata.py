@@ -478,14 +478,14 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         payload = {
             "query": {
                 "response_language": "English",
-                "summary": "primary care in Pittsburgh",
+                "summary": "primary care in Denver",
             },
             "local_results": [
                 self.agent._normalize_result_trust_metadata(
                     {
                         "name": "Riverside Family Medicine",
                         "specialties": ["Primary Care"],
-                        "location": "Pittsburgh, PA",
+                        "location": "Denver, CO",
                         "phone": "412-555-0100",
                         "source": "Local provider dataset",
                     }
@@ -494,7 +494,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
             "fallback_results": [
                 {
                     "name": "Medicare Care Compare",
-                    "location": "Pittsburgh, PA",
+                    "location": "Denver, CO",
                     "website": "https://www.medicare.gov/care-compare/",
                     "description": "Compare clinicians and facilities using Medicare's public directory.",
                     "source": "Trusted public directories",
@@ -506,7 +506,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
 
         self.assertIn('provider-card__title">1. Riverside Family Medicine</div>', response)
         self.assertIn("**Trusted resources and fallback options:**", response)
-        self.assertIn("1. **Medicare Care Compare**: Region: Pittsburgh, PA", response)
+        self.assertIn("1. **Medicare Care Compare**: Region: Denver, CO", response)
         self.assertIn("; Source: Trusted public directories", response)
         self.assertIn(r"; Website: https://www.medicare.gov/care-compare/", response)
         self.assertIn(
@@ -519,13 +519,13 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         payload = {
             "query": {
                 "response_language": "English",
-                "summary": "primary care in Pittsburgh",
+                "summary": "primary care in Denver",
             },
             "local_results": [],
             "fallback_results": [
                 {
                     "name": "Medicare Care Compare",
-                    "location": "Pittsburgh, PA",
+                    "location": "Denver, CO",
                     "website": "https://www.medicare.gov/care-compare/",
                     "description": "Compare clinicians and facilities using Medicare's public directory.",
                     "source": "Trusted public directories",
@@ -549,13 +549,13 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         payload = {
             "query": {
                 "response_language": "English",
-                "summary": "primary care in Pittsburgh",
+                "summary": "primary care in Denver",
             },
             "local_results": [],
             "fallback_results": [
                 {
                     "name": "Medicare **Care** Compare [Official]",
-                    "location": "Pittsburgh, PA (Metro)",
+                    "location": "Denver, CO (Metro)",
                     "website": "https://example.com/care(compare)",
                     "description": "Use *trusted* public data > call first.",
                     "source": "Trusted [public] directories",
@@ -566,7 +566,7 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         response = self.agent._compose_result_card_response(payload)
 
         self.assertIn(r"1. **Medicare \*\*Care\*\* Compare \[Official\]**", response)
-        self.assertIn(r"Region: Pittsburgh, PA \(Metro\)", response)
+        self.assertIn(r"Region: Denver, CO \(Metro\)", response)
         self.assertIn(r"Source: Trusted \[public\] directories", response)
         self.assertIn("Website: https://example.com/care(compare)", response)
         self.assertIn(r"Details: Use \*trusted\* public data \> call first\.", response)
