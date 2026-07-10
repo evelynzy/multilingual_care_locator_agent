@@ -25,11 +25,13 @@ class ReplyLocalizationTargetTests(unittest.TestCase):
     def test_arbitrary_language_is_localized(self):
         self.assertEqual(_reply_localization_target("Czech"), "Czech")
 
-    def test_language_with_footer_only_support_is_localized(self):
-        # Korean/Arabic have a safety-footer translation but no card-body copy,
-        # so the wrapper still falls back to English -> localize.
-        self.assertEqual(_reply_localization_target("Korean"), "Korean")
-        self.assertEqual(_reply_localization_target("Arabic"), "Arabic")
+    def test_locale_file_languages_need_no_llm(self):
+        # Korean/Arabic (and vi/tl) now render natively from locale files,
+        # so the LLM wrapper-translation pass is reserved for the long tail.
+        self.assertIsNone(_reply_localization_target("Korean"))
+        self.assertIsNone(_reply_localization_target("Arabic"))
+        self.assertIsNone(_reply_localization_target("Vietnamese"))
+        self.assertIsNone(_reply_localization_target("Tagalog"))
 
 
 class _StubClient:

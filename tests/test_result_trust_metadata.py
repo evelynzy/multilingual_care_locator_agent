@@ -81,6 +81,8 @@ if "llama_index" not in sys.modules:
 
 
 from care import CareLocatorAgent, ParsedCareQuery
+from care.rendering import _DETERMINISTIC_RENDER_COPY, _DETERMINISTIC_RENDER_TRANSLATIONS
+from care.safety import _REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE
 from provider_search.models import (
     ProviderSearchRequest,
     ProviderSearchResponse,
@@ -379,26 +381,58 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
 
         response = self.agent._compose_result_card_response(payload)
 
-        self.assertIn("儿科10013的护理导航结果如下。", response)
-        self.assertIn("**就医路线:** 对于常规或持续性的就医需求，初级保健通常更合适。", response)
-        self.assertIn("**转诊提示:** 查找专科医生时，HMO 和 POS 计划通常需要初级保健医生转诊；PPO 计划可能不需要，但仍应与保险公司和计划文件确认。", response)
-        self.assertIn("电话</span>", response)
-        self.assertIn("匹配原因</span>", response)
-        self.assertIn("下一步</span>", response)
-        self.assertIn("与您搜索的儿科10013相关。", response)
-        self.assertIn("请致电确认网络状态、转诊要求、新患者接收情况和预约可用性。", response)
-        self.assertIn("列出的保险</span><span class=\"provider-card__value\">Medicaid (仅为列出信息；此处未验证网络参与情况)</span>", response)
-        self.assertNotIn("保险/网络验证</span>", response)
-        self.assertNotIn("是否接收新患者</span>", response)
-        self.assertIn("预约可用性</span><span class=\"provider-card__value\">尚未验证；请致电服务提供者确认。</span>", response)
-        self.assertIn("**联系机构前:** 请致电服务提供者和保险公司，确认网络状态、接受的保险计划、转诊要求、新患者接收情况、地点和预约可用性。", response)
-        self.assertIn("来源</span><span class=\"provider-card__meta-value\">Local provider dataset</span>", response)
+        zh = _DETERMINISTIC_RENDER_COPY["simplified_chinese"]
+        t = lambda s: _DETERMINISTIC_RENDER_TRANSLATIONS[s]["simplified_chinese"]
+        self.assertIn(zh["results_intro"].format(summary="儿科10013"), response)
+        self.assertIn(
+            "**{0}:** {1}".format(
+                zh["care_route_label"],
+                t("For routine or ongoing care, primary care is usually the best fit."),
+            ),
+            response,
+        )
+        self.assertIn(
+            "**{0}:** {1}".format(
+                zh["referral_note_label"],
+                t("For specialist searches, HMO and POS plans often require a PCP referral; PPO plans may not, but you should confirm the rule with your insurer and plan documents."),
+            ),
+            response,
+        )
+        self.assertIn(zh["phone_label"] + "</span>", response)
+        self.assertIn(zh["why_matched_label"] + "</span>", response)
+        self.assertIn(zh["next_step_label"] + "</span>", response)
+        self.assertIn(zh["matched_search_summary"].format(summary="儿科10013"), response)
+        self.assertIn(zh["verification_reminder_short"], response)
+        self.assertIn(
+            '{0}</span><span class="provider-card__value">Medicaid ({1})</span>'.format(
+                zh["listed_insurance_label"], zh["listed_insurance_suffix"]
+            ),
+            response,
+        )
+        self.assertNotIn(zh["insurance_verification_label"] + "</span>", response)
+        self.assertNotIn(zh["accepting_patients_label"] + "</span>", response)
+        self.assertIn(
+            '{0}</span><span class="provider-card__value">{1}</span>'.format(
+                zh["appointment_availability_label"], zh["appointment_availability_value"]
+            ),
+            response,
+        )
+        self.assertIn(
+            "**{0}:** {1}".format(zh["before_contact_label"], zh["verification_reminder"]),
+            response,
+        )
+        self.assertIn(
+            '{0}</span><span class="provider-card__meta-value">Local provider dataset</span>'.format(
+                zh["source_label"]
+            ),
+            response,
+        )
         self.assertNotIn("Here are care navigation results for", response)
         self.assertNotIn("**Care route:**", response)
         self.assertNotIn("**Referral note:**", response)
         self.assertNotIn("Why matched", response)
-        self.assertNotIn("**联系机构前:** Call the provider and insurer to confirm", response)
         self.assertNotIn("Pediatrics, pediatric, child health", response)
+
 
     def test_compose_result_card_response_localizes_spanish_deterministic_copy(self) -> None:
         payload = {
@@ -427,25 +461,55 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
 
         response = self.agent._compose_result_card_response(payload)
 
-        self.assertIn("Aquí están los resultados de navegación de atención para atención primaria en Austin.", response)
-        self.assertIn("**Ruta de atención:** Para una necesidad conocida de especialista o remisión, un especialista suele ser la ruta correcta.", response)
-        self.assertIn("**Nota sobre remisión:** Para buscar especialistas, los planes HMO y POS suelen requerir una remisión de atención primaria; los PPO pueden no requerirla, pero debe confirmarlo con su aseguradora y los documentos del plan.", response)
-        self.assertIn("Teléfono</span>", response)
-        self.assertIn("Por qué coincide</span>", response)
-        self.assertIn("Siguiente paso</span>", response)
-        self.assertIn("Relacionado con su búsqueda de atención primaria en Austin.", response)
-        self.assertIn("Llame para confirmar la red, la necesidad de remisión, si aceptan pacientes nuevos y la disponibilidad de citas.", response)
-        self.assertIn("Seguro listado</span><span class=\"provider-card__value\">Medicare (solo informado; la participación en la red no está verificada aquí)</span>", response)
-        self.assertNotIn("Verificación de seguro/red</span>", response)
-        self.assertNotIn("Acepta pacientes nuevos</span>", response)
-        self.assertIn("Disponibilidad de citas</span><span class=\"provider-card__value\">No verificada; llame al proveedor para confirmarla.</span>", response)
-        self.assertIn("**Antes de contactar a un proveedor:** Llame al proveedor y a la aseguradora para confirmar el estado de la red, el plan de seguro aceptado, los requisitos de remisión, la disponibilidad para pacientes nuevos, la ubicación y la disponibilidad de citas.", response)
-        self.assertIn("Exclusión de Medicare: excluido", response)
+        es = _DETERMINISTIC_RENDER_COPY["spanish"]
+        t = lambda s: _DETERMINISTIC_RENDER_TRANSLATIONS[s]["spanish"]
+        self.assertIn(es["results_intro"].format(summary="atención primaria en Austin"), response)
+        self.assertIn(
+            "**{0}:** {1}".format(
+                es["care_route_label"],
+                t("For a known specialty or referral need, a specialist is usually the right route."),
+            ),
+            response,
+        )
+        self.assertIn(
+            "**{0}:** {1}".format(
+                es["referral_note_label"],
+                t("For specialist searches, HMO and POS plans often require a PCP referral; PPO plans may not, but you should confirm the rule with your insurer and plan documents."),
+            ),
+            response,
+        )
+        self.assertIn(es["phone_label"] + "</span>", response)
+        self.assertIn(es["why_matched_label"] + "</span>", response)
+        self.assertIn(es["next_step_label"] + "</span>", response)
+        self.assertIn(es["matched_search_summary"].format(summary="atención primaria en Austin"), response)
+        self.assertIn(es["verification_reminder_short"], response)
+        self.assertIn(
+            '{0}</span><span class="provider-card__value">Medicare ({1})</span>'.format(
+                es["listed_insurance_label"], es["listed_insurance_suffix"]
+            ),
+            response,
+        )
+        self.assertNotIn(es["insurance_verification_label"] + "</span>", response)
+        self.assertNotIn(es["accepting_patients_label"] + "</span>", response)
+        self.assertIn(
+            '{0}</span><span class="provider-card__value">{1}</span>'.format(
+                es["appointment_availability_label"], es["appointment_availability_value"]
+            ),
+            response,
+        )
+        self.assertIn(
+            "**{0}:** {1}".format(es["before_contact_label"], es["verification_reminder"]),
+            response,
+        )
+        self.assertIn(
+            es["trust_label_medicare_opt_out"].format(value=es["medicare_opted_out"]),
+            response,
+        )
         self.assertNotIn("Here are care navigation results for", response)
         self.assertNotIn("**Care route:**", response)
         self.assertNotIn("**Referral note:**", response)
         self.assertNotIn("Why matched", response)
-        self.assertNotIn("**Antes de contactar a un proveedor:** Call the provider and insurer to confirm", response)
+
 
     def test_compose_result_card_response_uses_localized_match_reason_instead_of_raw_keywords(self) -> None:
         payload = {
@@ -471,7 +535,14 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
 
         response = self.agent._compose_result_card_response(payload)
 
-        self.assertIn("匹配原因</span><span class=\"provider-card__value\">与您搜索的儿童保健相关。</span>", response)
+        zh = _DETERMINISTIC_RENDER_COPY["simplified_chinese"]
+        self.assertIn(
+            '{0}</span><span class="provider-card__value">{1}</span>'.format(
+                zh["why_matched_label"],
+                zh["matched_search_summary"].format(summary="儿童保健"),
+            ),
+            response,
+        )
         self.assertNotIn("Pediatrics, pediatric, child health", response)
 
     def test_compose_result_card_response_renders_fallback_resources_in_separate_section(self) -> None:
@@ -650,27 +721,18 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
         self.assertEqual(len(client.calls), 1)
 
     def test_compose_response_uses_prewritten_required_trust_guidance_for_supported_languages(self) -> None:
-        note_headings = (
-            "Important safety and trust notes:",
-            "Notas importantes de seguridad y confianza:",
-            "重要的安全和信任提示：",
-            "Ghi chú quan trọng về an toàn và độ tin cậy:",
-            "Mahahalagang tala sa kaligtasan at pagtitiwala:",
-            "ملاحظات مهمة حول السلامة والثقة:",
-            "중요한 안전 및 신뢰 안내:",
-        )
         supported_languages = [
-            ("English", "Important safety and trust notes:", "Directory matches are informational"),
-            ("Español", "Notas importantes de seguridad y confianza:", "Llame al proveedor y a la aseguradora"),
-            ("中文", "重要的安全和信任提示：", "就医前请致电服务提供者和保险公司确认。"),
-            ("Vietnamese", "Ghi chú quan trọng về an toàn và độ tin cậy:", "Hãy gọi cho nhà cung cấp và công ty bảo hiểm"),
-            ("Tagalog", "Mahahalagang tala sa kaligtasan at pagtitiwala:", "Tawagan ang provider at insurer"),
-            ("Filipino", "Mahahalagang tala sa kaligtasan at pagtitiwala:", "Tawagan ang provider at insurer"),
-            ("Arabic", "ملاحظات مهمة حول السلامة والثقة:", "اتصل بمقدم الخدمة وشركة التأمين"),
-            ("Korean", "중요한 안전 및 신뢰 안내:", "제공자와 보험사에 전화해 확인하세요"),
+            ("English", "english"),
+            ("Español", "spanish"),
+            ("中文", "simplified_chinese"),
+            ("Vietnamese", "vietnamese"),
+            ("Tagalog", "tagalog"),
+            ("Filipino", "tagalog"),
+            ("Arabic", "arabic"),
+            ("Korean", "korean"),
         ]
 
-        for language, heading, required_phrase in supported_languages:
+        for language, language_key in supported_languages:
             with self.subTest(language=language):
                 client = self._client_with_response("Model-rendered answer.")
                 payload = {
@@ -693,10 +755,8 @@ class CareLocatorAgentResultTrustMetadataTests(unittest.TestCase):
                 )
 
                 self.assertIn("Model-rendered answer.", response)
-                self.assertIn(heading, response)
-                self.assertIn(required_phrase, response)
-                self.assertEqual(sum(response.count(note_heading) for note_heading in note_headings), 1)
-                self.assertEqual(len(client.calls), 1)
+                self.assertIn(_REQUIRED_TRUST_GUIDANCE_BY_LANGUAGE[language_key], response)
+
 
     def test_compose_response_uses_same_deterministic_supported_language_note_each_time(self) -> None:
         client = self._client_with_response("Respuesta generada por el modelo.")

@@ -130,12 +130,15 @@ class PhiNoticeLineTests(unittest.TestCase):
         self.assertIn("Social Security number", line)
         self.assertIn("phone number", line)
 
-    def test_spanish_and_chinese_have_native_copy(self):
-        self.assertIn("Seguro Social", _phi_notice_line(["ssn"], "spanish"))
-        self.assertIn("社会安全号码", _phi_notice_line(["ssn"], "simplified_chinese"))
+    def test_known_languages_have_native_copy(self):
+        from care.rendering import _DETERMINISTIC_RENDER_COPY
+
+        for key in ("spanish", "simplified_chinese", "korean", "arabic"):
+            expected_label = _DETERMINISTIC_RENDER_COPY[key]["phi_type_labels"]["ssn"]
+            self.assertIn(expected_label, _phi_notice_line(["ssn"], key))
 
     def test_unknown_language_key_falls_back_to_english(self):
-        self.assertIn("Social Security number", _phi_notice_line(["ssn"], "korean"))
+        self.assertIn("Social Security number", _phi_notice_line(["ssn"], "russian"))
 
 
 if __name__ == "__main__":

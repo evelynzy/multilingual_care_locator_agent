@@ -101,13 +101,17 @@ class RenderLocaleResolutionTests(unittest.TestCase):
         self.assertEqual(_resolved_supported_language_key("Español"), "spanish")
         self.assertEqual(_resolved_supported_language_key("中文"), "simplified_chinese")
 
-    def test_supported_but_non_render_languages_fall_back_to_english_render(self):
-        # Vietnamese/Tagalog/Arabic/Korean have localized trust guidance but no
-        # render-copy translation, so card rendering falls back to English even
-        # though the trust note is localized.
-        for alias in ("vietnamese", "Tagalog", "Arabic", "Korean"):
+    def test_all_known_languages_resolve_to_native_render(self):
+        # Every product-recognized language renders natively from the committed
+        # locale files (previously vi/tl/ar/ko fell back to the English render).
+        for alias, expected_key in (
+            ("vietnamese", "vietnamese"),
+            ("Tagalog", "tagalog"),
+            ("Arabic", "arabic"),
+            ("Korean", "korean"),
+        ):
             with self.subTest(alias=alias):
-                self.assertEqual(_resolved_supported_language_key(alias), "english")
+                self.assertEqual(_resolved_supported_language_key(alias), expected_key)
 
     def test_unsupported_language_renders_in_english(self):
         self.assertEqual(_resolved_supported_language_key("russian"), "english")

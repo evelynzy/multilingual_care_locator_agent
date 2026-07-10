@@ -159,6 +159,10 @@ def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, An
 
 
 class LanguageMixin:
+    # Set when the long-tail translation pass falls back to English;
+    # class-body default so bare reads never raise on a fresh agent.
+    last_localization_fallback: Optional[str] = None
+
     # ------------------------------------------------------------------
     def _localize_reply_via_llm(
         self,
