@@ -158,6 +158,9 @@ class CareLocatorAgent(LanguageMixin, SafetyMixin, IntentMixin, GuidanceMixin, R
         if history:
             latest_only_query = self._interpret_user_need(client, message, [])
             parsed_query = self._merge_parsed_queries(parsed_query, latest_only_query)
+            parsed_query = self._apply_conversation_language_backstop(
+                parsed_query, message, history
+            )
 
         # Notice covers only PHI found in the CURRENT message — history was
         # already noticed on the turn it arrived.

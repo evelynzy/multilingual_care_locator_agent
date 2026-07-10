@@ -94,6 +94,50 @@ def _lookup_language_alias(normalized_language: str) -> Optional[str]:
     return language_key
 
 
+def _message_has_language_signal(text: str) -> bool:
+    """A message with no letters in any script (bare ZIP, digits, punctuation)
+    carries no language signal and must not shift the conversation language."""
+    return any(unicodedata.category(ch).startswith("L") for ch in str(text or ""))
+
+
+_SCRIPT_NAME_PREFIXES = (
+    ("CJK UNIFIED", "Chinese"),
+    ("HANGUL", "Korean"),
+    ("ARABIC", "Arabic"),
+)
+
+
+def _dominant_user_script_language(texts) -> Optional[str]:
+    """Deterministic conversation-language evidence from character scripts.
+
+    Counts letter characters across the given user texts; if one non-Latin
+    script (Han/Hangul/Arabic) holds a strict majority of ALL letters, return
+    its language name. Latin-script languages are indistinguishable from
+    English at this layer, so Latin/mixed input returns None.
+    """
+    counts = {label: 0 for _, label in _SCRIPT_NAME_PREFIXES}
+    total_letters = 0
+    for text in texts or ():
+        for ch in str(text or ""):
+            if not unicodedata.category(ch).startswith("L"):
+                continue
+            total_letters += 1
+            try:
+                char_name = unicodedata.name(ch)
+            except ValueError:
+                continue
+            for prefix, label in _SCRIPT_NAME_PREFIXES:
+                if char_name.startswith(prefix):
+                    counts[label] += 1
+                    break
+    if not total_letters:
+        return None
+    label, top = max(counts.items(), key=lambda item: item[1])
+    if top * 2 > total_letters:
+        return label
+    return None
+
+
 def normalize_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     normalized_messages: List[Dict[str, Any]] = []
     for message in messages:

@@ -5,10 +5,17 @@ import json
 import logging
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Tuple
 
-from care.language import _is_unknown_response_language, normalize_chat_messages
+from care.language import (
+    _dominant_user_script_language,
+    _is_unknown_response_language,
+    _lookup_language_alias,
+    _message_has_language_signal,
+    _normalize_response_language,
+    normalize_chat_messages,
+)
 from care.privacy import fold_digits
 from provider_search.specialty_families import (
     QUERY_SPECIALTY_FAMILY_ALIASES_BY_ID,
@@ -842,6 +849,40 @@ class IntentMixin:
             return False
 
         return True
+
+    # ------------------------------------------------------------------
+    def _apply_conversation_language_backstop(
+        self,
+        query: "ParsedCareQuery",
+        message: str,
+        history: List[Dict[str, str]],
+    ) -> "ParsedCareQuery":
+        """Deterministic conversation-language override for signal-less turns.
+
+        The full-history parse can misread a conversation whose latest turn is
+        a bare ZIP (F11). When (a) the conversation is multi-turn, (b) the
+        latest message carries no language signal, and (c) the merged language
+        resolves to English/unknown, character-script evidence from the user's
+        own messages decides instead. Latin-script languages are left to the
+        parse (scripts cannot distinguish them from English).
+        """
+        if not history:
+            return query
+        if _message_has_language_signal(message):
+            return query
+        merged_language = query.response_language or query.detected_language
+        if not _is_unknown_response_language(merged_language):
+            if _lookup_language_alias(_normalize_response_language(merged_language)) != "english":
+                return query
+        user_texts = [
+            str(turn.get("content") or "")
+            for turn in history
+            if isinstance(turn, dict) and turn.get("role") == "user"
+        ] + [message]
+        dominant = _dominant_user_script_language(user_texts)
+        if dominant is None:
+            return query
+        return replace(query, detected_language=dominant, response_language=dominant)
 
     # ------------------------------------------------------------------
     def _merge_parsed_queries(
