@@ -355,7 +355,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
     def test_rank_provider_results_prioritizes_request_alignment(self) -> None:
         request = ProviderSearchRequest(
             specialties=("Primary Care",),
-            location="Pittsburgh, PA",
+            location="Denver, CO",
             insurance=("Aetna",),
             preferred_languages=("Spanish",),
             keywords=("same day",),
@@ -365,8 +365,8 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="Harmony Family Clinic",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Pittsburgh",
-            state="PA",
+            city="Denver",
+            state="CO",
             taxonomy="Primary Care",
             specialties=("Primary Care",),
             languages=("Spanish",),
@@ -389,8 +389,8 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="Northside Medical Group",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Pittsburgh",
-            state="PA",
+            city="Denver",
+            state="CO",
             taxonomy="Primary Care",
             specialties=("Primary Care",),
             languages=("English",),
@@ -605,7 +605,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="Apex Specialty Clinic",
             source_name="ClinicalTables",
             dataset="npi_org",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Clinic/Center",
             specialties=("Clinic/Center",),
@@ -616,7 +616,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="Zen Cardiology",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Cardiology",
             specialties=("Cardiology",),
@@ -662,7 +662,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="Cupertino Women's Health",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="207V00000X",
             specialties=("207V00000X",),
@@ -672,7 +672,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="Downtown Imaging Associates",
             source_name="ClinicalTables",
             dataset="npi_org",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Diagnostic Radiology",
             specialties=("Diagnostic Radiology",),
@@ -705,7 +705,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="Cupertino Gynecology Group",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="207VC0200X",
             specialties=("207VC0200X",),
@@ -715,7 +715,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="South Bay Maternal Fetal Medicine",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="207VM0101X",
             specialties=("207VM0101X",),
@@ -725,7 +725,7 @@ class ProviderSearchRankingTests(unittest.TestCase):
             name="Downtown Imaging Associates",
             source_name="ClinicalTables",
             dataset="npi_org",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Diagnostic Radiology",
             specialties=("Diagnostic Radiology",),
@@ -885,7 +885,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 "",
                 "Obstetrics & Gynecology",
                 "207V00000X",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
                 "408-555-0100",
@@ -948,7 +948,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 "",
                 "",
                 "",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
                 "",
@@ -1013,7 +1013,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 "Clinic/Center",
                 "Obstetrics & Gynecology",
                 "207V00000X",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
                 "408-555-0100",
@@ -1077,7 +1077,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 "Clinic/Center",
                 "Physician/Obstetrics & Gynecology",
                 "",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
                 "408-555-0100",
@@ -1124,7 +1124,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Apex Specialty Clinic",
             source_name="ClinicalTables",
             dataset="npi_org",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Clinic/Center",
             specialties=("Clinic/Center",),
@@ -1135,7 +1135,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Zen Women's Health",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Physician/Obstetrics & Gynecology",
             specialties=("Physician/Obstetrics & Gynecology",),
@@ -1203,7 +1203,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Zen Cardiology",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Physician/Interventional Cardiology",
             specialties=(
@@ -1269,7 +1269,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 "",
                 "Obstetrics & Gynecology",
                 "207V00000X",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
             ]],
@@ -1338,7 +1338,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 "",
                 "Obstetrics & Gynecology",
                 "207V00000X",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
             ]],
@@ -1399,7 +1399,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 "",
                 "Obstetrics & Gynecology",
                 "207V00000X",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
             ]],
@@ -1443,8 +1443,8 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Harmony Family Clinic",
             source_name="NPI Registry (individual)",
             dataset="npi_idv",
-            city="Pittsburgh",
-            state="PA",
+            city="Denver",
+            state="CO",
             taxonomy="Primary Care",
             specialties=("Primary Care",),
             languages=("Spanish",),
@@ -1455,8 +1455,8 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Downtown Walk-In",
             source_name="NPI Registry (organization)",
             dataset="npi_org",
-            city="Pittsburgh",
-            state="PA",
+            city="Denver",
+            state="CO",
             taxonomy="Urgent Care",
             specialties=("Urgent Care",),
         )
@@ -1490,7 +1490,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
         response = service.search(
             ProviderSearchRequest(
                 specialties=("Primary Care",),
-                location="Pittsburgh, PA 80202",
+                location="Denver, CO 80202",
                 insurance=("Aetna",),
                 preferred_languages=("Spanish",),
                 keywords=("same day",),
@@ -1502,17 +1502,17 @@ class ProviderSearchServiceTests(unittest.TestCase):
         first_dataset, first_request = source.calls[0]
         self.assertEqual(first_dataset, "npi_idv")
         self.assertEqual(first_request.search_terms, "Primary Care")
-        self.assertEqual(first_request.city_hint, "Pittsburgh")
-        self.assertEqual(first_request.state_hint, "PA")
+        self.assertEqual(first_request.city_hint, "Denver")
+        self.assertEqual(first_request.state_hint, "CO")
         self.assertEqual(first_request.zip_hint, "80202")
         self.assertEqual(
             first_request.query_filter,
-            "addr_practice.state:PA AND addr_practice.zip:80202*",
+            "addr_practice.state:CO AND addr_practice.zip:80202*",
         )
         self.assertEqual(first_request.limit, 4)
         third_dataset, third_request = source.calls[2]
         self.assertEqual(third_dataset, "npi_idv")
-        self.assertEqual(third_request.search_terms, "Primary Care Pittsburgh PA 80202")
+        self.assertEqual(third_request.search_terms, "Primary Care Denver CO 80202")
         self.assertEqual(third_request.query_filter, first_request.query_filter)
 
         self.assertEqual(len(response.provider_results), 1)
@@ -2038,7 +2038,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
 
         response = service.search(
             ProviderSearchRequest(
-                location="Pittsburgh, PA",
+                location="Denver, CO",
             ),
             limit=3,
         )
@@ -2046,13 +2046,13 @@ class ProviderSearchServiceTests(unittest.TestCase):
         self.assertEqual(len(source.calls), 2)
         for dataset, request in source.calls:
             self.assertEqual(dataset in {"npi_idv", "npi_org"}, True)
-            self.assertEqual(request.search_terms, "Pittsburgh, PA")
-            self.assertEqual(request.city_hint, "Pittsburgh")
-            self.assertEqual(request.state_hint, "PA")
+            self.assertEqual(request.search_terms, "Denver, CO")
+            self.assertEqual(request.city_hint, "Denver")
+            self.assertEqual(request.state_hint, "CO")
             self.assertIsNone(request.zip_hint)
             self.assertEqual(
                 request.query_filter,
-                'addr_practice.state:PA AND addr_practice.city:"Pittsburgh"',
+                'addr_practice.state:CO AND addr_practice.city:"Denver"',
             )
         self.assertEqual(len(response.provider_results), 0)
         self.assertEqual(response.search_trace.total_candidates, 0)
@@ -2094,7 +2094,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 name="Noisy Clinician 0",
                 source_name="ClinicalTables",
                 dataset="npi_idv",
-                city="Santa Clara",
+                city="Seattle",
                 state="CA",
                 specialties=(),
                 taxonomy=None,
@@ -2105,7 +2105,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Cupertino OB/GYN Associates",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),
@@ -2151,7 +2151,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
                 name="Noisy Clinician 0",
                 source_name="ClinicalTables",
                 dataset="npi_idv",
-                city="Santa Clara",
+                city="Seattle",
                 state="CA",
                 specialties=(),
                 taxonomy=None,
@@ -2162,7 +2162,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Cupertino OB/GYN Associates",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),
@@ -2242,7 +2242,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Cupertino OB/GYN Associates",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),
@@ -2403,10 +2403,10 @@ class ProviderSearchServiceTests(unittest.TestCase):
     ) -> None:
         unrelated_provider = build_canonical_provider(
             provider_id="provider-radiology",
-            name="Santa Clara Imaging Group",
+            name="Seattle Imaging Group",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Diagnostic Radiology",
             specialties=("Diagnostic Radiology",),
@@ -2416,7 +2416,7 @@ class ProviderSearchServiceTests(unittest.TestCase):
             name="Cupertino OB/GYN Associates",
             source_name="ClinicalTables",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Obstetrics & Gynecology",
             specialties=("Obstetrics & Gynecology",),

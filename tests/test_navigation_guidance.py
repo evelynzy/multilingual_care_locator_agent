@@ -807,9 +807,9 @@ class CareNavigationGuidanceTests(unittest.TestCase):
         query = ParsedCareQuery(
             detected_language="English",
             response_language="English",
-            summary="dermatology follow-up in Pittsburgh",
+            summary="dermatology follow-up in Denver",
             medical_need=True,
-            location="Pittsburgh, PA",
+            location="Denver, CO",
             specialties=["Dermatology"],
             insurance=[],
             preferred_languages=[],
@@ -821,7 +821,7 @@ class CareNavigationGuidanceTests(unittest.TestCase):
 
         guidance = self.agent._build_navigation_guidance(
             query,
-            "dermatology follow-up in Pittsburgh, PA",
+            "dermatology follow-up in Denver, CO",
         )
 
         self.assertEqual(guidance["mode"], "search")

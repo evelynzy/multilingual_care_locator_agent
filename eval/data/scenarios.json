@@ -13,7 +13,7 @@
       "dimension": "anchor",
       "gold": {
         "expected_specialty": "cardiology",
-        "expected_state": "CA",
+        "expected_state": "WA",
         "expect_followup": false,
         "expect_nonzero_providers": true,
         "expect_emergency_routing": false,
@@ -142,7 +142,7 @@
       "variants": {
         "en": {
           "turns": [
-            "mental health 98101"
+            "mental health 77002"
           ],
           "source": "english_seed",
           "verification_status": "human_verified",
@@ -151,7 +151,7 @@
         },
         "zh": {
           "turns": [
-            "心理健康 98101"
+            "心理健康 77002"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -160,7 +160,7 @@
         },
         "es": {
           "turns": [
-            "salud mental 98101"
+            "salud mental 77002"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -169,7 +169,7 @@
         },
         "ar": {
           "turns": [
-            "الصحة العقلية 98101"
+            "الصحة العقلية 77002"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -178,7 +178,7 @@
         },
         "ko": {
           "turns": [
-            "정신 건강 98101"
+            "정신 건강 77002"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -193,7 +193,7 @@
       "dimension": "anchor",
       "gold": {
         "expected_specialty": "gyn",
-        "expected_state": "CA",
+        "expected_state": "GA",
         "expect_followup": false,
         "expect_nonzero_providers": true,
         "expect_emergency_routing": false,
@@ -202,7 +202,7 @@
       "variants": {
         "en": {
           "turns": [
-            "obstetrics gynecology 98101"
+            "obstetrics gynecology 30303"
           ],
           "source": "english_seed",
           "verification_status": "human_verified",
@@ -211,7 +211,7 @@
         },
         "zh": {
           "turns": [
-            "妇产科 98101"
+            "妇产科 30303"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -220,7 +220,7 @@
         },
         "es": {
           "turns": [
-            "obstetricia y ginecología 98101"
+            "obstetricia y ginecología 30303"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -229,7 +229,7 @@
         },
         "ar": {
           "turns": [
-            "الولادة والتوليد 98101"
+            "الولادة والتوليد 30303"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -238,7 +238,7 @@
         },
         "ko": {
           "turns": [
-            "산부인과 98101"
+            "산부인과 30303"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -262,7 +262,7 @@
       "variants": {
         "en": {
           "turns": [
-            "severe chest pain and shortness of breath 98101"
+            "severe chest pain and shortness of breath 60614"
           ],
           "source": "english_seed",
           "verification_status": "human_verified",
@@ -271,7 +271,7 @@
         },
         "zh": {
           "turns": [
-            "严重胸痛和呼吸困难 98101"
+            "严重胸痛和呼吸困难 60614"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -280,7 +280,7 @@
         },
         "es": {
           "turns": [
-            "dolor de pecho severo y dificultad para respirar 98101"
+            "dolor de pecho severo y dificultad para respirar 60614"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -289,7 +289,7 @@
         },
         "ar": {
           "turns": [
-            "ألم صدري شديد وضيق في التنفس 98101"
+            "ألم صدري شديد وضيق في التنفس 60614"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -298,7 +298,7 @@
         },
         "ko": {
           "turns": [
-            "심각한 가슴 통증과 숨-catching 98101"
+            "심각한 가슴 통증과 숨-catching 60614"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -613,7 +613,7 @@
       "dimension": "colloquial-condition",
       "gold": {
         "expected_specialty": "cardiology",
-        "expected_state": "CA",
+        "expected_state": "CO",
         "expect_followup": false,
         "expect_nonzero_providers": true,
         "expect_emergency_routing": false,
@@ -622,7 +622,7 @@
       "variants": {
         "en": {
           "turns": [
-            "my heart keeps skipping beats 98101"
+            "my heart keeps skipping beats 80202"
           ],
           "source": "english_seed",
           "verification_status": "human_verified",
@@ -631,7 +631,7 @@
         },
         "zh": {
           "turns": [
-            "我的心老是跳过一些节拍 98101"
+            "我的心老是跳过一些节拍 80202"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -640,7 +640,7 @@
         },
         "es": {
           "turns": [
-            "mi corazón sigue saltándose latidos 98101"
+            "mi corazón sigue saltándose latidos 80202"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -649,7 +649,7 @@
         },
         "ar": {
           "turns": [
-            "قلبي يتخطى نبضات 98101"
+            "قلبي يتخطى نبضات 80202"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -658,7 +658,7 @@
         },
         "ko": {
           "turns": [
-            "제 심장이 계속 박동을 놓치는 것 같아요 98101"
+            "제 심장이 계속 박동을 놓치는 것 같아요 80202"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -793,7 +793,7 @@
       "dimension": "followup-in-language",
       "gold": {
         "expected_specialty": "cardiology",
-        "expected_state": "CA",
+        "expected_state": "PA",
         "expect_followup": true,
         "expect_nonzero_providers": true,
         "expect_emergency_routing": false,
@@ -803,7 +803,7 @@
         "en": {
           "turns": [
             "I need a specialist",
-            "cardiology 98101"
+            "cardiology 19103"
           ],
           "source": "english_seed",
           "verification_status": "human_verified",
@@ -813,7 +813,7 @@
         "zh": {
           "turns": [
             "我需要一个专家",
-            "心脏病学 98101"
+            "心脏病学 19103"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -823,7 +823,7 @@
         "es": {
           "turns": [
             "Necesito un especialista",
-            "cardiología 98101"
+            "cardiología 19103"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -833,7 +833,7 @@
         "ar": {
           "turns": [
             "أحتاج إلى مختص",
-            "القلب 98101"
+            "القلب 19103"
           ],
           "source": "mt",
           "verification_status": "mt_only",
@@ -843,7 +843,7 @@
         "ko": {
           "turns": [
             "전문가가 필요합니다",
-            "심장병 98101"
+            "심장병 19103"
           ],
           "source": "mt",
           "verification_status": "mt_only",

@@ -25,7 +25,7 @@ def _live_v3_obgyn_row(
         "",
         "",
         "",
-        "Santa Clara",
+        "Seattle",
         "CA",
         "98101",
         "",
@@ -206,7 +206,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
                 "Harmony Family Clinic",
                 "1619271780",
                 "Family Medicine",
-                "123 Main St, Pittsburgh, PA 80202",
+                "123 Main St, Denver, CO 80202",
                 "412-555-0100",
             ]],
         ]
@@ -232,7 +232,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         provider = result.providers[0]
         self.assertEqual(provider.provider_id, "1619271780")
         self.assertEqual(provider.name, "Harmony Family Clinic")
-        self.assertEqual(provider.location_summary, "123 Main St, Pittsburgh, PA 80202")
+        self.assertEqual(provider.location_summary, "123 Main St, Denver, CO 80202")
         self.assertEqual(provider.phone, "412-555-0100")
         self.assertEqual(provider.taxonomy, "Family Medicine")
         self.assertEqual(provider.source, "NPI Registry (individual)")
@@ -265,7 +265,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
                 "",
                 "Obstetrics & Gynecology",
                 "207V00000X",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
             ]],
@@ -316,7 +316,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         self.assertEqual(provider.provider_id, "1619271780")
         self.assertEqual(provider.name, "Cupertino OB/GYN Associates")
         self.assertEqual(provider.taxonomy, "Obstetrics & Gynecology")
-        self.assertIn("Santa Clara", provider.location_summary or "")
+        self.assertIn("Seattle", provider.location_summary or "")
         self.assertIn("98101", provider.location_summary or "")
         self.assertEqual(provider.phone, "408-555-0100")
         self.assertIn("English", provider.languages)
@@ -346,7 +346,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
                 "Clinic/Center",
                 "Obstetrics & Gynecology",
                 "207V00000X",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
             ]],
@@ -432,7 +432,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
                 "Harmony Group Practice",
                 "1619271780",
                 "Ann",
-                "Santa Clara",
+                "Seattle",
                 "CA",
                 "98101",
             ]],
@@ -452,7 +452,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
         provider = result.providers[0]
         self.assertEqual(provider.name, "Harmony Group Practice")
         self.assertIsNone(provider.taxonomy)
-        self.assertIn("Santa Clara", provider.location_summary or "")
+        self.assertIn("Seattle", provider.location_summary or "")
         self.assertNotIn("Ann", provider.specialties)
 
     def test_search_dataset_applies_location_hints(self) -> None:
@@ -462,7 +462,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
             1,
             ["display row"],
             ["name.full", "NPI", "provider_type", "addr_practice.city", "addr_practice.state"],
-            [["Harmony Family Clinic", "1619271780", "Family Medicine", "Pittsburgh", "PA"]],
+            [["Harmony Family Clinic", "1619271780", "Family Medicine", "Denver", "PA"]],
         ]
         response.raise_for_status.return_value = None
 
@@ -502,7 +502,7 @@ class ClinicalTablesSourceTests(unittest.TestCase):
             1,
             ["display row"],
             ["name.full", "NPI", "provider_type", "addr_practice.city", "addr_practice.state"],
-            [["Harmony Family Clinic", "", "Family Medicine", "Pittsburgh", "PA"]],
+            [["Harmony Family Clinic", "", "Family Medicine", "Denver", "PA"]],
         ]
         response.raise_for_status.return_value = None
 

@@ -124,10 +124,10 @@ class CareLocatorAgentFollowUpStateTests(unittest.TestCase):
     ) -> None:
         pediatrics_provider = build_canonical_provider(
             provider_id="provider-pediatrics-followup",
-            name="Santa Clara Pediatrics",
+            name="Seattle Pediatrics",
             source_name="NPI Registry (individual)",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Pediatrics",
             specialties=("Pediatrics",),
@@ -379,7 +379,7 @@ class CareLocatorAgentFollowUpStateTests(unittest.TestCase):
             name="South Bay Cardiology",
             source_name="NPI Registry (individual)",
             dataset="npi_idv",
-            city="Santa Clara",
+            city="Seattle",
             state="CA",
             taxonomy="Cardiology",
             specialties=("Cardiology",),

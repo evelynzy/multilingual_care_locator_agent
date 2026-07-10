@@ -51,9 +51,9 @@ class TraceSerializationTests(unittest.TestCase):
             parsed_urgency=None, parsed_care_setting=None, parsed_needs_clarification=False,
             searched=True, request_specialties=["cardiology"], request_preferred_languages=[],
             provider_states=["CA"], provider_count=1, html_has_card=True, emergency_routed=False,
-            rendered_text="1. Dr. Heart — Cardiology — Santa Clara, CA",
+            rendered_text="1. Dr. Heart — Cardiology — Seattle, CA",
             provider_details=[{"name": "Dr. Heart", "specialties": ["Cardiology"],
-                               "languages": ["Spanish"], "state": "CA", "city": "Santa Clara"}],
+                               "languages": ["Spanish"], "state": "CA", "city": "Seattle"}],
         )
         trace = Trace("s01", "en", [turn], None)
         restored = trace_from_dict(trace_to_dict(trace))
@@ -203,8 +203,8 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
         from eval.trace import _provider_state
 
         # ClinicalTables leaves .state blank; state must be parsed from the address.
-        blank = _FakeProvider(state=None, address="710 LAWRENCE EXPY, SANTA CLARA, CA 98101")
-        self.assertEqual(_provider_state(blank), "CA")
+        blank = _FakeProvider(state=None, address="1 MAIN ST, SEATTLE, WA 98101")
+        self.assertEqual(_provider_state(blank), "WA")
         # A populated structured field wins and is upper-cased.
         structured = _FakeProvider(state="ny", address=None)
         self.assertEqual(_provider_state(structured), "NY")
@@ -215,12 +215,12 @@ class TraceCaptureAndCacheTests(unittest.TestCase):
         from eval.trace import _provider_state
 
         # NPPES-enriched records embed the ZIP+4 UNHYPHENATED in the address
-        # ("CA 981015173"), which the old regex could not terminate on, and
+        # ("WA 981011234"), which the old regex could not terminate on, and
         # carry the state in the structured raw field. Both must work — the
         # app's real (enriched) service is what the harness measures now.
-        enriched = _FakeProvider(state=None, address="710 LAWRENCE EXPY, SANTA CLARA, CA 981015173")
-        enriched.raw = {"addr_practice.state": "CA"}
-        self.assertEqual(_provider_state(enriched), "CA")
+        enriched = _FakeProvider(state=None, address="1 MAIN ST, SEATTLE, WA 981011234")
+        enriched.raw = {"addr_practice.state": "WA"}
+        self.assertEqual(_provider_state(enriched), "WA")
 
         # Raw structured field alone (no parseable address) is sufficient.
         raw_only = _FakeProvider(state=None, address=None)

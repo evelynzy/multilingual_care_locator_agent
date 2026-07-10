@@ -24,17 +24,17 @@ class NPPESSourceTests(unittest.TestCase):
 
     def test_format_location_compacts_fields(self) -> None:
         address = {
-            "address_1": "200 Lothrop St",
+            "address_1": "200 Main St",
             "address_2": "Suite 123",
-            "city": "Pittsburgh",
-            "state": "PA",
+            "city": "Denver",
+            "state": "CO",
             "postal_code": "80202-2582",
             "country_name": "United States",
         }
 
         location = NPPESSource.format_location(address)
 
-        self.assertEqual(location, "200 Lothrop St, Suite 123, Pittsburgh, PA 80202-2582")
+        self.assertEqual(location, "200 Main St, Suite 123, Denver, CO 80202-2582")
 
     def test_parse_payload_normalizes_lookup_entry(self) -> None:
         source = NPPESSource()
@@ -45,9 +45,9 @@ class NPPESSourceTests(unittest.TestCase):
                         {"address_purpose": "MAILING", "telephone_number": "000-000-0000"},
                         {
                             "address_purpose": "LOCATION",
-                            "address_1": "200 Lothrop St",
-                            "city": "Pittsburgh",
-                            "state": "PA",
+                            "address_1": "200 Main St",
+                            "city": "Denver",
+                            "state": "CO",
                             "postal_code": "80202-2582",
                             "telephone_number": "412-605-3019",
                         },
@@ -79,9 +79,9 @@ class NPPESSourceTests(unittest.TestCase):
                     "addresses": [
                         {
                             "address_purpose": "LOCATION",
-                            "address_1": "200 Lothrop St",
-                            "city": "Pittsburgh",
-                            "state": "PA",
+                            "address_1": "200 Main St",
+                            "city": "Denver",
+                            "state": "CO",
                             "postal_code": "80202-2582",
                             "telephone_number": "412-605-3019",
                         },
@@ -114,7 +114,7 @@ class NPPESSourceTests(unittest.TestCase):
 
         enriched = source.enrich_provider(provider)
 
-        self.assertEqual(enriched.location_summary, "200 Lothrop St, Pittsburgh, PA 80202-2582")
+        self.assertEqual(enriched.location_summary, "200 Main St, Denver, CO 80202-2582")
         self.assertEqual(enriched.phone, "412-605-3019")
         self.assertEqual(enriched.taxonomy, "Urology")
         self.assertIn("nppes", enriched.raw)

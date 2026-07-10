@@ -200,7 +200,7 @@ candidates carried too little taxonomy evidence for the ranking gate and every
 such cell silently zeroed. A second, subtler instance sat one layer deeper: the
 trace capture's state parser assumed the bare source's address format and
 returned empty states for every NPPES-enriched record (enriched addresses embed
-the ZIP+4 unhyphenated — `CA 981015173` — which the old regex could not
+the ZIP+4 unhyphenated — `CA 981011234` — which the old regex could not
 terminate on), mass-failing the `state` metric including on English control
 cells. The gap dated to Milestone 1 and stayed invisible for one reason: no
 earlier scenario exercised a code path where the two configurations differ.

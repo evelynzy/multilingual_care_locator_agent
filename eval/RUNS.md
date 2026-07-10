@@ -114,7 +114,7 @@ bare `ProviderSearchService` — no NPPES enrichment, no YAML dataset config —
 configuration the app never runs**, present since Milestone 1 and invisible until
 these scenarios exercised the differing path. One layer deeper, the trace capture's
 state parser assumed the bare source's address format and returned empty states for
-every NPPES-enriched record (their ZIP+4 is unhyphenated: `CA 981015173`). Both
+every NPPES-enriched record (their ZIP+4 is unhyphenated: `CA 981011234`). Both
 fixed and pinned by tests (`build_matrix_agent`, `_provider_state`); the matrix now
 measures the app's real service. **Consequence for history: the 2026-07-01/02
 baselines were measured on the bare configuration — all deltas below are
