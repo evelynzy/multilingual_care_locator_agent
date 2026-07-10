@@ -102,6 +102,10 @@ def _message_has_language_signal(text: str) -> bool:
 
 _SCRIPT_NAME_PREFIXES = (
     ("CJK UNIFIED", "Chinese"),
+    # Compatibility ideographs (U+F900-FAFF) are also Han: without this
+    # prefix they would count toward the letter total but credit no bucket,
+    # diluting the strict-majority threshold.
+    ("CJK COMPATIBILITY IDEOGRAPH", "Chinese"),
     ("HANGUL", "Korean"),
     ("ARABIC", "Arabic"),
 )

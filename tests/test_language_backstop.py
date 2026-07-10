@@ -40,6 +40,14 @@ class DominantScriptTests(unittest.TestCase):
         self.assertIsNone(_dominant_user_script_language([]))
         self.assertIsNone(_dominant_user_script_language(["94110"]))
 
+    def test_cjk_compatibility_ideographs_count_as_chinese(self):
+        # chr(0xF914) is a CJK COMPATIBILITY IDEOGRAPH (a source literal
+        # can silently normalize to the unified codepoint). Two of them
+        # against two Latin letters (3v2): Chinese wins only if compatibility
+        # ideographs credit the Han bucket instead of diluting the total.
+        text = chr(0xF914) * 3 + "ab"
+        self.assertEqual(_dominant_user_script_language([text]), "Chinese")
+
 
 class ConversationLanguageBackstopTests(unittest.TestCase):
     def setUp(self):
