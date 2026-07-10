@@ -857,8 +857,13 @@ class IntentMixin:
                     merged.append(item)
             return merged
 
-        detected_language = _prefer(latest.detected_language, full.detected_language)
-        response_language = _prefer(latest.response_language, full.response_language)
+        # Language is a conversation-level attribute: the full-history parse
+        # sees every turn (including a genuine language switch), while the
+        # latest-only parse of a low-information turn ("98101", "ok") reads as
+        # English and used to clobber the conversation language (the s15
+        # multi-turn English-rendering failure).
+        detected_language = _prefer(full.detected_language, latest.detected_language)
+        response_language = _prefer(full.response_language, latest.response_language)
 
         latest_needs_specialty_clarification = self._requires_specialty_clarification(
             latest.follow_up_focus

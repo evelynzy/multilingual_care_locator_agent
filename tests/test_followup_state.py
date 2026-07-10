@@ -540,5 +540,43 @@ class CareLocatorAgentFollowUpStateTests(unittest.TestCase):
         )
 
 
+def _lang_query(detected, response):
+    return ParsedCareQuery(
+        detected_language=detected, response_language=response,
+        summary="care request", medical_need=True, location="98101",
+        specialties=["cardiology"], insurance=[], preferred_languages=[],
+        keywords=[], patient_context=None, care_setting=None,
+        needs_clarification=False, follow_up_focus=[],
+    )
+
+
+class MergeLanguageSemanticsTests(unittest.TestCase):
+    """Language is a conversation-level attribute: the full-history parse sees
+    every turn, so it is authoritative; a latest-only parse of a
+    low-information turn ("98101", "ok") must not clobber it (the s15
+    multi-turn English-rendering failure)."""
+
+    def setUp(self):
+        self.agent = CareLocatorAgent(provider_search_service=Mock())
+
+    def test_merge_keeps_conversation_language_on_low_information_turn(self):
+        merged = self.agent._merge_parsed_queries(
+            _lang_query("Spanish", "Spanish"), _lang_query("English", "English"))
+        self.assertEqual(merged.detected_language, "Spanish")
+        self.assertEqual(merged.response_language, "Spanish")
+
+    def test_merge_full_history_language_wins_when_parses_disagree(self):
+        merged = self.agent._merge_parsed_queries(
+            _lang_query("English", "English"), _lang_query("Spanish", "Spanish"))
+        self.assertEqual(merged.detected_language, "English")
+        self.assertEqual(merged.response_language, "English")
+
+    def test_merge_falls_back_to_latest_when_full_language_unknown(self):
+        merged = self.agent._merge_parsed_queries(
+            _lang_query("unknown", "unknown"), _lang_query("Korean", "Korean"))
+        self.assertEqual(merged.detected_language, "Korean")
+        self.assertEqual(merged.response_language, "Korean")
+
+
 if __name__ == "__main__":
     unittest.main()
