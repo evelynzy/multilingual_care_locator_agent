@@ -8,7 +8,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from care.language import normalize_chat_messages
+from care.language import _is_unknown_response_language, normalize_chat_messages
 from care.privacy import fold_digits
 from provider_search.specialty_families import (
     QUERY_SPECIALTY_FAMILY_ALIASES_BY_ID,
@@ -850,6 +850,12 @@ class IntentMixin:
         def _prefer(primary: Optional[str], fallback: Optional[str]) -> Optional[str]:
             return primary if primary not in (None, "", "unknown") else fallback
 
+        def _prefer_language(primary: Optional[str], fallback: Optional[str]) -> Optional[str]:
+            # Language fields judge absence via _is_unknown_response_language
+            # (case/variant tolerant: "Unknown", "N/A", "undetected", ...) —
+            # the model does not spell its sentinel consistently.
+            return fallback if _is_unknown_response_language(primary) else primary
+
         def _merge_lists(primary: List[str], fallback: List[str]) -> List[str]:
             merged: List[str] = []
             for item in primary + fallback:
@@ -862,8 +868,8 @@ class IntentMixin:
         # latest-only parse of a low-information turn ("98101", "ok") reads as
         # English and used to clobber the conversation language (the s15
         # multi-turn English-rendering failure).
-        detected_language = _prefer(full.detected_language, latest.detected_language)
-        response_language = _prefer(full.response_language, latest.response_language)
+        detected_language = _prefer_language(full.detected_language, latest.detected_language)
+        response_language = _prefer_language(full.response_language, latest.response_language)
 
         latest_needs_specialty_clarification = self._requires_specialty_clarification(
             latest.follow_up_focus

@@ -577,6 +577,18 @@ class MergeLanguageSemanticsTests(unittest.TestCase):
         self.assertEqual(merged.detected_language, "Korean")
         self.assertEqual(merged.response_language, "Korean")
 
+    def test_merge_falls_back_when_full_language_is_cased_sentinel(self):
+        merged = self.agent._merge_parsed_queries(
+            _lang_query("Unknown", "N/A"), _lang_query("Korean", "Korean"))
+        self.assertEqual(merged.detected_language, "Korean")
+        self.assertEqual(merged.response_language, "Korean")
+
+    def test_merge_keeps_full_language_over_empty_latest(self):
+        merged = self.agent._merge_parsed_queries(
+            _lang_query("Arabic", "Arabic"), _lang_query("", ""))
+        self.assertEqual(merged.detected_language, "Arabic")
+        self.assertEqual(merged.response_language, "Arabic")
+
 
 if __name__ == "__main__":
     unittest.main()
