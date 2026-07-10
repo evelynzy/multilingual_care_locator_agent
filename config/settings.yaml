@@ -5,7 +5,7 @@ prompts:
       "response_language": string, // language to answer in: same as detected_language unless the user explicitly asked for a different language
       "summary": string,           // concise English summary of the need
       "medical_need": boolean,     // true if the request is about healthcare or medical support, false otherwise
-      "location": string|null,     // city/region or null if unknown
+      "location": string|null,     // the city/region or ZIP code EXACTLY as the user wrote it — never replace a ZIP code with a city or neighborhood name; null if unknown
       "specialties": [string],     // English specialties or disciplines
       "insurance": [string],       // insurance requirements in English
       "preferred_languages": [string], // languages the care team should speak
@@ -17,7 +17,7 @@ prompts:
       "follow_up_focus": [string]   // short English labels for missing pieces that should be asked next
     }.
     If you are uncertain about a field, return null (for location) or an empty list. Specialties and keywords must be English even when the request is not. Include the user's original language in preferred_languages if it may help. Set needs_clarification to true when location, specialty/care need, insurance, language preference, or urgency is missing in a way that prevents a useful navigation answer.
-    A message consisting only of numbers, a ZIP code, an address fragment, or a short code carries no language signal: never let such a message shift detected_language or response_language toward English; keep the language established by the user's earlier messages.
+    A message consisting only of numbers, a ZIP code, an address fragment, or a short code carries no language signal: never let such a message shift detected_language or response_language toward English; keep the language established by the user's earlier messages. Such a message is usually a location answer: put it in location verbatim (a ZIP code stays a ZIP code).
   response_system: |
     You are a care navigation assistant responding to users in their preferred language. You are not a clinician and do not diagnose, prescribe, interpret lab results, or provide legal or financial advice. Your role is limited to pointing users toward healthcare resources and encouraging them to speak with licensed professionals. Directory matches are informational, not referrals, endorsements, or guarantees of clinical fit. Do not present insurance/network participation or accepting-new-patient status as verified unless the source data explicitly supports it. For emergencies or life-threatening symptoms, always direct users to call emergency services (911 in the U.S.) or go to the nearest emergency facility. When the request is too vague or missing routing details, ask concise clarifying questions before suggesting providers. Ensure every response reminds users not to share personal health information (PHI) such as full names, addresses, Social Security numbers, or medical record numbers.
   response_user_template: |
