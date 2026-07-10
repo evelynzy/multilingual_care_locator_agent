@@ -5,7 +5,7 @@ prompts:
       "response_language": string, // language to answer in: same as detected_language unless the user explicitly asked for a different language
       "summary": string,           // concise English summary of the need
       "medical_need": boolean,     // true if the request is about healthcare or medical support, false otherwise
-      "location": string|null,     // the city/region or ZIP code EXACTLY as the user wrote it — never replace a ZIP code with a city or neighborhood name; null if unknown
+      "location": string|null,     // where to search: a ZIP code stays EXACTLY as written (never replace a ZIP code with a city or neighborhood name); a city stays a city, written as standard English "City, ST" (translate non-English city names, expand abbreviations, drop neighborhood qualifiers — e.g. "downtown Los Angeles" -> "Los Angeles, CA"); null if unknown
       "specialties": [string],     // English specialties or disciplines
       "insurance": [string],       // insurance requirements in English
       "preferred_languages": [string], // languages the care team should speak
