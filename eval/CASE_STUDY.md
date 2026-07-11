@@ -19,6 +19,7 @@ regressions and one broken infrastructure assumption) documented as it happened.
 | Arabic−English gap | **−24 pts** | −12 | −19 | **−5 pts** |
 | McNemar p (ar vs en) | **0.002** | 0.0625 | — | **0.69** |
 | Judge dimensions (all languages) | n/a | mixed | mixed | **100% on all four** |
+| Multi-turn language stability | — | — | bistable cell | **40/40 fresh captures localized** |
 
 Five takeaways (each expanded in the body):
 
@@ -34,21 +35,21 @@ Five takeaways (each expanded in the body):
    claims were proven by intervention (same request, one variable changed), not
    by eyeballing grids. [§2](#2-method), [§4](#4-methodology-lessons-what-the-harness-caught)
 3. **The judge is validated, then honestly bounded.** An independent LLM judge
-   was checked against blinded human labels twice: once catching a real
-   calibration divergence (κ = 0 on faithfulness — a rubric lesson, not noise),
+   was checked against human labels twice (the second round fully blinded):
+   once catching a real calibration divergence (κ = 0 on faithfulness — a rubric lesson, not noise),
    once unanimous with the human — which I report as *corroboration, not
    discrimination*, because a snapshot with no failures cannot test a judge's
-   ability to catch them. [§4d](#d-the-judge-arc-validate-then-bound-what-validation-can-say)
+   ability to catch them. [§4d](#d-the-judge-arc--validate-then-bound-what-validation-can-say)
 4. **The harness caught its own mistakes — that is the point of gates.** An
    English-parity gate turned two regressions introduced by my own prompt edits
    into same-day diagnoses, and repeated sampling exposed that "temperature 0"
    is not deterministic on a routed serving stack — after which I corrected my
-   own published wording, append-only. [§4b](#b-f12-the-gate-that-caught-me-twice), [§4c](#c-f14-temperature-0-is-a-sampling-distribution-here)
+   own published wording, append-only. [§4b](#b-f12--the-gate-that-caught-me-twice), [§4c](#c-f14--temperature-0-is-a-sampling-distribution-here)
 5. **Fairness is engineered, not rented.** The gap closed mainly by moving
    language handling *out* of the model: curated taxonomy maps, committed locale
    files with disclosed machine translation, a deterministic script backstop,
    and an explicit location contract. Those guarantees hold regardless of which
-   model sits in front. [§5](#5-fairness-engineering-dont-rent-it-from-the-model)
+   model sits in front. [§5](#5-fairness-engineering--dont-rent-it-from-the-model)
 
 *Skills exercised: evaluation harness design, counterfactual layer attribution,
 LLM-judge validation with Cohen's κ and blinded labeling, paired statistics
@@ -89,8 +90,8 @@ query, everything downstream (search, ranking, API) is English and
 
 **English as control.** Every scenario runs in English too. A failure that
 reproduces in the English control is an app-quality bug, not a fairness signal
-— the control *pre-localizes* it. Two scenario clusters (ambiguous colloquial
-queries) fail in every language including English; a naive reading of the
+— the control *pre-localizes* it. One failure class — two ambiguous-colloquial-query scenarios — fails in
+every language including English; a naive reading of the
 multilingual grid would have blamed translation.
 
 **Attribution rule (English-pivot invariant):** if a non-English cell produces
@@ -98,8 +99,8 @@ the *same English intent* as its English twin but a *different result*, the
 divergence must be upstream in the parse (A1), because B and C are
 language-invariant. Where it mattered, this observational rule was upgraded to
 **counterfactual proof**: replay the identical request against two service
-builds (harness fidelity, [§4a](#a-f10-the-harness-measured-a-service-the-app-never-runs)), or the identical
-input against two prompt versions ([§4b](#b-f12-the-gate-that-caught-me-twice)).
+builds (harness fidelity, [§4a](#a-f10--the-harness-measured-a-service-the-app-never-runs)), or the identical
+input against two prompt versions ([§4b](#b-f12--the-gate-that-caught-me-twice)).
 
 **Scoring, two tiers.** Deterministic checks against per-scenario gold labels
 (specialty resolved, provider in the right state, follow-up asked, nonzero
@@ -107,14 +108,15 @@ results, emergency routed, language preference handled, PHI redacted), plus an
 independent LLM judge (a different model lineage from the system under test)
 scoring each rendered reply on four binary dimensions — helpfulness, safety,
 faithfulness, language-appropriateness. The judge is *validated, not trusted*:
-blinded human labeling with strict ingest and Cohen's κ, twice
-([§4d](#d-the-judge-arc-validate-then-bound-what-validation-can-say)).
+human labeling with strict ingest and Cohen's κ, twice — the second round fully
+blinded
+([§4d](#d-the-judge-arc--validate-then-bound-what-validation-can-say)).
 
 **Repeated sampling, not single captures.** Late in the project I proved that
 temperature-0 calls are not deterministic on the routed serving stack
 (`eval/FINDINGS.md` F14). Since then, stability claims require N-of-M repeated
 gates (the multi-turn language fix shipped against a 20-of-20 fresh-capture
-gate, twice), and single-capture cells carry an implicit serving-variance error
+gate, twice — 40/40 in total), and single-capture cells carry an implicit serving-variance error
 bar.
 
 ## 3. Results — from a real gap to a residual within noise
@@ -147,17 +149,29 @@ effective sample is closer to 15 scenarios than 42 checks; resampling is by
 scenario):
 
 ```
-2026-07-01 baseline:
+run: eval/runs/2026-07-01-multilingual-15x5.jsonl
 lang  pairs  b(en+/L-)  c(en-/L+)  McNemar-p  gap      95% cluster CI
 ar       42         10          0     0.0020   -23.8%  [ -43.2%,   -7.3%]
-zh       42          4          0     0.1250    -9.5%  [ -23.8%,   +0.0%]
+es       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
 ko       42          3          0     0.2500    -7.1%  [ -17.9%,   +0.0%]
-es       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
+zh       42          4          0     0.1250    -9.5%  [ -23.8%,   +0.0%]
+```
 
-v4 (current):
-ar       42          4          2     0.6875    -4.8%  [ -23.3%,  +11.9%]
-ko       42          1          0     1.0000    -2.4%  [  -7.3%,   +0.0%]
+```
+run: eval/runs/2026-07-09-multilingual-judged-v2.jsonl
+lang  pairs  b(en+/L-)  c(en-/L+)  McNemar-p  gap      95% cluster CI
+ar       42          5          0     0.0625   -11.9%  [ -25.6%,   +0.0%]
 es       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
+ko       42          8          2     0.1094   -14.3%  [ -33.3%,   +5.4%]
+zh       42          4          0     0.1250    -9.5%  [ -23.8%,   +0.0%]
+```
+
+```
+run: eval/runs/2026-07-10-multilingual-judged-v4.jsonl
+lang  pairs  b(en+/L-)  c(en-/L+)  McNemar-p  gap      95% cluster CI
+ar       42          4          2     0.6875    -4.8%  [ -23.3%,  +11.9%]
+es       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
+ko       42          1          0     1.0000    -2.4%  [  -7.3%,   +0.0%]
 zh       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
 ```
 
@@ -168,10 +182,12 @@ concordant with English — literally zero discordant checks — and the Arabic
 residual (4 vs 2 discordant, p = 0.69) cannot be distinguished from zero.
 **Power statement:** at this sample size (42 paired checks in ~15 correlated
 clusters per language), the instrument reliably detects gaps of the baseline's
-magnitude (~20+ points) and cannot certify anything below roughly ±10 points —
-so "not significant" here must be read as "below this instrument's resolution,"
-never as "proven equal." Certifying the residual would take a several-fold
-larger scenario set; that is a stated limitation, not a footnote.
+magnitude — and its detection floor is demonstrated empirically by the v2 run:
+an 11.9-point Arabic gap (5-vs-0 discordance) already lands at p = 0.0625,
+just short of significance. So gaps around ten points sit at the edge of this
+instrument's resolution, and "not significant" must be read as "below the
+resolution," never as "proven equal." Certifying the residual would take a
+several-fold larger scenario set; that is a stated limitation, not a footnote.
 
 ### What moved the numbers (fix attribution)
 
@@ -179,7 +195,7 @@ Each measured movement traces to a numbered finding in `eval/FINDINGS.md`:
 
 | movement | cause (finding) |
 |---|---|
-| "primary care" and 7 specialty families returned zero providers | F1/F5 — curated umbrella-taxonomy maps (Layer B) |
+| "primary care" and at least seven specialty families returned zero providers | F1/F5 — curated umbrella-taxonomy maps (Layer B) |
 | Arabic-Indic digits (`٩٤١١٠`) unusable end-to-end | F9 — length-preserving Unicode digit folding at the input seam |
 | Language-concordance requests silently unmet | F6 — explicit disclosure line (judge faithfulness flipped 10/10) |
 | Non-es/zh replies fell back to English wrappers | F8 + locale pipeline — 6 committed locale files generated from English masters, machine translation disclosed, visible "auto-translated" mark |
@@ -214,7 +230,8 @@ While shipping the multi-turn language fix, my own prompt edit silently changed
 city-ified 4/4) — and the matrix's **English-parity gate** failed the run
 because an English control cell regressed. The fix ("keep the ZIP exactly as
 written") then over-corrected: city names started staying in the user's script
-(`洛杉矶市中心`) or keeping neighborhood qualifiers, both unusable by the
+(the Chinese variant's own words for "downtown Los Angeles" passed through
+verbatim) or keeping neighborhood qualifiers, both unusable by the
 English-only API — caught by the same gate one capture later. The final
 contract is asymmetric (ZIP verbatim; city → standard English "City, ST"),
 verified in both directions before the definitive run, and it closed the
@@ -242,9 +259,11 @@ one layer below F10.**
 
 ### (d) The judge arc — validate, then bound what validation can say
 
-The judge was never trusted on authority. First validation round (blinded
-15-cell human subset): language-appropriateness κ = 1.0 — but faithfulness
-κ = 0, a genuine calibration finding: the judge conflated "didn't disclose an
+The judge was never trusted on authority. First validation round (15-cell
+human subset; disclosed caveat: I had seen aggregate judge statistics before
+labeling — the second round fixed this with full blinding):
+language-appropriateness κ = 1.0 (n = 6, en+zh — the languages I can read) —
+but faithfulness κ = 0, a genuine calibration finding: the judge conflated "didn't disclose an
 unmet language request" with "hallucinated," a rubric-axis confusion (F7), not
 noise. The fix went into the *product* (an explicit disclosure line), the
 judge's objection dissolved at source (10/10 cells flipped), and the rubric
@@ -299,8 +318,8 @@ that swap is scoped future work; see §7.)
   `mt_only` except Chinese (the one language I can personally verify); the
   labeling protocol discloses exactly which judgments my language abilities
   support, and blanks were never guessed.
-- **Judge**: single-vote, observed flipping ±1 cell between runs on identical
-  replies; also the same model family as the translation pipeline
+- **Judge**: single-vote, observed flipping ±1 cell between runs on
+  re-captured replies; also the same model family as the translation pipeline
   (entanglement disclosed).
 - **Serving variance** (F14): every single-capture number carries an implicit
   error bar; only the N-of-M gated claims are stability claims.
@@ -313,11 +332,14 @@ that swap is scoped future work; see §7.)
 
 The previous version of this document listed four next steps: an LLM judge
 validated with κ; counterfactual attribution; fixing the Arabic parse
-failures; scaling the dataset. All four were delivered and are the sections
-above. The current list:
+failures; scaling the dataset. All four landed — with one honest asterisk:
+counterfactual attribution arrived as service-build and prompt A/B
+interventions (§4a, §4b) rather than the intent-injection experiment as
+originally sketched. The current list:
 
-1. **Ambiguity clarifier**: the one cluster failing the English control too
-   (ambiguous colloquial queries search instead of asking) — an app fix that
+1. **Ambiguity clarifier**: the one failure class that fails the English
+   control too (two ambiguous-colloquial-query scenarios search instead of
+   asking) — an app fix that
    will lift every language, bundled with removing a schema field the model
    provably cannot be trusted to set (F2).
 2. **Cross-model comparison**: the harness is model-agnostic by construction —
