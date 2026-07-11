@@ -328,6 +328,14 @@ unstable between runs — quantified motivation for the B4 human re-label.
   during this cycle (s15/zh, s01/ko); both recaptures reproduced the original
   verdicts, reclassifying them as the stable behaviors documented above. No cell
   in this snapshot carries a verdict different from its first fresh capture.
+- **Correction (2026-07-10, see FINDINGS F14):** the "reproduced 5/5 at
+  temperature 0 → stable" reasoning in this entry assumed temperature-0 parses
+  are deterministic; later probing showed the serving stack routes requests to
+  differing backends and identical temp-0 calls can flip within minutes. The
+  failures were real in this snapshot, but same-session repetition overstates
+  stability — repeated sampling across sessions (as later used for the 20/20
+  language gates) is the defensible standard. The original text above is
+  preserved unrewritten.
 
 ---
 
@@ -472,3 +480,14 @@ human found nothing the judge missed on a stratified 20-cell sample — the
 judge's clean bill for v4 is not judge leniency. The discriminative evidence
 for the judge remains the 2026-07-02 κ (language_appropriateness 1.0 on real
 failures) plus the F7 calibration episode, both predating the fixes.
+
+### Correction (2026-07-10, see FINDINGS F14)
+
+The "5/5 at temperature 0" phrasing in this entry (s11/ar under remaining
+failures, quoted from the v3 diagnosis) carries the same caveat as the v3
+correction above: temperature-0 parses are not deterministic on this serving
+stack, so same-session repetition counts understate variance. Follow-up probes
+found the s11/ar over-triage to be REAL but STOCHASTIC (FINDINGS F13) — the
+snapshot's captured failure stands; its implied stability does not. Entries
+from here on treat single-session repetition as sampling, not proof of
+determinism.

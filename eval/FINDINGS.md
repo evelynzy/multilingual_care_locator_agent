@@ -304,6 +304,56 @@ full-history and latest-only parses); and an English-control parity gate in
 the eval is what turned both regressions from silent production drift into
 same-day diagnoses.
 
+### F13 — Arabic symptom phrasing is STOCHASTICALLY over-triaged to emergency (Layer A1, OPEN)
+s11-colloquial-heart ("my heart keeps skipping beats" + a ZIP; gold expects a
+normal cardiology search) fails only in Arabic across the archived snapshots:
+the Arabic variant parsed `urgency=emergency` in every measurement of two
+earlier sessions (5/5, then the v4 capture), so the app emergency-routed and
+never searched. Counterfactual probes were run with interpretations
+pre-registered in a local spec BEFORE execution — and **none matched**, which
+is reported as such rather than reinterpreted silently: on probe day the same
+dataset phrase parsed emergency only 3/9, flipping within minutes at
+temperature 0, while the literal English back-translation parsed emergency 0/9
+(and the dataset's English variant passes in every archived snapshot). Three
+assistant-generated Arabic paraphrases of the same complaint (disclosed: not
+verified by a native speaker) parsed non-emergency 3/3 each on probe day —
+small samples under F14's nondeterminism, so phrase-level conclusions are
+deliberately not drawn. The defensible attribution: **the emergency/non-emergency
+boundary is unstable specifically on the Arabic input** — the English side
+sits firmly on the correct side (the literal back-translation 0/9 on probe
+day; the dataset's own English variant, a distinct phrasing, non-emergency in
+every archived snapshot), while the Arabic phrase oscillates (3/9 to 6/6
+depending on the day). The fairness harm is
+therefore probabilistic availability loss: an Arabic speaker asking the exact
+question an English speaker asks receives, some fraction of the time, only 911
+guidance instead of the cardiologist list — and which fraction varies with
+serving conditions (F14). Status OPEN: attribution only, no fix shipped; the
+fix decision is the owner's (if prompt-side, it carries the F12 verification
+tax and should ride the planned clarifier work). Raw probe outputs archived
+locally with the eval scratch records.
+
+### F14 — "temperature 0" is not deterministic on this serving stack (Layer: the eval itself, OPEN as a standing caveat)
+During the F13 probes, the identical interpret request (same prompt, same
+input, same code, temperature 0) returned different parses within the same
+minute — and a behavior measured as "5/5 at temperature 0" in one session
+reversed to "0/3, then 3/6" in another. The inference route explains it: the
+hosted router distributes requests across serving backends (a request captured
+during probing was served by a third-party provider), and backend differences
+(quantization, batching, samplers) make temperature-0 outputs
+non-reproducible across calls, let alone across days. Consequences, recorded
+honestly: (a) the "reproduced 5/5 at temperature 0 → stable behavior" wording
+in the 2026-07-10 v3/v4 run entries relied on a determinism assumption the
+infrastructure does not provide — correction notes are appended to those
+entries (the originals are preserved, not rewritten); the underlying failures
+were real in their snapshots, but "stable vs transient" classifications made
+from single-session repetition are weaker than stated. (b) Repeated sampling
+is the only defensible stability evidence on this stack — the 20/20
+fresh-capture gate used for the multi-turn language fix is the pattern to
+reuse, and single-capture cells in any snapshot carry an implicit ±
+serving-variance error bar. (c) This is the F10 lesson extended one layer
+down: not just the harness's service configuration but the SERVING
+INFRASTRUCTURE is part of the system under test.
+
 ## Method note
 Findings F1/F3 sit in Layer B (our code) and F2 in Layer A1 (the LLM). The LLM
 understood the English inputs correctly in every case — the failures are
