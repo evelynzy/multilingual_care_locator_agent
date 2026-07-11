@@ -434,3 +434,41 @@ and latest-only parses.
 - `localization_fallback` is now part of every trace; zero events this run
   means the seven known languages never touched the LLM translation pass, as
   designed.
+
+### Addendum (2026-07-10, same day): judge-vs-human agreement on the v4 replies
+
+A fresh 20-cell blinded subset (variance-stratified selection; the worksheet
+never shows judge verdicts) was hand-labeled by the author against THIS run's
+replies and ingested strictly (`eval/data/human_labels.json`; blanks are
+omitted and excluded, never guessed).
+
+| dimension | n | observed agreement | κ | coverage |
+|---|---|---|---|---|
+| faithfulness | 20 | 1.00 | 1.0 (degenerate) | all 5 languages |
+| language_appropriateness | 20 | 1.00 | 1.0 (degenerate) | all 5 languages |
+| safety | 11 | 1.00 | 1.0 (degenerate) | en, zh |
+| helpfulness | 11 | 1.00 | 1.0 (degenerate) | en, zh |
+
+**Protocol notes (changes vs the 2026-07-02 labeling):**
+- `language_appropriateness` now covers all five languages via **script-level
+  identification**: the author cannot read es/ar/ko but can visually identify
+  Spanish-like Latin text, Hangul, and Arabic script and match them to the
+  user's language. Disclosed caveat: "looks Spanish" is weaker evidence than
+  Hangul/Arabic script identification. This amends the original en+zh-only
+  rule.
+- The faithfulness eyeballing was supported by a mechanical name-match report
+  (which reply names appear in the returned-provider list); the judgment
+  stayed human, and the tool's limits (ALL-CAPS card names only) are recorded
+  with it.
+- Unlike 2026-07-02, the author saw NO judge statistics before labeling.
+
+**Honest reading:** both raters are unanimous — every filled label is "pass",
+matching the judge's 100%-everywhere v4 verdicts, zero disagreements. That is
+**corroboration, not discrimination**: with no variance in either rater, κ
+carries no information (the 1.0 is the degenerate convention from the
+2026-07-02 entry), and this subset contains no negative cases because the v4
+snapshot has none anywhere. What it does establish: an independent blinded
+human found nothing the judge missed on a stratified 20-cell sample — the
+judge's clean bill for v4 is not judge leniency. The discriminative evidence
+for the judge remains the 2026-07-02 κ (language_appropriateness 1.0 on real
+failures) plus the F7 calibration episode, both predating the fixes.

@@ -126,6 +126,13 @@ Lesson surfaced by human validation: **faithfulness (are the claims grounded?) a
 (did we admit the unmet need?) are distinct axes** — the judge rubric should split them, and an
 aggregate faithfulness score shouldn't be trusted until it does (and until a larger, balanced
 labeled set exists).
+**DISSOLVED AT SOURCE (2026-07-10).** The F6 disclosure line removed the judge's
+objection (10/10 faithfulness flips on the s09/s10 cells, 2026-07-09 run), and on
+a fresh 20-cell blinded human subset against the v4 replies the judge and the
+author are unanimous on faithfulness (20/20 agreement, all five languages, zero
+disagreements — RUNS.md v4 addendum). The divergence no longer reproduces; the
+lesson stands for future rubric design (keep groundedness and disclosure as
+separate axes), but no calibration correction is currently needed.
 
 ### F8 — provider-results reply lost any-language localization (Layer A2 regression, FIXED)
 Commit `df2362c` ("restore clickable examples and provider cards") switched provider-card
