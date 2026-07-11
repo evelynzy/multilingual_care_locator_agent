@@ -56,6 +56,11 @@ LLM-judge validation with Cohen's κ and blinded labeling, paired statistics
 (McNemar, cluster bootstrap), harness-fidelity auditing, responsible-AI
 disclosure practice.*
 
+*Scope and velocity: a 103-cell evaluation matrix over a real application;
+14 numbered findings — 8 fixed and verified, every one documented the day it
+was found; a 491-test suite; first measurement to closed gap in nine days of
+dated, committed snapshots.*
+
 ---
 
 ## 1. Problem
@@ -120,6 +125,10 @@ gate, twice — 40/40 in total), and single-capture cells carry an implicit serv
 bar.
 
 ## 3. Results — from a real gap to a residual within noise
+
+Chinese and Spanish now tie English exactly — zero discordant checks against
+the control — and the remaining Arabic residual is smaller than this
+instrument can resolve. Nine days earlier, Arabic was 24 points behind.
 
 ### The trajectory
 
@@ -191,7 +200,9 @@ several-fold larger scenario set; that is a stated limitation, not a footnote.
 
 ### What moved the numbers (fix attribution)
 
-Each measured movement traces to a numbered finding in `eval/FINDINGS.md`:
+Each measured movement traces to a numbered finding in `eval/FINDINGS.md` —
+and none of them waited for a better model: every row is a code, data, or
+contract change I shipped, tested, and re-measured.
 
 | movement | cause (finding) |
 |---|---|
