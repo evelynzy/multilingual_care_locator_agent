@@ -58,7 +58,7 @@ disclosure practice.*
 
 *Scope and velocity: a 103-cell evaluation matrix over a real application;
 14 numbered findings — 8 fixed and verified, every one documented the day it
-was found; a 491-test suite; first measurement to closed gap in nine days of
+was found; a 491-test suite; first measurement to a residual within noise in nine days of
 dated, committed snapshots.*
 
 ---
@@ -126,9 +126,9 @@ bar.
 
 ## 3. Results — from a real gap to a residual within noise
 
-Chinese and Spanish now tie English exactly — zero discordant checks against
-the control — and the remaining Arabic residual is smaller than this
-instrument can resolve. Nine days earlier, Arabic was 24 points behind.
+Chinese and Spanish now tie English exactly on the paired core-15 checks —
+zero discordant checks against the control — and the remaining Arabic residual
+is smaller than this instrument can resolve. Nine days earlier, Arabic was 24 points behind.
 
 ### The trajectory
 
@@ -346,7 +346,8 @@ validated with κ; counterfactual attribution; fixing the Arabic parse
 failures; scaling the dataset. All four landed — with one honest asterisk:
 counterfactual attribution arrived as service-build and prompt A/B
 interventions (§4a, §4b) rather than the intent-injection experiment as
-originally sketched. The current list:
+originally sketched, and the dataset scaled in scenarios (15 → 32), not yet in
+languages. The current list:
 
 1. **Ambiguity clarifier**: the one failure class that fails the English
    control too (two ambiguous-colloquial-query scenarios search instead of
