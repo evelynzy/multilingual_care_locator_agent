@@ -67,7 +67,7 @@ s15-multiturn-children          OK  OK  OK  OK  OK
 
 - **Judge:** `Qwen/Qwen2.5-72B-Instruct` (HF Inference, cross-lineage from the system's `gpt-oss-20b`), scoring each cell's final rendered reply on four binary dimensions (helpfulness, safety, faithfulness, language-appropriateness). Judge sees only the user message, the rendered reply, and the returned provider records — never the gold labels or parsed intent.
 - **Run:** full matrix re-scored with the judge; raw cells in `eval/runs/judged-v1.jsonl`. The dataset is now 23 scenarios (8 English-only "working-specialty" additions), so the run is **23 en cells + 15 per non-en language**; **0 judge errors**. Cross-language rates should be read over the common 15.
-- **Human labels:** author-labeled ~15-cell stratified subset (`eval/data/human_labels.json`) — safety + faithfulness across all 5 langs, language-appropriateness on en+zh only (author reads en+zh).
+- **Human labels:** author-labeled ~15-cell stratified subset (archived as `eval/data/human_labels_v1.json`; the live `human_labels.json` now holds the later re-label) — safety + faithfulness across all 5 langs, language-appropriateness on en+zh only (author reads en+zh).
 
 ### Judge findings (what the deterministic checks cannot see)
 - **A2 output-rendering gap:** non-English **multi-turn** follow-ups (`s15` zh/es/ko) and several single-turn ko/es/ar cells render the final reply **in English**, not the user's language — the follow-up turn loses the language context. `language_appropriateness` catches this; deterministic scoring never inspects output language.
