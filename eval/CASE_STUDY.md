@@ -12,7 +12,7 @@ regressions and one broken infrastructure assumption) documented as it happened.
 
 ## Executive summary
 
-| | 2026-07-01 baseline | v2 (07-09) | v3 (07-10) | **v4 (07-10, current)** |
+| | baseline | v2 | v3 | **v4 (current)** |
 |---|---|---|---|---|
 | English core-15 | 92% | 93% | 93% | **93%** |
 | Arabic core-15 | 69% | 81% | 74% | **88%** |
@@ -44,7 +44,7 @@ Five takeaways (each expanded in the body):
    English-parity gate turned two regressions introduced by my own prompt edits
    into same-day diagnoses, and repeated sampling exposed that "temperature 0"
    is not deterministic on a routed serving stack — after which I corrected my
-   own published wording, append-only. [§4b](#b-f12--the-gate-that-caught-me-twice), [§4c](#c-f14--temperature-0-is-a-sampling-distribution-here)
+   own published wording, append-only. [§4b](#b-the-gate-that-caught-me-twice), [§4c](#c-temperature-0-is-a-sampling-distribution-here)
 5. **Fairness is engineered, not rented.** The gap closed mainly by moving
    language handling *out* of the model: curated taxonomy maps, committed locale
    files with disclosed machine translation, a deterministic script backstop,
@@ -58,8 +58,8 @@ disclosure practice.*
 
 *Scope and velocity: a 103-cell evaluation matrix over a real application;
 14 numbered findings — 8 fixed and verified, every one documented the day it
-was found; a 491-test suite; first measurement to a residual within noise in nine days of
-dated, committed snapshots.*
+was found; a 491-test suite; first measurement to a residual within noise across four
+committed, independently reproducible snapshots.*
 
 ---
 
@@ -104,8 +104,8 @@ the *same English intent* as its English twin but a *different result*, the
 divergence must be upstream in the parse (A1), because B and C are
 language-invariant. Where it mattered, this observational rule was upgraded to
 **counterfactual proof**: replay the identical request against two service
-builds (harness fidelity, [§4a](#a-f10--the-harness-measured-a-service-the-app-never-runs)), or the identical
-input against two prompt versions ([§4b](#b-f12--the-gate-that-caught-me-twice)).
+builds (harness fidelity, [§4a](#a-the-harness-measured-a-service-the-app-never-runs)), or the identical
+input against two prompt versions ([§4b](#b-the-gate-that-caught-me-twice)).
 
 **Scoring, two tiers.** Deterministic checks against per-scenario gold labels
 (specialty resolved, provider in the right state, follow-up asked, nonzero
@@ -128,18 +128,18 @@ bar.
 
 Chinese and Spanish now tie English exactly on the paired core-15 checks —
 zero discordant checks against the control — and the remaining Arabic residual
-is smaller than this instrument can resolve. Nine days earlier, Arabic was 24 points behind.
+is smaller than this instrument can resolve. At baseline, Arabic was 24 points behind.
 
 ### The trajectory
 
-| snapshot | date | en core-15 | ar core-15 | gap | context |
-|---|---|---|---|---|---|
-| baseline | 2026-07-01 | 92% (39/42) | 69% (29/42) | −24 pts¹ | first full matrix (pre-fidelity-fix harness config) |
-| v2 | 2026-07-09 | 93% | 81% | −12 | after digit-folding, disclosure, localization, coverage fixes; harness fidelity repaired mid-run (cross-config caveat disclosed in `eval/RUNS.md`) |
-| v3 | 2026-07-10 | 93% | 74% | −19 | a dataset location refresh exposed new location-handling cells — an honest regression, kept and diagnosed |
-| **v4** | **2026-07-10** | **93%** | **88%** | **−5** | after the multi-turn language fix and the location contract |
+| snapshot | en core-15 | ar core-15 | gap | context |
+|---|---|---|---|---|
+| baseline | 92% (39/42) | 69% (29/42) | −24 pts¹ | first full matrix (pre-fidelity-fix harness config) |
+| v2 | 93% | 81% | −12 | after digit-folding, disclosure, localization, coverage fixes; harness fidelity repaired mid-run (cross-config caveat disclosed in `eval/RUNS.md`) |
+| v3 | 93% | 74% | −19 | a dataset location refresh exposed new location-handling cells — an honest regression, kept and diagnosed |
+| **v4** | **93%** | **88%** | **−5** | after the multi-turn language fix and the location contract |
 
-¹ The 07-01 run entry prints −23; recomputed at consistent rounding (as in the
+¹ The baseline run entry prints −23; recomputed at consistent rounding (as in the
 v2 entry of `eval/RUNS.md`) the series is −24 → −12 → −19 → −5.
 
 v4, all languages: en 96% / es 94% / zh 94% / ko 92% / ar 91% over all cells;
@@ -150,15 +150,16 @@ telemetry recorded zero silent English fallbacks.
 
 ### Paired statistics
 
-Reproduce with `PYTHONPATH=. python -m eval.paired_stats <run.jsonl>` — the
-script pairs each language's core-15 checks with the English control cell,
+Reproduce with `PYTHONPATH=. python -m eval.paired_stats <archive.jsonl>`
+(the three archives live under `eval/runs/`) — the script pairs each language's core-15 checks with the English control cell,
 reports McNemar's exact test on discordant pairs, and a **scenario-level
 cluster bootstrap** CI (checks within a scenario are correlated, so the
 effective sample is closer to 15 scenarios than 42 checks; resampling is by
 scenario):
 
+Baseline archive:
+
 ```
-run: eval/runs/2026-07-01-multilingual-15x5.jsonl
 lang  pairs  b(en+/L-)  c(en-/L+)  McNemar-p  gap      95% cluster CI
 ar       42         10          0     0.0020   -23.8%  [ -43.2%,   -7.3%]
 es       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
@@ -166,8 +167,9 @@ ko       42          3          0     0.2500    -7.1%  [ -17.9%,   +0.0%]
 zh       42          4          0     0.1250    -9.5%  [ -23.8%,   +0.0%]
 ```
 
+v2 archive:
+
 ```
-run: eval/runs/2026-07-09-multilingual-judged-v2.jsonl
 lang  pairs  b(en+/L-)  c(en-/L+)  McNemar-p  gap      95% cluster CI
 ar       42          5          0     0.0625   -11.9%  [ -25.6%,   +0.0%]
 es       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
@@ -175,8 +177,9 @@ ko       42          8          2     0.1094   -14.3%  [ -33.3%,   +5.4%]
 zh       42          4          0     0.1250    -9.5%  [ -23.8%,   +0.0%]
 ```
 
+v4 archive:
+
 ```
-run: eval/runs/2026-07-10-multilingual-judged-v4.jsonl
 lang  pairs  b(en+/L-)  c(en-/L+)  McNemar-p  gap      95% cluster CI
 ar       42          4          2     0.6875    -4.8%  [ -23.3%,  +11.9%]
 es       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
@@ -206,12 +209,12 @@ contract change I shipped, tested, and re-measured.
 
 | movement | cause (finding) |
 |---|---|
-| "primary care" and at least seven specialty families returned zero providers | F1/F5 — curated umbrella-taxonomy maps (Layer B) |
-| Arabic-Indic digits (`٩٤١١٠`) unusable end-to-end | F9 — length-preserving Unicode digit folding at the input seam |
-| Language-concordance requests silently unmet | F6 — explicit disclosure line (judge faithfulness flipped 10/10) |
-| Non-es/zh replies fell back to English wrappers | F8 + locale pipeline — 6 committed locale files generated from English masters, machine translation disclosed, visible "auto-translated" mark |
-| Multi-turn conversations lost the user's language on a bare-ZIP turn | F11 — prompt contract + case-tolerant merge + deterministic script backstop; shipped against a 20/20 (×2) repeated-capture gate |
-| ZIPs parsed into (sometimes wrong) city names; in-language city names unusable | F12 — a two-sided location contract: ZIP verbatim, city normalized to English (+18 checks, closing the whole cluster) |
+| "primary care" and at least seven specialty families returned zero providers | curated umbrella-taxonomy maps in our own code (findings F1/F5) |
+| Arabic-Indic digits (`٩٤١١٠`) unusable end-to-end | length-preserving Unicode digit folding at the input seam (F9) |
+| Language-concordance requests silently unmet | an explicit disclosure line; judge faithfulness flipped 10/10 (F6) |
+| Non-es/zh replies fell back to English wrappers | 6 committed locale files generated from English masters — machine translation disclosed, visible "auto-translated" mark (F8) |
+| Multi-turn conversations lost the user's language on a bare-ZIP turn | prompt contract + case-tolerant merge + deterministic script backstop, shipped against a 20/20 (×2) repeated-capture gate (F11) |
+| ZIPs parsed into (sometimes wrong) city names; in-language city names unusable | a two-sided location contract — ZIP verbatim, city normalized to English (+18 checks, closing the whole cluster) (F12) |
 
 ## 4. Methodology lessons (what the harness caught)
 
@@ -219,7 +222,7 @@ These four episodes are the part of this project I would defend in an
 interview; each is documented in `eval/RUNS.md`/`eval/FINDINGS.md` as it
 happened, not reconstructed.
 
-### (a) F10 — the harness measured a service the app never runs
+### (a) The harness measured a service the app never runs
 
 The first full re-run zeroed seven specialty families the service verifiably
 handles. Counterfactual isolation — the byte-identical search request replayed
@@ -229,11 +232,11 @@ against two service builds — returned 5 providers on the app's real service an
 the trace parser assumed the bare service's address format and mass-failed a
 metric on English control cells. Both fixed and pinned by tests; every
 historical comparison across the boundary is labeled *cross-config* in the run
-log. **Lesson: the eval harness is part of the system under test — instrument
+log (finding F10, `eval/FINDINGS.md`). **Lesson: the eval harness is part of the system under test — instrument
 the real object, and treat every historical number as carrying its harness's
 configuration.**
 
-### (b) F12 — the gate that caught me twice
+### (b) The gate that caught me twice
 
 While shipping the multi-turn language fix, my own prompt edit silently changed
 *location* parsing: "cardiology 19103" began resolving to a (wrong) city name
@@ -246,12 +249,12 @@ verbatim) or keeping neighborhood qualifiers, both unusable by the
 English-only API — caught by the same gate one capture later. The final
 contract is asymmetric (ZIP verbatim; city → standard English "City, ST"),
 verified in both directions before the definitive run, and it closed the
-pre-existing city-ification cluster as a side effect (+18 checks). **Lessons: a
+pre-existing city-ification cluster as a side effect (+18 checks; finding F12). **Lessons: a
 prompt edit is a behavior change to every field the prompt governs — A/B the
 fields you didn't touch; and an English-parity gate converts silent drift into
 same-day diagnoses.**
 
-### (c) F14 — "temperature 0" is a sampling distribution here
+### (c) "Temperature 0" is a sampling distribution here
 
 A follow-up probe found the same interpret request flipping between parses
 within a minute, at temperature 0 — and a behavior measured "5/5 stable" in one
@@ -266,7 +269,7 @@ routing (its literal English back-translation: 0/9 on probe day, and the
 scenario's English variant passes in every archived snapshot), meaning Arabic users are
 *probabilistically* denied the provider list others get (`eval/FINDINGS.md`
 F13). **Lesson: the serving infrastructure is part of the system under test,
-one layer below F10.**
+one layer below the harness-fidelity lesson in (a).**
 
 ### (d) The judge arc — validate, then bound what validation can say
 
@@ -299,7 +302,7 @@ deterministic, testable guarantees:
   registry taxonomy terms, curated and pinned by invariant tests.
 - **Digit folding** (F9): any Unicode decimal script → ASCII at the input seam,
   length-preserving so redaction spans survive.
-- **Committed locale files** (F8/W-series): all six non-English supported
+- **Committed locale files** (F8): all six non-English supported
   languages render from files generated once from the English masters —
   machine translation *disclosed in-product* (a localized "auto-translated from
   English" mark on every non-English safety footer) and in the docs; zero
@@ -353,10 +356,11 @@ languages. The current list:
    control too (two ambiguous-colloquial-query scenarios search instead of
    asking) — an app fix that
    will lift every language, bundled with removing a schema field the model
-   provably cannot be trusted to set (F2).
+   provably cannot be trusted to set (finding F2).
 2. **Cross-model comparison**: the harness is model-agnostic by construction —
    swap the system-under-test model, re-run 103 cells, and answer "does a
    frontier model shrink the residual gaps?" as a measured hypothesis
-   (with F14's repeated-sampling discipline), not an assumption.
-3. **The F13 fix decision** and the follow-up hygiene pool (backstop edge
-   cases, prompt-contract review for the remaining free-text fields).
+   (with the repeated-sampling discipline from §4c), not an assumption.
+3. **Deciding the fix** for the stochastic Arabic over-triage described in
+   §4c, plus a small hardening pool (edge cases in the script backstop,
+   contract review for the remaining free-text prompt fields).
