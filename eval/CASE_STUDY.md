@@ -58,7 +58,7 @@ disclosure practice.*
 
 *Scope and velocity: a 103-cell evaluation matrix over a real application;
 14 numbered findings — 8 fixed and verified, every one documented the day it
-was found; a 491-test suite; first measurement to a residual within noise across four
+was found; a 496-test suite; first measurement to a residual within noise across four
 committed, independently reproducible snapshots.*
 
 ---

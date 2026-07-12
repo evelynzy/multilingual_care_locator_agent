@@ -41,7 +41,6 @@ def get_chat_model_settings() -> Dict[str, Any]:
     }
 
 
-
 def get_search_settings() -> Dict[str, Any]:
     search = _load_config().get("search", {})
     clinical = search.get("clinicaltables", {})

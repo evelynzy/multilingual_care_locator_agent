@@ -16,7 +16,7 @@ This Space hosts a multilingual care navigation assistant built with [Gradio](ht
 
 ## What it does
 - Understands care requests written in any language via a multilingual LLM, and extracts structured intent (specialty, location, insurance, language preferences)
-- Searches the public [NPI registry](https://clinicaltables.nlm.nih.gov/api/npireg/v3/search) (ClinicalTables + NPPES enrichment) through a curated specialty-taxonomy bridge
+- Searches the public [NPI registry](https://clinicaltables.nlm.nih.gov/apidoc/npi_idv/v3/) (ClinicalTables + NPPES enrichment) through a curated specialty-taxonomy bridge
 - Replies deterministically localized in seven languages — English, Español, 简体中文, العربية, 한국어, Tiếng Việt, Tagalog — with machine-translated copy visibly marked; other languages get a best-effort translation pass
 - Redacts personal identifiers (SSNs, phone numbers, member IDs) from the input before any text reaches the LLM, and says so
 - Falls back to trusted public resources when no direct matches are found
