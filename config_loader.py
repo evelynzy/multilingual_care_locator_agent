@@ -41,12 +41,6 @@ def get_chat_model_settings() -> Dict[str, Any]:
     }
 
 
-def get_embed_model_name() -> str:
-    models = _load_config().get("models", {})
-    embed = models.get("embed", {})
-    env_key = embed.get("env")
-    return os.getenv(env_key, embed.get("default_id")) if env_key else embed.get("default_id")
-
 
 def get_search_settings() -> Dict[str, Any]:
     search = _load_config().get("search", {})
@@ -106,7 +100,6 @@ __all__ = [
     "ConfigError",
     "get_prompt",
     "get_chat_model_settings",
-    "get_embed_model_name",
     "get_search_settings",
     "get_ui_settings",
     "get_message",

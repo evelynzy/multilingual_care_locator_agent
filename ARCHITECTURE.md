@@ -201,7 +201,7 @@ attributable to a specific layer. Results, findings (F1–F8), and the case stud
 | `provider_search/` | B: retrieval package (service, sources, ranking, families, cache) |
 | `eval/` | fairness-evaluation harness (dataset, tracing, scoring, judge, κ) |
 | `config/settings.yaml` | prompts, UI copy, fallback resources, search settings |
-| `retriever.py`, `config_loader.py` | legacy retrieval helpers / config access |
+| `config_loader.py` | config access |
 | `tests/` | unit + gated live tests (`RUN_EVAL=1`) |
 
 The A1/routing/A2 stages are now split into the `care/` package with single-purpose modules (mirroring `provider_search/`).
