@@ -342,7 +342,7 @@ during probing was served by a third-party provider), and backend differences
 (quantization, batching, samplers) make temperature-0 outputs
 non-reproducible across calls, let alone across days. Consequences, recorded
 honestly: (a) the "reproduced 5/5 at temperature 0 → stable behavior" wording
-in the 2026-07-10 v3/v4 run entries relied on a determinism assumption the
+in the v3/v4 run entries relied on a determinism assumption the
 infrastructure does not provide — correction notes are appended to those
 entries (the originals are preserved, not rewritten); the underlying failures
 were real in their snapshots, but "stable vs transient" classifications made
