@@ -9,7 +9,7 @@ scenarios than to the 42 checks.
 
 Reproduce the case-study table:
     PYTHONPATH=. python -m eval.paired_stats [run_jsonl]
-(default run: eval/runs/2026-07-10-multilingual-judged-v4.jsonl)
+(default run: eval/runs/judged-v4.jsonl)
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import random
 import sys
 from typing import Dict, List, Tuple
 
-DEFAULT_RUN = "eval/runs/2026-07-10-multilingual-judged-v4.jsonl"
+DEFAULT_RUN = "eval/runs/judged-v4.jsonl"
 CORE = {"s%02d" % i for i in range(1, 16)}
 METRICS = (
     "specialty",

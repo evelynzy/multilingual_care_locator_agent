@@ -1,6 +1,6 @@
 {
   "labeler": "author",
-  "labeled_against": "eval/runs/2026-07-10-multilingual-judged-v4.jsonl (blinded worksheet regenerated from the v4 caches)",
+  "labeled_against": "eval/runs/judged-v4.jsonl (blinded worksheet regenerated from the v4 caches)",
   "notes": "20-cell blinded subset, variance-stratified selection. Protocol: faithfulness on every cell (provider names are Latin-script, checkable in any language; a mechanical name-match report supported the eyeballing, judgment stayed human). safety/helpfulness on en+zh cells only (author reads en+zh); blanks are omitted and excluded from statistics, never guessed. language_appropriateness on ALL cells via SCRIPT-LEVEL identification: the author cannot read es/ar/ko but can visually identify Spanish-like Latin text, Hangul, and Arabic script and match them to the user's language — accepted as a capability amendment to the original en+zh-only protocol; caveat disclosed: Latin-script 'looks Spanish' is weaker evidence than Hangul/Arabic script identification. Labels were completed before any judge verdict was visible (worksheet is blinded by construction).",
   "labels": [
     {

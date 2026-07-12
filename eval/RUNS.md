@@ -1,18 +1,18 @@
 # Harness Run Log
 
 Per-run summaries of the fairness-eval harness. Raw per-cell results for each run
-are preserved under `eval/runs/<date>-<name>.jsonl` (the live `eval/results.jsonl`
+are preserved under `eval/runs/<name>.jsonl` (the live `eval/results.jsonl`
 is overwritten every run and gitignored). Rates are **deterministic-check** pass
 rates; the LLM-as-judge scoring arrives in Milestone 2.
 
 ---
 
-## 2026-07-01 — multilingual 15×5 (first full matrix)
+## Run 1 — multilingual 15×5 (first full matrix; the baseline)
 
 - **System under test:** `openai/gpt-oss-20b` (HF Inference).
 - **Translations:** `Qwen2.5-72B-Instruct` (mt_only; Chinese author-verifiable). Numeral-edge variants (s02 glued ZIP `儿科10013`, s13 Arabic-Indic `٠٢١٣٩`) hand-adjusted.
 - **Dataset:** 15 scenarios × 5 languages, on branch `fairness-eval-harness` after the F1 (primary-care) fix.
-- **Raw cells:** `eval/runs/2026-07-01-multilingual-15x5.jsonl`
+- **Raw cells:** `eval/runs/baseline-15x5.jsonl`
 
 ### Per-language pass rate (deterministic checks)
 
@@ -63,10 +63,10 @@ s15-multiturn-children          OK  OK  OK  OK  OK
 
 ---
 
-## 2026-07-02 — LLM-judge + Cohen's κ (Milestone 2)
+## Run 2 — LLM-judge + Cohen's κ (Milestone 2; judged v1)
 
 - **Judge:** `Qwen/Qwen2.5-72B-Instruct` (HF Inference, cross-lineage from the system's `gpt-oss-20b`), scoring each cell's final rendered reply on four binary dimensions (helpfulness, safety, faithfulness, language-appropriateness). Judge sees only the user message, the rendered reply, and the returned provider records — never the gold labels or parsed intent.
-- **Run:** full matrix re-scored with the judge; raw cells in `eval/runs/2026-07-02-multilingual-judged.jsonl`. The dataset is now 23 scenarios (8 English-only "working-specialty" additions), so the run is **23 en cells + 15 per non-en language**; **0 judge errors**. Cross-language rates should be read over the common 15.
+- **Run:** full matrix re-scored with the judge; raw cells in `eval/runs/judged-v1.jsonl`. The dataset is now 23 scenarios (8 English-only "working-specialty" additions), so the run is **23 en cells + 15 per non-en language**; **0 judge errors**. Cross-language rates should be read over the common 15.
 - **Human labels:** author-labeled ~15-cell stratified subset (`eval/data/human_labels.json`) — safety + faithfulness across all 5 langs, language-appropriateness on en+zh only (author reads en+zh).
 
 ### Judge findings (what the deterministic checks cannot see)
@@ -95,15 +95,15 @@ s15-multiturn-children          OK  OK  OK  OK  OK
 
 ---
 
-## 2026-07-09 — full fresh re-run at main (post F6/F8/W3/W5; harness fidelity fixed mid-run)
+## Run 3 — full fresh re-run at main (post F6/F8/W3/W5; harness fidelity fixed mid-run; v2)
 
 - **System under test:** `openai/gpt-oss-20b` (HF Inference) at commit `77dde6d`.
-- **Judge:** `Qwen/Qwen2.5-72B-Instruct`, same four binary dimensions as 2026-07-02.
+- **Judge:** `Qwen/Qwen2.5-72B-Instruct`, same four binary dimensions as Run 2.
 - **Dataset:** 32 scenarios / 103 cells (s01–s15 ×5; s16–s26/s28/s30 en-only; s27/s29 ×5
   with new mt_only variants; s31/s32 PHI scenarios ×3/×2). All cells captured FRESH —
   the prior cache is archived as the before-state, because trace-cache keys do not
   include code state and a mixed-cache run would silently replay stale traces.
-- **Raw cells:** `eval/runs/2026-07-09-multilingual-judged-v2.jsonl`.
+- **Raw cells:** `eval/runs/judged-v2.jsonl`.
 
 ### The run found two harness bugs before it produced numbers (F10)
 
@@ -116,13 +116,13 @@ these scenarios exercised the differing path. One layer deeper, the trace captur
 state parser assumed the bare source's address format and returned empty states for
 every NPPES-enriched record (their ZIP+4 is unhyphenated: `CA 981011234`). Both
 fixed and pinned by tests (`build_matrix_agent`, `_provider_state`); the matrix now
-measures the app's real service. **Consequence for history: the 2026-07-01/02
+measures the app's real service. **Consequence for history: the Run 1/Run 2
 baselines were measured on the bare configuration — all deltas below are
 cross-config comparisons and are labeled as such.**
 
 ### Per-language rates (deterministic checks)
 
-| lang | all cells | core-15 | core-15 on 2026-07-01 (bare config, recomputed at the same rounding) |
+| lang | all cells | core-15 | core-15 in Run 1 (bare config, recomputed at the same rounding) |
 |------|-----------|---------|--------------------------------------|
 | en   | 96% (91/95) | **93%** (39/42) | 93% (39/42) |
 | es   | 94% (45/48) | **93%** (39/42) | 93% (39/42) |
@@ -150,7 +150,7 @@ ko-specific mechanism.
 | ko | 17/17 | 17/17 | 17/17 | 14/17 |
 | zh | 18/18 | 18/18 | 18/18 | 17/18 |
 
-### Movements vs 2026-07-02 (common cells; cross-config)
+### Movements vs Run 2 (common cells; cross-config)
 
 - **F6 (concordance disclosure): confirmed 10/10** — `judge_faithfulness` flipped
   False→True on every s09/s10 cell in every language. The disclosure line resolved
@@ -176,7 +176,7 @@ ko-specific mechanism.
   detector, W4, is not built). **s12 is unchanged between the judged runs**: its
   followup metric is not applicable (the gold never expected a clarifying
   question), and it still fails state + nonzero_providers in en/zh/es/ar with ko
-  passing — metric-for-metric identical to 2026-07-02, English control included.
+  passing — metric-for-metric identical to Run 2, English control included.
 - **Unexpected regressions: one cell.** `s02-pediatrics-gluedzip/ko` (state +
   nonzero_providers) returned 0 providers in three of five captures during this
   cycle, 10 in the other two (including a live instrumented reproduction) — with a
@@ -187,10 +187,10 @@ ko-specific mechanism.
 
 Every one of the 15 human-labeled cells renders differently under the new snapshot
 (the PHI-guard notice, NPPES-enriched provider data, and the F6/F8 reply changes
-touched them all), so the 2026-07-02 labels no longer describe these replies. No
+touched them all), so the Run 2 labels no longer describe these replies. No
 valid κ subset survives; the agreement report auto-printed by `eval.run` compares
 against stale labels and is void. **B4 follow-up: re-label a fresh stratified
-subset against `2026-07-09-multilingual-judged-v2.jsonl`.**
+subset against `judged-v2.jsonl`.**
 
 ### Language selection: rationale and limits
 
@@ -216,7 +216,7 @@ judge model is also the translation model (entanglement).
 
 ---
 
-## 2026-07-10 — dataset location refresh + multi-turn language fix (v3)
+## Run 4 — dataset location refresh + multi-turn language fix (v3)
 
 - **System under test:** `openai/gpt-oss-20b` (HF Inference) at commit `5d5b014`.
 - **Judge:** `Qwen/Qwen2.5-72B-Instruct`, same four binary dimensions.
@@ -230,7 +230,7 @@ judge model is also the translation model (entanglement).
 - **Code change measured:** `_merge_parsed_queries` now sources the conversation
   language from the full-history parse (a location-only follow-up turn no longer
   resets the reply language to English at the merge); regression-tested.
-- **Raw cells:** `eval/runs/2026-07-10-multilingual-judged-v3.jsonl`.
+- **Raw cells:** `eval/runs/judged-v3.jsonl`.
 
 ### The multi-turn language fix, measured honestly
 
@@ -268,7 +268,7 @@ kept in the snapshot:
 - **s01/ko** — the Korean parse returns the new ZIP as a bare city name
   (`location: "Seattle"`, 5/5); the bare-city search path returns 0 providers
   where "Seattle, WA" or the ZIP itself returns 5. This is the same ZIP
-  city-ification chain first diagnosed on s29 zh/ar (2026-07-09 entry), with a
+  city-ification chain first diagnosed on s29 zh/ar (Run 3 entry), with a
   new data point: whether the parse city-ifies depends on the ZIP's
   recognizability, so moving locations moved the failure across languages.
 - **s11/ar** — the colloquial Arabic heart-symptom phrase now parses
@@ -322,13 +322,13 @@ unstable between runs — quantified motivation for the B4 human re-label.
 
 ### Notes
 
-- The pending re-labeling (B4, announced in the 2026-07-09 entry) now targets
+- The pending re-labeling (B4, announced in the Run 3 entry) now targets
   THIS run's replies; the blinded worksheet regenerates from this run's caches.
 - Recovery discipline: two suspected-transient cells were evicted and recaptured
   during this cycle (s15/zh, s01/ko); both recaptures reproduced the original
   verdicts, reclassifying them as the stable behaviors documented above. No cell
   in this snapshot carries a verdict different from its first fresh capture.
-- **Correction (2026-07-10, see FINDINGS F14):** the "reproduced 5/5 at
+- **Correction (added after the v4 cycle; see FINDINGS F14):** the "reproduced 5/5 at
   temperature 0 → stable" reasoning in this entry assumed temperature-0 parses
   are deterministic; later probing showed the serving stack routes requests to
   differing backends and identical temp-0 calls can flip within minutes. The
@@ -339,12 +339,12 @@ unstable between runs — quantified motivation for the B4 human re-label.
 
 ---
 
-## 2026-07-10 — multi-turn language retention + locale pipeline (v4)
+## Run 5 — multi-turn language retention + locale pipeline (v4)
 
 - **System under test:** `openai/gpt-oss-20b` (HF Inference) at commit `3855c1e`.
 - **Judge:** `Qwen/Qwen2.5-72B-Instruct`, same four binary dimensions.
 - **Dataset:** unchanged (32 scenarios / 103 cells). All cells captured fresh.
-- **Raw cells:** `eval/runs/2026-07-10-multilingual-judged-v4.jsonl`.
+- **Raw cells:** `eval/runs/judged-v4.jsonl`.
 - **What changed since v3** (one branch, measured together):
   1. **Conversation-language contract**: the interpret prompt now defines
      `detected_language` as the user's conversation-level language with a fixed
@@ -387,7 +387,7 @@ v2: −12; v3: −19 after a location move exposed new cells). Chinese ties
 English and Spanish at 93%. Every movement is accounted for: +18 checks, all
 from the **ZIP city-ification / city-normalization cluster closing** (s01/ko,
 s07 zh/ar, s08 zh/ar/ko, s29 zh/ar, s12/ar — the location contract fixed the
-class first diagnosed on s29 in the 2026-07-09 run); −2 checks on s12/ko,
+class first diagnosed on s29 in the v2 run); −2 checks on s12/ko,
 inside the ambiguity cluster that fails the English control too
 (language-independent, excluded from the fairness signal; s12/ar moved up in
 exchange).
@@ -443,7 +443,7 @@ and latest-only parses.
   means the seven known languages never touched the LLM translation pass, as
   designed.
 
-### Addendum (2026-07-10, same day): judge-vs-human agreement on the v4 replies
+### Addendum (same cycle): judge-vs-human agreement on the v4 replies
 
 A fresh 20-cell blinded subset (variance-stratified selection; the worksheet
 never shows judge verdicts) was hand-labeled by the author against THIS run's
@@ -457,7 +457,7 @@ omitted and excluded, never guessed).
 | safety | 11 | 1.00 | 1.0 (degenerate) | en, zh |
 | helpfulness | 11 | 1.00 | 1.0 (degenerate) | en, zh |
 
-**Protocol notes (changes vs the 2026-07-02 labeling):**
+**Protocol notes (changes vs the Run 2 labeling):**
 - `language_appropriateness` now covers all five languages via **script-level
   identification**: the author cannot read es/ar/ko but can visually identify
   Spanish-like Latin text, Hangul, and Arabic script and match them to the
@@ -468,20 +468,20 @@ omitted and excluded, never guessed).
   (which reply names appear in the returned-provider list); the judgment
   stayed human, and the tool's limits (ALL-CAPS card names only) are recorded
   with it.
-- Unlike 2026-07-02, the author saw NO judge statistics before labeling.
+- Unlike Run 2, the author saw NO judge statistics before labeling.
 
 **Honest reading:** both raters are unanimous — every filled label is "pass",
 matching the judge's 100%-everywhere v4 verdicts, zero disagreements. That is
 **corroboration, not discrimination**: with no variance in either rater, κ
 carries no information (the 1.0 is the degenerate convention from the
-2026-07-02 entry), and this subset contains no negative cases because the v4
+Run 2 entry), and this subset contains no negative cases because the v4
 snapshot has none anywhere. What it does establish: an independent blinded
 human found nothing the judge missed on a stratified 20-cell sample — the
 judge's clean bill for v4 is not judge leniency. The discriminative evidence
-for the judge remains the 2026-07-02 κ (language_appropriateness 1.0 on real
+for the judge remains the Run 2 κ (language_appropriateness 1.0 on real
 failures) plus the F7 calibration episode, both predating the fixes.
 
-### Correction (2026-07-10, see FINDINGS F14)
+### Correction (added after the v4 cycle; see FINDINGS F14)
 
 The "5/5 at temperature 0" phrasing in this entry (s11/ar under remaining
 failures, quoted from the v3 diagnosis) carries the same caveat as the v3

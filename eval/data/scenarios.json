@@ -1129,7 +1129,7 @@
           "source": "english_seed",
           "verification_status": "human_verified",
           "verified_by": "author",
-          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+          "notes": "F5-fixed family; ZIP live-verified nonzero at authoring time"
         }
       }
     },
@@ -1153,7 +1153,7 @@
           "source": "english_seed",
           "verification_status": "human_verified",
           "verified_by": "author",
-          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+          "notes": "F5-fixed family; ZIP live-verified nonzero at authoring time"
         }
       }
     },
@@ -1177,7 +1177,7 @@
           "source": "english_seed",
           "verification_status": "human_verified",
           "verified_by": "author",
-          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+          "notes": "F5-fixed family; ZIP live-verified nonzero at authoring time"
         }
       }
     },
@@ -1201,7 +1201,7 @@
           "source": "english_seed",
           "verification_status": "human_verified",
           "verified_by": "author",
-          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+          "notes": "F5-fixed family; ZIP live-verified nonzero at authoring time"
         },
         "zh": {
           "turns": [
@@ -1261,7 +1261,7 @@
           "source": "english_seed",
           "verification_status": "human_verified",
           "verified_by": "author",
-          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+          "notes": "F5-fixed family; ZIP live-verified nonzero at authoring time"
         }
       }
     },
@@ -1285,7 +1285,7 @@
           "source": "english_seed",
           "verification_status": "human_verified",
           "verified_by": "author",
-          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+          "notes": "F5-fixed family; ZIP live-verified nonzero at authoring time"
         },
         "zh": {
           "turns": [
@@ -1345,7 +1345,7 @@
           "source": "english_seed",
           "verification_status": "human_verified",
           "verified_by": "author",
-          "notes": "F5-fixed family; ZIP live-verified nonzero on 2026-07-08"
+          "notes": "F5-fixed family; ZIP live-verified nonzero at authoring time"
         }
       }
     },

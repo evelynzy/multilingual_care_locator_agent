@@ -66,7 +66,7 @@ umbrella map — give each `specialty_families` entry its NPI-taxonomy synonyms
 lift usable coverage from ~14 → 22 families. (These broken specialties are kept
 OUT of the fairness dataset so they don't muddy the cross-language signal.)
 
-**FIXED (2026-07-08).** The fix needed both halves of the pipeline, verified by a
+**FIXED.** The fix needed both halves of the pipeline, verified by a
 live before/after probe through the real service at ZIP 94110:
 - *Retrieval:* `_UMBRELLA_TAXONOMY_TERMS` (clinicaltables.py) now rewrites every
   affected family's query terms to live-verified NPI taxonomy names. Internal-
@@ -84,7 +84,7 @@ live before/after probe through the real service at ZIP 94110:
   0 → 5; oncology 2 → 5; physical therapy 3 → 5; controls unchanged at 5.
   Mapping and classification pinned by `tests/test_specialty_umbrella_terms.py`
   and `tests/test_provider_search_foundation.py`.
-- Coverage sweep (2026-07-08): all 22 specialty families probed live through
+- Coverage sweep (same cycle): all 22 specialty families probed live through
   the real service at ZIP 94110 (dense) and 68508 (low-density). The sweep
   caught a second gap class: practitioner forms ("orthopedist",
   "pulmonologist", "urologist", …) failed either at retrieval (not in the
@@ -114,20 +114,20 @@ fall back to English like the rest of the deterministic card). Providers still s
 just stops implying they meet the language need. Verified by
 `tests/test_language_concordance_disclosure.py`. (Surfaced by the author during judge-validation
 labeling.)
-**Matrix-confirmed (2026-07-09 run):** `judge_faithfulness` flipped fail→pass on all
+**Matrix-confirmed (v2 run):** `judge_faithfulness` flipped fail→pass on all
 10 s09/s10 cells across every language — the disclosure resolved the judge's
 objection exactly as predicted (see RUNS.md).
 
 ### F7 — the judge over-flags faithfulness on the F6 cells (judge-calibration; Layer A judge)
 The Qwen judge scored `s09`/`s10` `faithfulness=fail` in every language, conflating the F6
 *disclosure* gap with hallucination. Author labels mark them faithful → Cohen's κ on
-faithfulness collapses to 0 while language-appropriateness κ = 1.0 (`eval/RUNS.md`, 2026-07-02).
+faithfulness collapses to 0 while language-appropriateness κ = 1.0 (`eval/RUNS.md`, Run 2).
 Lesson surfaced by human validation: **faithfulness (are the claims grounded?) and disclosure
 (did we admit the unmet need?) are distinct axes** — the judge rubric should split them, and an
 aggregate faithfulness score shouldn't be trusted until it does (and until a larger, balanced
 labeled set exists).
-**DISSOLVED AT SOURCE (2026-07-10).** The F6 disclosure line removed the judge's
-objection (10/10 faithfulness flips on the s09/s10 cells, 2026-07-09 run), and on
+**DISSOLVED AT SOURCE.** The F6 disclosure line removed the judge's
+objection (10/10 faithfulness flips on the s09/s10 cells, v2 run), and on
 a fresh 20-cell blinded human subset against the v4 replies the judge and the
 author are unanimous on faithfulness (20/20 agreement, all five languages, zero
 disagreements — RUNS.md v4 addendum). The divergence no longer reproduces; the
@@ -152,18 +152,18 @@ error (never worse than the English fallback). Verified live: a Czech `68502` qu
 fully-Czech reply (incl. the localized "911" line) with the Medicare URL verbatim. Tests:
 `tests/test_reply_localization.py`. (Note: re-running the fairness matrix should now lift the ar/ko
 `language_appropriateness` scores — deferred.)
-**Matrix-confirmed, partially (2026-07-09 run):** single-turn language-appropriateness
+**Matrix-confirmed, partially (v2 run):** single-turn language-appropriateness
 is now high everywhere (ar 18/19, zh 17/18 overall), but all four s15 multi-turn cells
 still render English — the turn-2 location-only parse ("94110") resets
 `response_language` to English before rendering. That is a distinct, still-open
 multi-turn language-context gap, not an F8 regression (see RUNS.md).
-**Update (2026-07-10 run):** the merge-layer reset is fixed — `_merge_parsed_queries`
+**Update (v3 run):** the merge-layer reset is fixed — `_merge_parsed_queries`
 now sources the conversation language from the full-history parse
 (regression-tested), and s15 language-appropriateness flipped True in es (a genuinely
 localized render) and in ar/ko (with a caveat: those replies still render the English
 wrapper, which the judge passed anyway — see RUNS.md). The residual s15/zh failure is
 upstream of the merge and is its own finding: F11.
-**CLOSED (2026-07-10, v4).** The remaining coverage asymmetry F8 hid (3-language
+**CLOSED (v4).** The remaining coverage asymmetry F8 hid (3-language
 in-code copy / 7-language footer / LLM-for-the-rest) is gone: all six non-English
 known languages now render from locale files committed to the repo and generated
 from the English masters (`care/generate_locales.py` → `care/locales/*.json`,
@@ -194,7 +194,7 @@ literal digit inside a pattern — and any consumer of the *matched value* — s
 reintroduces an ASCII assumption. Negatives were 0 false positives in every language
 (including the Arabic-Indic ZIP `٩٤١١٠`).
 
-**FIXED (2026-07-09).** `fold_digits` (care/privacy.py) folds every Unicode decimal
+**FIXED.** `fold_digits` (care/privacy.py) folds every Unicode decimal
 digit to ASCII before pattern matching. The fold is length-preserving, so match spans
 map back to the original text and redaction preserves the user's script (the reply
 shows `[REDACTED: …]` in place of `١٩٨٥-٠١-٠٢`, everything else untouched). Before →
@@ -208,12 +208,12 @@ issue on both of its paths: message-side extraction (`_extract_zip_code` now ret
 the English-only provider API). Folding is deliberately limited to decimal digits —
 superscript/circled characters never matched `\d`, and folding them would have
 created false positives that never existed.
-**Matrix-confirmed (2026-07-09 run):** `phi_redacted` passed in all 5 live cells,
+**Matrix-confirmed (v2 run):** `phi_redacted` passed in all 5 live cells,
 including the Arabic-Indic member-ID and SSN variants — no raw synthetic PHI reached
 the intent LLM in any capture.
 
 ### F10 — the harness measured a service the app never runs (Layer: the eval itself, FIXED)
-The 2026-07-09 matrix re-run's first capture zeroed all seven umbrella-family
+The v2 matrix re-run's first capture zeroed all seven umbrella-family
 scenarios — families the service verifiably handles. Counterfactual isolation
 (the byte-identical `ProviderSearchRequest` replayed against two service builds:
 5 results vs 0) located the fault in the harness, not the app: `eval/run.py`
@@ -228,13 +228,13 @@ terminate on), mass-failing the `state` metric including on English control
 cells. The gap dated to Milestone 1 and stayed invisible for one reason: no
 earlier scenario exercised a code path where the two configurations differ.
 
-**FIXED (2026-07-09).** `eval/run.py::build_matrix_agent` now wraps the service
+**FIXED.** `eval/run.py::build_matrix_agent` now wraps the service
 the app itself constructs (config-driven datasets, NPPES enrichment, cache), and
 `eval/trace.py::_provider_state` reads the enriched record shapes; both are
 pinned by tests so the drift cannot silently return. Lessons recorded: an eval
 harness is part of the system under test — instrument the REAL object, not a
 lookalike; and every historical number carries its harness's configuration
-(the 2026-07-01/02 baselines are bare-config and all comparisons against them
+(the Run 1/Run 2 baselines are bare-config and all comparisons against them
 are labeled cross-config in RUNS.md).
 
 ### F11 — the full-history parse misdetects conversation language when the last turn is language-neutral (Layer A1, open)
@@ -245,7 +245,7 @@ instrumentation of the interpret call (identical parameters and prompts,
 temperature 0) shows `detected_language` flipping between `zh` and `en` for the
 same two user turns, depending only on the wording of the assistant's intervening
 reply — which is itself sampled at temperature 0.3, so the s15/zh cell is
-bistable from run to run (see RUNS.md 2026-07-10). Two contract gaps compound
+bistable from run to run (see the Run 4 entry in RUNS.md). Two contract gaps compound
 here: (a) the interpret prompt never states that `detected_language` means the
 *user's* conversation-level language, so nothing anchors it against a
 language-neutral final turn; (b) the parse emits inconsistent language spellings
@@ -258,7 +258,7 @@ captures. Related judge observation: on the ar/ko s15 cells the judge passed
 English-rendered replies (multi-turn leniency), so the B4 re-label deliberately
 includes multi-turn cells.
 
-**FIXED (2026-07-10, v4).** Three layers, because the prompt alone could not be
+**FIXED (v4).** Three layers, because the prompt alone could not be
 trusted (the F2 lesson): (a) the interpret prompt now defines
 `detected_language` as the USER's conversation-level language with an
 English-name vocabulary and an exact lowercase `unknown` sentinel, plus an
@@ -278,7 +278,7 @@ hardened contract — disclosed limit.
 The interpret prompt's original location comment ("city/region or null") left
 the model free to transform what the user wrote, and it failed in BOTH
 directions, each exposed by a different scenario family:
-- **ZIP → city ("city-ification", first diagnosed on s29 in the 2026-07-09
+- **ZIP → city ("city-ification", first diagnosed on s29 in the v2
   run):** the parse sometimes returned a ZIP as a city name — sometimes the
   wrong city entirely ("cardiology 19103" → "Upper Darby, PA") — and the
   bare-city search path returns zero where the ZIP returns results. Which
@@ -292,7 +292,7 @@ directions, each exposed by a different scenario family:
   the English-only provider API cannot search — s07/s08 regressed across
   languages including the English control.
 
-**FIXED (2026-07-10, v4)** with an asymmetric contract: a ZIP code is
+**FIXED (v4)** with an asymmetric contract: a ZIP code is
 extracted verbatim and never replaced by a city or neighborhood name; a city
 name is normalized to standard English "City, ST" (translated, abbreviations
 expanded, qualifiers dropped). Verified in both directions before capture

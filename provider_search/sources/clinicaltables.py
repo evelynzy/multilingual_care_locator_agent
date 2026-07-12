@@ -130,7 +130,7 @@ _UMBRELLA_TAXONOMY_TERMS = {
     # Practitioner forms (-ist/-ician): the LLM parse usually normalizes these
     # to field names, but real traces show leaks (an "allergist" parse), and
     # NPI's suggest endpoint does not convert them — a leaked form returned
-    # zero providers. Values live-verified 2026-07-08 at ZIP 94110.
+    # zero providers. Values live-verified at ZIP 94110.
     "pediatrician": "pediatrics",
     "dermatologist": "dermatology",
     "cardiologist": "cardiovascular disease",

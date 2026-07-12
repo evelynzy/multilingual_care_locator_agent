@@ -48,7 +48,7 @@ class UmbrellaSpecialtyTermTests(unittest.TestCase):
 class UmbrellaMapCoversBrokenFamiliesTests(unittest.TestCase):
     """Every specialty family NPI files under a different taxonomy name (F5)
     must be rewritten by the umbrella map; the mapped values are live-verified
-    against the real service (probe at ZIP 94110, 2026-07-08)."""
+    against the real service (probe at ZIP 94110)."""
 
     def test_every_f5_family_term_is_rewritten(self):
         for term in (
@@ -82,7 +82,7 @@ class UmbrellaMapCoversBrokenFamiliesTests(unittest.TestCase):
     def test_every_umbrella_key_classifies_to_a_family(self):
         # The ranking gate derives family ids from the REQUESTED term; a dict
         # key with no family alias fetches providers that are then all dropped
-        # as specialty_mismatch (the "orthopedist" gap found 2026-07-08).
+        # as specialty_mismatch (the "orthopedist" gap).
         for key in _UMBRELLA_TAXONOMY_TERMS:
             self.assertIsNotNone(normalize_specialty_family_id(key), key)
 
