@@ -61,10 +61,17 @@ turn's answer when it names any. Answering a "which specialty?" question with on
 the earlier turn's specialty. The app is stateless between turns: every turn re-derives intent
 from the visible transcript, which lets later turns correct earlier misreads.
 
-**Language determination.** The LLM reports `detected_language`/`response_language`; a guard
-overrides "respond in English" whenever a non-English input was detected (small models drift
-toward English). Downstream, an NFKD-normalized alias map (`"中文"`, `"한국어"`, `"es"`, …)
-resolves the language for each rendering subsystem.
+**Language determination.** The interpret prompt defines `detected_language` as
+conversation-level — the language the user has been writing in across the visible transcript,
+not the latest fragment — with a lowercase `"unknown"` sentinel when the model cannot tell. A
+guard overrides "respond in English" whenever a non-English input was detected (small models
+drift toward English), and a deterministic **script backstop**
+(`care/intent.py::_apply_conversation_language_backstop`) covers the multi-turn hole: when the
+parse still claims English or unknown but a strict majority of the characters the user actually
+typed are Han, Hangul, or Arabic script (`care/language.py::_dominant_user_script_language`),
+the script evidence wins — for non-Latin scripts this signal is independent of the parse.
+Downstream, an NFKD-normalized alias map (`"中文"`, `"한국어"`, `"es"`, …) resolves the
+language for each rendering subsystem.
 
 ## Routing and guidance (`care/guidance.py`, `care/safety.py`)
 
@@ -86,7 +93,10 @@ resolves the language for each rendering subsystem.
 **Location parsing** uses dedicated assets in `care/intent.py`: US state code and full-name tables, a noise-token
 list (words like "plan"/"find"/"area" can never become city names), specialty-word rejection
 ("dermatology, CA" does not invent a city), and city/state regexes shared with the trust
-boundary above.
+boundary above. The interpret prompt also states a two-sided **location contract**: ZIP codes
+are carried verbatim (never rewritten into a city name), while city names are normalized to
+English "City, ST" whatever script the user wrote them in — both directions are exercised by
+the fairness eval after any prompt change (`eval/FINDINGS.md` F12).
 
 ## Stages B/C — retrieval (`provider_search/`)
 
@@ -127,11 +137,17 @@ referral notes, one HTML provider card per result (address, phone, source, why-m
 trust-badge row that never over-claims ("Informational", "Network unverified", "New patients
 unknown", "Appointments unverified"). Provider data is inserted verbatim.
 
-**Localization.** Card template copy is pre-written in English/Spanish/Chinese; for any other
-detected language a single LLM pass (`care/language.py`) translates the wrapper text (headings, labels, guidance,
-safety notes) while keeping provider names, addresses, phones, ZIPs, and URLs exactly as
-written, falling back to the original reply on any failure. This restores full any-language
-replies (`eval/FINDINGS.md` F8) on top of reliable structured cards.
+**Localization.** Template copy has a single English source in code (the masters in
+`care/rendering.py`); the six other supported languages (es/zh/vi/tl/ar/ko) render from
+committed locale files (`care/locales/*.json`), generated offline by
+`care/generate_locales.py` (machine translation with placeholder, line-structure, and
+label-text guards) and loaded at import by `care/locales_loader.py`. The machine translation
+is disclosed in-product by a localized "auto-translated from English" mark. Replies in the
+seven supported languages involve zero runtime translation. Any other detected language gets a
+best-effort LLM pass (`care/language.py`) that translates the wrapper text while keeping
+provider names, addresses, phones, ZIPs, and URLs exactly as written — hardened with a retry,
+an untranslated-echo check, and `localization_fallback` telemetry so a silent English fallback
+is recorded, never hidden (`eval/FINDINGS.md` F8).
 
 **Language-concordance disclosure.** If the user asked for a provider who speaks language X
 and no returned record confirms it (NPI rarely carries language data), the reply says so
@@ -140,8 +156,9 @@ implying the need was met (`eval/FINDINGS.md` F6).
 
 **Safety footer.** Every reply, on every composition path, ends with the safety block from
 `care/safety.py` (care navigation only, nothing verified unless stated, call to confirm, don't
-share personal health information, 911 guidance), pre-written in seven languages
-(en/es/zh/vi/tl/ar/ko) with double-append guards.
+share personal health information, 911 guidance). The English master lives in code; the six
+localized footers come from the committed locale files, each ending with its own localized
+"auto-translated from English" mark. Double-append guards keep the footer single.
 
 **App shell (`app.py`).** A thin Gradio `ChatInterface`: builds the inference client, prepends
 the configured system message, delegates to `CareLocatorAgent.handle_request`, and hosts the
@@ -162,10 +179,10 @@ SSR reachability check that crash-loops inside Spaces.
   dates of birth, member/record numbers) with `[REDACTED: …]` placeholders before any
   text reaches the inference service — applied every turn to the new message and all
   prior user turns (the app is stateless and re-sends the transcript). ZIP codes are
-  never redacted. A notice tells the user what was removed — localized natively for
-  en/es/zh, and via the LLM wrapper pass on results replies for other languages
-  (non-results paths fall back to English until the uniform language policy lands).
-  Free-text names and alphanumeric member IDs are out of scope (v1).
+  never redacted. A notice tells the user what was removed, rendered from the shared
+  deterministic copy tables in all seven supported languages (long-tail languages get it
+  via the best-effort LLM pass on results replies). Free-text names and alphanumeric
+  member IDs are out of scope (v1).
 - Model self-reports (like `needs_clarification`) are validated behaviorally before being
   trusted — and rejected when they prove unreliable.
 
@@ -176,8 +193,9 @@ A fairness-evaluation harness runs the real request path over a scenario × lang
 reply), scores them against gold labels, and adds an independent LLM judge
 (`Qwen2.5-72B-Instruct`, cross-lineage from the system model) validated against human labels
 with Cohen's κ. Because layers B/C are language-invariant, cross-language divergence is
-attributable to a specific layer. Results, findings (F1–F8), and the case study live in
-`eval/RUNS.md`, `eval/FINDINGS.md`, and `eval/CASE_STUDY.md`.
+attributable to a specific layer. Results, findings (F1–F14), the paired statistics
+(`eval/paired_stats.py`), and the case study live in `eval/RUNS.md`, `eval/FINDINGS.md`, and
+`eval/CASE_STUDY.md`.
 
 ## Known limitations and planned work
 
@@ -185,9 +203,6 @@ attributable to a specific layer. Results, findings (F1–F8), and the case stud
   return nothing) instead of triggering a clarifying question; the curated ambiguity list that
   already handles "child allergy" is planned to grow, matching on the language-invariant
   parsed specialties so all languages benefit equally.
-- **Localization consolidation**: template copy currently lives in three hand-written language
-  tables plus a seven-language footer; consolidating to a single English source with generated,
-  clearly-labeled translations (shipped as locale files) is planned.
 - **Intent schema cleanup**: the model-supplied `needs_clarification` field will be removed
   from the schema (it is already ignored); the app-computed signal will be renamed to make its
   provenance explicit.
