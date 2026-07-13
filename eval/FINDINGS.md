@@ -237,7 +237,7 @@ lookalike; and every historical number carries its harness's configuration
 (the Run 1/Run 2 baselines are bare-config and all comparisons against them
 are labeled cross-config in RUNS.md).
 
-### F11 — the full-history parse misdetects conversation language when the last turn is language-neutral (Layer A1, open)
+### F11 — the full-history parse misdetects conversation language when the last turn is language-neutral (Layer A1, FIXED)
 With the merge fixed (F8 update), the conversation language comes from the
 full-history interpret call — which turns out to be unreliable in exactly the
 scenario the fix targets: a follow-up turn that is a bare ZIP code. Payload-level
@@ -251,7 +251,7 @@ here: (a) the interpret prompt never states that `detected_language` means the
 language-neutral final turn; (b) the parse emits inconsistent language spellings
 ("zh", "Chinese", "en", "English") while the merge's absent-value sentinel is the
 lowercase literal `"unknown"` only, so a differently-spelled sentinel would pass
-as a real language. Candidate fix (deferred, W-item): harden the interpret prompt
+as a real language. Candidate fix recorded at the time: harden the interpret prompt
 contract — define `detected_language` as the user-conversation language with a
 fixed value set and sentinel — then re-measure s15 stability across repeated
 captures. Related judge observation: on the ar/ko s15 cells the judge passed

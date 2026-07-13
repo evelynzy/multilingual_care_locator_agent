@@ -166,7 +166,7 @@ ko-specific mechanism.
   numeric trust boundary stays silent), and the city-path retrieval returns zero
   for umbrella families where the ZIP path returns 5. This is the same
   location-handling cluster as s07/s08 (below) — counterfactual layer attribution
-  is exactly the counterfactual follow-up this cluster motivates.
+  is exactly the follow-up this cluster motivates.
 - **F8 (any-language localization): partial.** Single-turn language-appropriateness
   improved broadly (ar 18/19, zh 17/18 overall), but all four `s15` multi-turn
   cells still render English: the turn-2 location-only parse ("94110") resets
@@ -382,7 +382,7 @@ unstable between runs — quantified motivation for the B4 human re-label.
 | ko   | 92% (44/48) | **90%** (38/42) | 86% |
 | ar   | 91% (51/56) | **88%** (37/42) | 74% |
 
-**Headline: the Arabic−English core-15 gap is now −5 points** (July 1: −24;
+**Headline: the Arabic−English core-15 gap is now −5 points** (baseline: −24;
 v2: −12; v3: −19 after a location move exposed new cells). Chinese ties
 English and Spanish at 93%. Every movement is accounted for: +18 checks, all
 from the **ZIP city-ification / city-normalization cluster closing** (s01/ko,

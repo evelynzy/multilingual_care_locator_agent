@@ -73,7 +73,7 @@ Current scale: 32 scenarios × up to 5 languages = 103 evaluation cells
 (the original core-15 scenarios exist in all five languages and carry the
 cross-language comparisons); the app itself ships deterministic support for 7
 languages. Everything below is reproducible from committed artifacts:
-`eval/RUNS.md` (dated run entries), `eval/FINDINGS.md` (numbered findings),
+`eval/RUNS.md` (the run log), `eval/FINDINGS.md` (numbered findings),
 `eval/runs/*.jsonl` (raw per-cell results), and `eval/paired_stats.py`.
 
 ## 2. Method
@@ -146,7 +146,7 @@ telemetry recorded zero silent English fallbacks.
 ### Paired statistics
 
 Reproduce with `PYTHONPATH=. python -m eval.paired_stats <archive.jsonl>`
-(all five snapshot archives live under `eval/runs/`; the blocks below show baseline, v2, and v4) — the script pairs each language's core-15 checks with the English control cell,
+(five run archives live under `eval/runs/`; the blocks below show baseline, v2, and v4) — the script pairs each language's core-15 checks with the English control cell,
 reports McNemar's exact test on discordant pairs, and a **scenario-level
 cluster bootstrap** CI (checks within a scenario are correlated, so the
 effective sample is closer to 15 scenarios than 42 checks; resampling is by

@@ -35,7 +35,7 @@ Built with [Gradio](https://gradio.app) and the [Hugging Face Inference API](htt
 pip install -r requirements.txt
 echo 'HF_TOKEN=hf_your_token_here' > .env   # a Hugging Face token for the Inference API
 python app.py                               # Gradio UI at http://localhost:7860
-python -m pytest tests/                     # live-API tests stay skipped unless RUN_EVAL=1
+python -m pytest tests/                     # gated live-API tests stay skipped by default
 ```
 
 ## How it works
