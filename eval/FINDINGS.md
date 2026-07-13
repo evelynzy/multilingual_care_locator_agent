@@ -2,7 +2,7 @@
 
 Running log of what the harness surfaced. Each finding is localized to a layer
 (A1 = LLM input understanding, B = our deterministic code, C = English-only NPI
-API, A2 = LLM output rendering) per the attribution model in the design spec.
+API, A2 = LLM output rendering).
 
 ## English control baseline
 
@@ -225,7 +225,7 @@ trace capture's state parser assumed the bare source's address format and
 returned empty states for every NPPES-enriched record (enriched addresses embed
 the ZIP+4 unhyphenated — `CA 981011234` — which the old regex could not
 terminate on), mass-failing the `state` metric including on English control
-cells. The gap dated to Milestone 1 and stayed invisible for one reason: no
+cells. The gap dated to the harness's first version and stayed invisible for one reason: no
 earlier scenario exercised a code path where the two configurations differ.
 
 **FIXED.** `eval/run.py::build_matrix_agent` now wraps the service

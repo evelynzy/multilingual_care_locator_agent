@@ -108,7 +108,6 @@ def respond(
 chatbot = gr.ChatInterface(
     respond,
     type="messages",
-    # textbox=gr.Textbox(placeholder="e.g., primary care 90048"),
     examples=list(EXAMPLE_PROMPTS),
     description=ui_settings.get("description", ""),
     title=ui_settings.get("title", "Multilingual Care Locator"),

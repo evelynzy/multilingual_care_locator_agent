@@ -17,7 +17,7 @@ regressions and one broken infrastructure assumption) documented as it happened.
 | English core-15 | 92% | 93% | 93% | **93%** |
 | Arabic core-15 | 69% | 81% | 74% | **88%** |
 | Arabic−English gap | **−24 pts** | −12 | −19 | **−5 pts** |
-| McNemar p (ar vs en) | **0.002** | 0.0625 | — | **0.69** |
+| McNemar p (ar vs en) | **0.002** | 0.0625 | 0.0078 | **0.69** |
 | Judge dimensions (all languages) | n/a | mixed | mixed | **100% on all four** |
 | Multi-turn language stability | — | — | bistable cell | **40/40 fresh captures localized** |
 
@@ -51,14 +51,9 @@ Five takeaways (each expanded in the body):
    and an explicit location contract. Those guarantees hold regardless of which
    model sits in front. [§5](#5-fairness-engineering--dont-rent-it-from-the-model)
 
-*Skills exercised: evaluation harness design, counterfactual layer attribution,
-LLM-judge validation with Cohen's κ and blinded labeling, paired statistics
-(McNemar, cluster bootstrap), harness-fidelity auditing, responsible-AI
-disclosure practice.*
-
 *Scope and velocity: a 103-cell evaluation matrix over a real application;
 14 numbered findings — 8 fixed and verified, every one documented the day it
-was found; a 496-test suite; first measurement to a residual within noise across four
+was found; a ~500-test suite; first measurement to a residual within noise across four
 committed, independently reproducible snapshots.*
 
 ---
@@ -151,7 +146,7 @@ telemetry recorded zero silent English fallbacks.
 ### Paired statistics
 
 Reproduce with `PYTHONPATH=. python -m eval.paired_stats <archive.jsonl>`
-(the three archives live under `eval/runs/`) — the script pairs each language's core-15 checks with the English control cell,
+(all five snapshot archives live under `eval/runs/`; the blocks below show baseline, v2, and v4) — the script pairs each language's core-15 checks with the English control cell,
 reports McNemar's exact test on discordant pairs, and a **scenario-level
 cluster bootstrap** CI (checks within a scenario are correlated, so the
 effective sample is closer to 15 scenarios than 42 checks; resampling is by

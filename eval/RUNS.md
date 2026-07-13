@@ -3,7 +3,7 @@
 Per-run summaries of the fairness-eval harness. Raw per-cell results for each run
 are preserved under `eval/runs/<name>.jsonl` (the live `eval/results.jsonl`
 is overwritten every run and gitignored). Rates are **deterministic-check** pass
-rates; the LLM-as-judge scoring arrives in Milestone 2.
+rates; the LLM-as-judge scoring arrives with Run 2.
 
 ---
 
@@ -59,11 +59,11 @@ s15-multiturn-children          OK  OK  OK  OK  OK
 
 ### Caveats
 - Deterministic checks only (no LLM-judge yet). Small self-made dataset. Translations mt_only except Chinese.
-- Attribution here is *observational*; counterfactual confirmation (inject EN intent to split A1 vs A2) is Milestone 3.
+- Attribution here is *observational*; counterfactual confirmation (inject EN intent to split A1 vs A2) is deferred to later runs.
 
 ---
 
-## Run 2 — LLM-judge + Cohen's κ (Milestone 2; judged v1)
+## Run 2 — LLM-judge + Cohen's κ (judged v1)
 
 - **Judge:** `Qwen/Qwen2.5-72B-Instruct` (HF Inference, cross-lineage from the system's `gpt-oss-20b`), scoring each cell's final rendered reply on four binary dimensions (helpfulness, safety, faithfulness, language-appropriateness). Judge sees only the user message, the rendered reply, and the returned provider records — never the gold labels or parsed intent.
 - **Run:** full matrix re-scored with the judge; raw cells in `eval/runs/judged-v1.jsonl`. The dataset is now 23 scenarios (8 English-only "working-specialty" additions), so the run is **23 en cells + 15 per non-en language**; **0 judge errors**. Cross-language rates should be read over the common 15.
@@ -111,7 +111,7 @@ The first capture zeroed all seven umbrella-family scenarios that the service
 verifiably handles. Counterfactual isolation (the byte-identical request replayed
 against two service builds: 5 results vs 0) showed `eval/run.py` was constructing a
 bare `ProviderSearchService` — no NPPES enrichment, no YAML dataset config — **a
-configuration the app never runs**, present since Milestone 1 and invisible until
+configuration the app never runs**, present since the harness's first version and invisible until
 these scenarios exercised the differing path. One layer deeper, the trace capture's
 state parser assumed the bare source's address format and returned empty states for
 every NPPES-enriched record (their ZIP+4 is unhyphenated: `CA 981011234`). Both
@@ -166,7 +166,7 @@ ko-specific mechanism.
   numeric trust boundary stays silent), and the city-path retrieval returns zero
   for umbrella families where the ZIP path returns 5. This is the same
   location-handling cluster as s07/s08 (below) — counterfactual layer attribution
-  is exactly Milestone 3's job.
+  is exactly the counterfactual follow-up this cluster motivates.
 - **F8 (any-language localization): partial.** Single-turn language-appropriateness
   improved broadly (ar 18/19, zh 17/18 overall), but all four `s15` multi-turn
   cells still render English: the turn-2 location-only parse ("94110") resets
