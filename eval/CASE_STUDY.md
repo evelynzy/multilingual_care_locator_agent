@@ -36,16 +36,16 @@ Five takeaways (each expanded in the body):
    by eyeballing grids. [§2](#2-method), [§4](#4-methodology-lessons-what-the-harness-caught)
 3. **The judge is validated, then honestly bounded.** An independent LLM judge
    was checked against human labels twice (the second round fully blinded):
-   once catching a real calibration divergence (κ = 0 on faithfulness — a rubric lesson, not noise),
+   once catching a real calibration divergence (κ = 0 on faithfulness, a rubric lesson rather than noise),
    once unanimous with the human — which I report as *corroboration, not
    discrimination*, because a snapshot with no failures cannot test a judge's
    ability to catch them. [§4d](#d-the-judge-arc--validate-then-bound-what-validation-can-say)
-4. **The harness caught its own mistakes — that is the point of gates.** An
+4. **The harness caught its own mistakes.** An
    English-parity gate turned two regressions introduced by my own prompt edits
    into same-day diagnoses, and repeated sampling exposed that "temperature 0"
    is not deterministic on a routed serving stack — after which I corrected my
    own published wording, append-only. [§4b](#b-the-gate-that-caught-me-twice), [§4c](#c-temperature-0-is-a-sampling-distribution-here)
-5. **Fairness is engineered, not rented.** The gap closed mainly by moving
+5. **The guarantees are model-independent.** The gap closed mainly by moving
    language handling *out* of the model: curated taxonomy maps, committed locale
    files with disclosed machine translation, a deterministic script backstop,
    and an explicit location contract. Those guarantees hold regardless of which
@@ -89,8 +89,8 @@ query, everything downstream (search, ranking, API) is English and
 - **A2** — LLM output rendering (results → user's language)
 
 **English as control.** Every scenario runs in English too. A failure that
-reproduces in the English control is an app-quality bug, not a fairness signal
-— the control *pre-localizes* it. One failure class — two ambiguous-colloquial-query scenarios — fails in
+reproduces in the English control is an app-quality bug, not a fairness signal;
+the control *pre-localizes* it. One failure class — two ambiguous-colloquial-query scenarios — fails in
 every language including English; a naive reading of the
 multilingual grid would have blamed translation.
 
@@ -121,9 +121,9 @@ bar.
 
 ## 3. Results — from a real gap to a residual within noise
 
-Chinese and Spanish now tie English exactly on the paired core-15 checks —
-zero discordant checks against the control — and the remaining Arabic residual
-is smaller than this instrument can resolve. At baseline, Arabic was 24 points behind.
+Chinese and Spanish now tie English exactly on the paired core-15 checks, with
+zero discordant checks against the control. The remaining Arabic residual is
+smaller than this instrument can resolve. At baseline, Arabic was 24 points behind.
 
 ### The trajectory
 
@@ -182,7 +182,7 @@ ko       42          1          0     1.0000    -2.4%  [  -7.3%,   +0.0%]
 zh       42          0          0     1.0000    +0.0%  [  +0.0%,   +0.0%]
 ```
 
-**Reading this honestly.** The baseline Arabic gap was statistically
+**What the numbers do and do not establish.** The baseline Arabic gap was statistically
 significant on paired evidence: ten discordant checks, all favoring English
 (p = 0.002), CI excluding zero. In v4, Chinese and Spanish are perfectly
 concordant with English — literally zero discordant checks — and the Arabic
@@ -198,9 +198,9 @@ several-fold larger scenario set; that is a stated limitation, not a footnote.
 
 ### What moved the numbers (fix attribution)
 
-Each measured movement traces to a documented finding in `eval/FINDINGS.md` —
-and none of them waited for a better model: every row is a code, data, or
-contract change I shipped, tested, and re-measured.
+Each measured movement traces to a documented finding in `eval/FINDINGS.md`.
+None of them waited for a better model: every row is a code, data, or contract
+change I shipped, tested, and re-measured.
 
 | movement | cause (finding) |
 |---|---|
@@ -223,7 +223,7 @@ The first full re-run zeroed seven specialty families the service verifiably
 handles. Counterfactual isolation — the byte-identical search request replayed
 against two service builds — returned 5 providers on the app's real service and
 0 on the harness's, exposing that the harness had constructed a bare service
-(no enrichment, no dataset config) since its first milestone. One layer deeper,
+(no enrichment, no dataset config) since its first version. One layer deeper,
 the trace parser assumed the bare service's address format and mass-failed a
 metric on English control cells. Both fixed and pinned by tests; every
 historical comparison across the boundary is labeled *cross-config* in the run
@@ -244,15 +244,15 @@ verbatim) or keeping neighborhood qualifiers, both unusable by the
 English-only API — caught by the same gate one capture later. The final
 contract is asymmetric (ZIP verbatim; city → standard English "City, ST"),
 verified in both directions before the definitive run, and it closed the
-pre-existing city-ification cluster as a side effect (+18 checks). **Lessons: a
-prompt edit is a behavior change to every field the prompt governs — A/B the
-fields you didn't touch; and an English-parity gate converts silent drift into
-same-day diagnoses.**
+pre-existing city-ification cluster as a side effect (+18 checks). The lessons I
+took: a prompt edit is a behavior change to every field the prompt governs, so
+A/B the fields you didn't touch. And an English-parity gate converts silent
+drift into a same-day diagnosis.
 
 ### (c) "Temperature 0" is a sampling distribution here
 
 A follow-up probe found the same interpret request flipping between parses
-within a minute, at temperature 0 — and a behavior measured "5/5 stable" in one
+within a minute, at temperature 0, and a behavior measured "5/5 stable" in one
 session reversing in the next. The hosted router distributes calls across
 serving backends; backend differences make temp-0 outputs non-reproducible.
 Consequences I acted on: correction notes appended (never rewritten) to my own
@@ -283,9 +283,10 @@ language-appropriateness across all five languages via a disclosed script-level
 identification protocol. I report that as **corroboration, not discrimination**:
 with zero variance in either rater and no failing cells in the snapshot, κ is
 degenerate and cannot measure the judge's ability to catch failures — the
-discriminative evidence remains the first round. **Lesson: judge validation is
-a process with a shelf life (labels stale when replies change), and the honest
-statistician says what a perfect-agreement result does *not* establish.**
+discriminative evidence remains the first round. Judge validation, in other
+words, is a process with a shelf life: labels go stale when the replies change,
+and a perfect-agreement result has to be reported together with what it does
+not establish.
 
 ## 5. Fairness engineering — don't rent it from the model
 
