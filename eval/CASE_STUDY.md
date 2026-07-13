@@ -119,7 +119,7 @@ blinded
 
 **Repeated sampling, not single captures.** Late in the project I proved that
 temperature-0 calls are not deterministic on the routed serving stack
-(`eval/FINDINGS.md` F14). Since then, stability claims require N-of-M repeated
+(documented in `eval/FINDINGS.md`). Since then, stability claims require N-of-M repeated
 gates (the multi-turn language fix shipped against a 20-of-20 fresh-capture
 gate, twice — 40/40 in total), and single-capture cells carry an implicit serving-variance error
 bar.
@@ -203,18 +203,18 @@ several-fold larger scenario set; that is a stated limitation, not a footnote.
 
 ### What moved the numbers (fix attribution)
 
-Each measured movement traces to a numbered finding in `eval/FINDINGS.md` —
+Each measured movement traces to a documented finding in `eval/FINDINGS.md` —
 and none of them waited for a better model: every row is a code, data, or
 contract change I shipped, tested, and re-measured.
 
 | movement | cause (finding) |
 |---|---|
-| "primary care" and at least seven specialty families returned zero providers | curated umbrella-taxonomy maps in our own code (findings F1/F5) |
-| Arabic-Indic digits (`٩٤١١٠`) unusable end-to-end | length-preserving Unicode digit folding at the input seam (F9) |
-| Language-concordance requests silently unmet | an explicit disclosure line; judge faithfulness flipped 10/10 (F6) |
-| Non-es/zh replies fell back to English wrappers | 6 committed locale files generated from English masters — machine translation disclosed, visible "auto-translated" mark (F8) |
-| Multi-turn conversations lost the user's language on a bare-ZIP turn | prompt contract + case-tolerant merge + deterministic script backstop, shipped against a 20/20 (×2) repeated-capture gate (F11) |
-| ZIPs parsed into (sometimes wrong) city names; in-language city names unusable | a two-sided location contract — ZIP verbatim, city normalized to English (+18 checks, closing the whole cluster) (F12) |
+| "primary care" and at least seven specialty families returned zero providers | curated umbrella-taxonomy maps in our own code |
+| Arabic-Indic digits (`٩٤١١٠`) unusable end-to-end | length-preserving Unicode digit folding at the input seam |
+| Language-concordance requests silently unmet | an explicit disclosure line; judge faithfulness flipped 10/10 |
+| Non-es/zh replies fell back to English wrappers | 6 committed locale files generated from English masters — machine translation disclosed, visible "auto-translated" mark |
+| Multi-turn conversations lost the user's language on a bare-ZIP turn | prompt contract + case-tolerant merge + deterministic script backstop, shipped against a 20/20 (×2) repeated-capture gate |
+| ZIPs parsed into (sometimes wrong) city names; in-language city names unusable | a two-sided location contract — ZIP verbatim, city normalized to English (+18 checks, closing the whole cluster) |
 
 ## 4. Methodology lessons (what the harness caught)
 
@@ -232,7 +232,7 @@ against two service builds — returned 5 providers on the app's real service an
 the trace parser assumed the bare service's address format and mass-failed a
 metric on English control cells. Both fixed and pinned by tests; every
 historical comparison across the boundary is labeled *cross-config* in the run
-log (finding F10, `eval/FINDINGS.md`). **Lesson: the eval harness is part of the system under test — instrument
+log. **Lesson: the eval harness is part of the system under test — instrument
 the real object, and treat every historical number as carrying its harness's
 configuration.**
 
@@ -249,7 +249,7 @@ verbatim) or keeping neighborhood qualifiers, both unusable by the
 English-only API — caught by the same gate one capture later. The final
 contract is asymmetric (ZIP verbatim; city → standard English "City, ST"),
 verified in both directions before the definitive run, and it closed the
-pre-existing city-ification cluster as a side effect (+18 checks; finding F12). **Lessons: a
+pre-existing city-ification cluster as a side effect (+18 checks). **Lessons: a
 prompt edit is a behavior change to every field the prompt governs — A/B the
 fields you didn't touch; and an English-parity gate converts silent drift into
 same-day diagnoses.**
@@ -267,8 +267,8 @@ evidence; and the one remaining cross-language failure was re-characterized as
 **stochastic** — an Arabic phrasing that sometimes over-triages to emergency
 routing (its literal English back-translation: 0/9 on probe day, and the
 scenario's English variant passes in every archived snapshot), meaning Arabic users are
-*probabilistically* denied the provider list others get (`eval/FINDINGS.md`
-F13). **Lesson: the serving infrastructure is part of the system under test,
+*probabilistically* denied the provider list others get (documented in
+`eval/FINDINGS.md`). **Lesson: the serving infrastructure is part of the system under test,
 one layer below the harness-fidelity lesson in (a).**
 
 ### (d) The judge arc — validate, then bound what validation can say
@@ -278,7 +278,7 @@ human subset; disclosed caveat: I had seen aggregate judge statistics before
 labeling — the second round fixed this with full blinding):
 language-appropriateness κ = 1.0 (n = 6, en+zh — the languages I can read) —
 but faithfulness κ = 0, a genuine calibration finding: the judge conflated "didn't disclose an
-unmet language request" with "hallucinated," a rubric-axis confusion (F7), not
+unmet language request" with "hallucinated" — a rubric-axis confusion, not
 noise. The fix went into the *product* (an explicit disclosure line), the
 judge's objection dissolved at source (10/10 cells flipped), and the rubric
 lesson — groundedness and disclosure are different axes — stands. Second round
@@ -298,20 +298,20 @@ The gap did not close because the model got better; the model never changed.
 It closed because language handling moved from "whatever the LLM does" to
 deterministic, testable guarantees:
 
-- **Umbrella taxonomy maps** (F1/F5): messy human specialty words → verified
+- **Umbrella taxonomy maps**: messy human specialty words → verified
   registry taxonomy terms, curated and pinned by invariant tests.
-- **Digit folding** (F9): any Unicode decimal script → ASCII at the input seam,
+- **Digit folding**: any Unicode decimal script → ASCII at the input seam,
   length-preserving so redaction spans survive.
-- **Committed locale files** (F8): all six non-English supported
+- **Committed locale files**: all six non-English supported
   languages render from files generated once from the English masters —
   machine translation *disclosed in-product* (a localized "auto-translated from
   English" mark on every non-English safety footer) and in the docs; zero
   runtime translation calls for supported languages, and telemetry proving it.
-- **Script backstop** (F11): if a multi-turn conversation's latest message has
+- **Script backstop**: if a multi-turn conversation's latest message has
   no language signal and the parse claims English, character-script evidence
   from the user's own messages overrides it — mathematically independent of the
   parse for non-Latin scripts.
-- **Location contract** (F12): ZIP codes verbatim, city names normalized to
+- **Location contract**: ZIP codes verbatim, city names normalized to
   English — stated in the prompt, verified bidirectionally.
 
 The LLM still does what only it can (understanding that "儿科 10013" is a
@@ -335,12 +335,12 @@ that swap is scoped future work; see §7.)
 - **Judge**: single-vote, observed flipping ±1 cell between runs on
   re-captured replies; also the same model family as the translation pipeline
   (entanglement disclosed).
-- **Serving variance** (F14): every single-capture number carries an implicit
+- **Serving variance**: every single-capture number carries an implicit
   error bar; only the N-of-M gated claims are stability claims.
 - **The script backstop cannot help Latin-script languages** (Spanish rides
   the hardened prompt contract alone) — a structural asymmetry, disclosed.
 - **One known open failure**: the stochastic Arabic emergency over-triage
-  (F13) — attributed, characterized, not yet fixed.
+  — attributed, characterized, not yet fixed.
 
 ## 7. What's next (and what "next" meant last time)
 
@@ -356,7 +356,7 @@ languages. The current list:
    control too (two ambiguous-colloquial-query scenarios search instead of
    asking) — an app fix that
    will lift every language, bundled with removing a schema field the model
-   provably cannot be trusted to set (finding F2).
+   provably cannot be trusted to set.
 2. **Cross-model comparison**: the harness is model-agnostic by construction —
    swap the system-under-test model, re-run 103 cells, and answer "does a
    frontier model shrink the residual gaps?" as a measured hypothesis
