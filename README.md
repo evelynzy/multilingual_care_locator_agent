@@ -31,4 +31,4 @@ This project ships its own fairness evaluation, documented end to end:
 This is an independent, non-commercial open-source project developed on personal time and personal devices. It is not affiliated with, endorsed by, or sponsored by my employer. 
 The application uses only publicly available data and APIs (e.g., federal/state public directories). It does not process Protected Health Information (PHI) and is provided for informational purposes only, not as medical, legal, or insurance advice. 
 Users should verify provider participation and coverage directly with the provider and plan. 
-By using this project, you agree to the repository’s License, Privacy Notice, and Terms of Use.
+The code and documentation are released under the Apache License 2.0 (see [LICENSE](LICENSE)).
